@@ -1,0 +1,109 @@
+/* Hero.module.css — hero section, display type reserved for marketing (TYPOGRAPHY.md §3) */
+
+.hero {
+  position: relative;
+  overflow: clip;
+  padding-top: var(--space-16);
+  padding-bottom: var(--space-16);
+  text-align: center;
+}
+
+/* Soft colour fields behind the hero — DESIGN_SYSTEM.md §3 */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 760px;
+  background:
+    radial-gradient(560px 380px at 50% 0%,  rgba(29, 78, 216, 0.16), transparent 70%),
+    radial-gradient(480px 360px at 88% 24%, rgba(15, 118, 110, 0.13), transparent 70%),
+    radial-gradient(520px 400px at 6% 38%,  rgba(245, 158, 11, 0.10), transparent 70%);
+  pointer-events: none;
+}
+
+.copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.eyebrowDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-secondary);
+  flex-shrink: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-display);
+  font-weight: var(--weight-bold);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--color-text);
+  max-width: 16ch;
+  text-wrap: balance;
+}
+
+.lead {
+  margin: 0;
+  font-size: var(--text-body-lg);
+  line-height: var(--leading-relaxed);
+  color: var(--color-text-secondary);
+  max-width: 58ch;
+  text-wrap: pretty;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+/* ── Product preview ───────────────────────────────────────────────────────── */
+.previewWrap {
+  position: relative;
+  z-index: 1;
+  margin-top: var(--space-12);
+}
+
+.previewWrap::before {
+  content: '';
+  position: absolute;
+  inset: -32px -16px -72px;
+  background: radial-gradient(60% 62% at 50% 52%, rgba(29, 78, 216, 0.18), transparent 72%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ── Entrance motion — 250ms ease-out, once (DESIGN_SYSTEM.md §8) ──────────── */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.copy { animation: rise var(--duration-slow) var(--easing-base) both; }
+.previewWrap { animation: rise var(--duration-slow) var(--easing-base) 100ms both; }
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  .hero {
+    padding-top: calc(var(--space-16) * 1.5);
+    padding-bottom: calc(var(--space-16) * 1.75);
+  }
+}
+
+@media (max-width: 640px) {
+  .actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .actions > a { width: 100%; }
+  .previewWrap { margin-top: var(--space-10); }
+}

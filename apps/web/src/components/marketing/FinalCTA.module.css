@@ -1,0 +1,67 @@
+/* FinalCTA.module.css — Primary conversion band (white text on Primary passes: COLORS.md §2) */
+
+.band {
+  position: relative;
+  overflow: clip;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: center;
+  padding: var(--space-16) var(--space-6);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
+  border-radius: var(--radius-card);
+  box-shadow: 0 24px 60px rgba(29, 78, 216, 0.35);
+}
+
+/* Soft highlight across the top of the band */
+.band::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(560px 240px at 50% -10%, rgba(255, 255, 255, 0.18), transparent 70%);
+  pointer-events: none;
+}
+
+.title {
+  position: relative;
+  margin: 0;
+  max-width: 18ch;
+  font-size: var(--text-h2);
+  font-weight: var(--weight-semibold);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: #fff;
+  text-wrap: balance;
+}
+
+.lead {
+  position: relative;
+  margin: 0;
+  max-width: 52ch;
+  font-size: var(--text-body-lg);
+  line-height: var(--leading-relaxed);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.actions {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+@media (max-width: 640px) {
+  .band {
+    padding: var(--space-12) var(--space-5);
+    border-radius: var(--radius-nav);
+  }
+
+  .actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .actions > a { width: 100%; }
+}

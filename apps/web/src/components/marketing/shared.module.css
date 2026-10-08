@@ -1,0 +1,197 @@
+/* shared.module.css — layout, buttons and labels shared by marketing sections.
+   Tokens only, per COLORS.md, TYPOGRAPHY.md and DESIGN_SYSTEM.md. */
+
+.container {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin-inline: auto;
+  padding-inline: var(--space-6);
+}
+
+.section {
+  padding-block: var(--space-16);
+  scroll-margin-top: calc(var(--topbar-height) + var(--space-4));
+}
+
+/* ── Section heading block ─────────────────────────────────────────────────── */
+.sectionHead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: center;
+  max-width: 720px;
+  margin-inline: auto;
+  margin-bottom: var(--space-12);
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-overline);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--text-h2);
+  font-weight: var(--weight-semibold);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--color-text);
+  text-wrap: balance;
+}
+
+.sectionLead {
+  margin: 0;
+  font-size: var(--text-body-lg);
+  line-height: var(--leading-relaxed);
+  color: var(--color-text-secondary);
+  max-width: 62ch;
+}
+
+/* ── Buttons (COLORS.md §4) ────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px; /* DESIGN_SYSTEM.md §9: 44px touch target */
+  padding: 0 var(--space-6);
+  border: 1px solid transparent;
+  border-radius: var(--radius-input);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) var(--easing-base),
+    border-color var(--duration-fast) var(--easing-base),
+    color var(--duration-fast) var(--easing-base),
+    box-shadow var(--duration-fast) var(--easing-base),
+    transform var(--duration-fast) var(--easing-base);
+}
+
+.btn:hover { text-decoration: none; }
+.btn:active { transform: translateY(0); }
+
+/* Primary: fill Primary, white text */
+.btnPrimary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.btnPrimary:hover {
+  background: var(--color-primary-hover);
+  box-shadow: 0 4px 12px rgba(29, 78, 216, 0.35);
+  transform: translateY(-1px);
+}
+
+.btnPrimary:active { box-shadow: none; }
+
+/* Secondary: surface fill, Primary border and text */
+.btnSecondary {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.btnSecondary:hover {
+  background: var(--color-primary-light);
+}
+
+/* Light button — used on the Primary CTA band */
+.btnLight {
+  background: var(--color-surface);
+  color: var(--color-primary);
+}
+
+.btnLight:hover {
+  background: var(--color-primary-light);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+}
+
+/* Outline button — used on the Primary CTA band */
+.btnOutlineLight {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.btnOutlineLight:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #fff;
+  transform: translateY(-1px);
+}
+
+/* Quiet text button — header sign-in link */
+.btnQuiet {
+  background: transparent;
+  color: var(--color-text-secondary);
+  padding-inline: var(--space-3);
+}
+
+.btnQuiet:hover {
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+/* ── Proof ticks ───────────────────────────────────────────────────────────── */
+.ticks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3) var(--space-6);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.tickIcon { color: var(--color-success); flex-shrink: 0; }
+
+/* ── Accessibility helper ──────────────────────────────────────────────────── */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  .section {
+    padding-block: calc(var(--space-16) * 1.75); /* 112px */
+  }
+}
+
+@media (max-width: 640px) {
+  .container { padding-inline: var(--space-4); }
+  .sectionHead { margin-bottom: var(--space-8); }
+  .tick { width: 100%; justify-content: center; }
+}

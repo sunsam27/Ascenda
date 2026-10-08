@@ -1,0 +1,61 @@
+/* FeatureGrid.module.css — solid feature cards (body copy on solid: DESIGN_SYSTEM.md §1) */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-6);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--solid-shadow);
+  transition:
+    transform var(--duration-base) var(--easing-base),
+    box-shadow var(--duration-base) var(--easing-base),
+    border-color var(--duration-base) var(--easing-base);
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.10);
+  border-color: var(--color-border-strong);
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-input);
+  flex-shrink: 0;
+}
+
+.icon[data-tint='primary']   { background: var(--color-primary-light); color: var(--color-primary); }
+.icon[data-tint='secondary'] { background: rgba(15, 118, 110, 0.12);   color: var(--color-secondary); }
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-h3);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.cardText {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 640px) {
+  .grid { grid-template-columns: 1fr; gap: var(--space-4); }
+  .card { padding: var(--space-5); }
+}

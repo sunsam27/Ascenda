@@ -1,0 +1,713 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// ASCENDA — Prisma Schema
+//
+// Rules from ARCHITECTURE.md and SECURITY.md:
+//   1. All tenant tables carry organisation_id NOT NULL
+//   2. UUID primary keys on every table
+//   3. created_at, updated_at, created_by on every table
+//   4. Money: integer minor units only — no Decimal for payroll amounts
+//   5. Row-Level Security is applied via migration SQL (see RLS migration notes)
+//   6. Field-level encryption for bank_account_number, national_id, tax_id
+//      is done at the application layer — Prisma stores the encrypted bytes
+//   7. Effective-dated records: valid_from / valid_to on compensation, leave
+//      policy, statutory rule packs
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum OrganisationType {
+  CHURCH
+  SME
+  NGO
+  SCHOOL
+  OTHER
+}
+
+enum WorkerCategory {
+  EMPLOYEE
+  MINISTER
+  VOLUNTEER
+  CONTRACTOR
+  INTERN
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CASUAL
+  FIXED_TERM
+}
+
+enum WorkerStatus {
+  ACTIVE
+  ON_LEAVE
+  SUSPENDED
+  TERMINATED
+  DRAFT
+}
+
+enum SystemRole {
+  OWNER
+  HR_ADMINISTRATOR
+  PAYROLL_ADMINISTRATOR
+  FINANCE_APPROVER
+  MANAGER
+  EMPLOYEE_SELF
+  VOLUNTEER_SELF
+  AUDITOR
+  VIEWER
+  SUPPORT_READ_ONLY
+}
+
+enum LeaveStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum LeaveTypeCategory {
+  ANNUAL
+  SICK
+  MATERNITY
+  PATERNITY
+  COMPASSIONATE
+  UNPAID
+  CUSTOM
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  IN_REVIEW
+  PENDING_APPROVAL
+  APPROVED
+  PROCESSED
+  LOCKED
+}
+
+enum PayFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+}
+
+enum PayrollItemType {
+  BASIC_SALARY
+  ALLOWANCE
+  BONUS
+  DEDUCTION
+  EMPLOYER_PENSION
+  EMPLOYEE_PENSION
+  TAX
+  REIMBURSEMENT
+  STIPEND
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REVERSED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ESCALATED
+  DELEGATED
+}
+
+enum DocumentType {
+  CONTRACT
+  ID_DOCUMENT
+  PAYSLIP
+  OFFER_LETTER
+  POLICY
+  CERTIFICATION
+  OTHER
+}
+
+enum AuditAction {
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+  MFA_CHANGED
+  PASSWORD_CHANGED
+  ROLE_CHANGED
+  PERMISSION_CHANGED
+  WORKER_CREATED
+  WORKER_UPDATED
+  WORKER_DELETED
+  COMPENSATION_CHANGED
+  BANK_DETAILS_CHANGED
+  PAYROLL_RUN_CREATED
+  PAYROLL_RUN_APPROVED
+  PAYROLL_RUN_LOCKED
+  PAYMENT_APPROVED
+  EXPORT_CREATED
+  RESTRICTED_FIELD_ACCESSED
+  SUPPORT_ACCESS
+  DOCUMENT_UPLOADED
+  DOCUMENT_ACCESSED
+}
+
+enum AttendanceSource {
+  MANUAL
+  CLOCK_IN_OUT
+  IMPORT
+}
+
+// ─── Identity & Access ───────────────────────────────────────────────────────
+
+/// Platform-level user account. Credentials managed separately.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   /// Argon2id hash — NEVER expose in responses
+  firstName    String
+  lastName     String
+  avatarUrl    String?
+  isMfaEnabled Boolean  @default(false)
+  mfaSecret    String?  /// Encrypted TOTP secret
+  lastLoginAt  DateTime?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships       Membership[]
+  auditLogsAsActor  AuditLog[]   @relation("AuditActor")
+
+  @@map("users")
+}
+
+/// One membership per (user, organisation) pair. Role evaluated per org.
+model Membership {
+  id             String     @id @default(uuid())
+  organisationId String
+  userId         String
+  role           SystemRole
+  isActive       Boolean    @default(true)
+  invitedAt      DateTime   @default(now())
+  acceptedAt     DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  createdBy      String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([organisationId, userId])
+  @@index([organisationId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+// ─── Organisations ───────────────────────────────────────────────────────────
+
+model Organisation {
+  id          String           @id @default(uuid())
+  name        String
+  slug        String           @unique
+  type        OrganisationType
+  country     String           /// ISO 3166-1 alpha-2
+  currency    String           /// ISO 4217
+  timezone    String           /// IANA timezone
+  terminology Json             @default("{}") /// {"Department":"Ministry","Employee":"Pastor"}
+  logoUrl     String?
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  memberships          Membership[]
+  departments          Department[]
+  locations            Location[]
+  workers              Worker[]
+  payCalendars         PayCalendar[]
+  payrollRuns          PayrollRun[]
+  leaveTypes           LeaveType[]
+  leaveRequests        LeaveRequest[]
+  leaveBalances        LeaveBalance[]
+  attendanceRecords    AttendanceRecord[]
+  approvalWorkflows    ApprovalWorkflow[]
+  payments             Payment[]
+  documents            Document[]
+  auditLogs            AuditLog[]
+  statutoryRulePacks   StatutoryRulePack[]
+
+  @@map("organisations")
+}
+
+model Department {
+  id             String   @id @default(uuid())
+  organisationId String
+  name           String
+  parentId       String?
+  managerId      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdBy      String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  parent       Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children     Department[] @relation("DepartmentHierarchy")
+  workers      Worker[]
+
+  @@index([organisationId])
+  @@map("departments")
+}
+
+model Location {
+  id             String   @id @default(uuid())
+  organisationId String
+  name           String
+  address        String?
+  city           String?
+  country        String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdBy      String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  workers      Worker[]
+
+  @@index([organisationId])
+  @@map("locations")
+}
+
+// ─── People ──────────────────────────────────────────────────────────────────
+
+model Worker {
+  id               String         @id @default(uuid())
+  organisationId   String
+  userId           String?        /// Linked if they have a login
+  employeeNumber   String
+  firstName        String
+  lastName         String
+  preferredName    String?
+  email            String
+  phone            String?
+  category         WorkerCategory
+  employmentType   EmploymentType
+  status           WorkerStatus   @default(DRAFT)
+  jobTitle         String
+  departmentId     String?
+  locationId       String?
+  managerId        String?
+  startDate        DateTime
+  endDate          DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  createdBy        String
+
+  organisation        Organisation         @relation(fields: [organisationId], references: [id])
+  department          Department?          @relation(fields: [departmentId], references: [id])
+  location            Location?            @relation(fields: [locationId], references: [id])
+  manager             Worker?              @relation("ManagerRelation", fields: [managerId], references: [id])
+  directReports       Worker[]             @relation("ManagerRelation")
+  compensationRecords CompensationRecord[]
+  bankAccounts        BankAccount[]
+  leaveRequests       LeaveRequest[]
+  leaveBalances       LeaveBalance[]
+  attendanceRecords   AttendanceRecord[]
+  payrollItems        PayrollItem[]
+  payments            Payment[]
+  documents           Document[]
+  workerIdentity      WorkerIdentity?
+
+  @@unique([organisationId, employeeNumber])
+  @@index([organisationId])
+  @@index([organisationId, status])
+  @@map("workers")
+}
+
+/// Restricted fields — field-level encryption applied at application layer
+model WorkerIdentity {
+  id                   String   @id @default(uuid())
+  organisationId       String
+  workerId             String   @unique
+  /// Encrypted; display masked last-4 only by default
+  nationalIdEncrypted  String?
+  nationalIdMasked     String?
+  taxIdEncrypted       String?
+  taxIdMasked          String?
+  nationalIdType       String?
+  dateOfBirth          DateTime?
+  gender               String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  createdBy            String
+
+  worker Worker @relation(fields: [workerId], references: [id])
+
+  @@index([organisationId])
+  @@map("worker_identities")
+}
+
+/// Effective-dated — query with valid_from <= date AND (valid_to IS NULL OR valid_to > date)
+model CompensationRecord {
+  id                    String      @id @default(uuid())
+  organisationId        String
+  workerId              String
+  /// Amount in integer minor currency units — NO FLOATS
+  grossAmountMinorUnits Int
+  currency              String
+  payFrequency          PayFrequency
+  validFrom             DateTime
+  validTo               DateTime?
+  notes                 String?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  createdBy             String
+
+  worker Worker @relation(fields: [workerId], references: [id])
+
+  @@index([organisationId])
+  @@index([workerId, validFrom])
+  @@map("compensation_records")
+}
+
+/// Bank account number stored encrypted at application layer
+model BankAccount {
+  id                     String   @id @default(uuid())
+  organisationId         String
+  workerId               String
+  bankName               String
+  bankCode               String
+  accountNumberEncrypted String   /// AES-256-GCM envelope encrypted
+  accountNumberMasked    String   /// e.g. "****1234"
+  accountName            String
+  isVerified             Boolean  @default(false)
+  isPrimary              Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  createdBy              String
+
+  worker Worker @relation(fields: [workerId], references: [id])
+
+  @@index([organisationId])
+  @@index([workerId])
+  @@map("bank_accounts")
+}
+
+// ─── Time & Leave ────────────────────────────────────────────────────────────
+
+model LeaveType {
+  id               String            @id @default(uuid())
+  organisationId   String
+  name             String
+  category         LeaveTypeCategory
+  defaultBalance   Decimal           @db.Decimal(5, 1) /// Days — 0.5 increments OK here (not money)
+  isPaid           Boolean
+  requiresApproval Boolean           @default(true)
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  createdBy        String
+
+  organisation  Organisation   @relation(fields: [organisationId], references: [id])
+  leaveRequests LeaveRequest[]
+  leaveBalances LeaveBalance[]
+
+  @@index([organisationId])
+  @@map("leave_types")
+}
+
+model LeaveRequest {
+  id                 String      @id @default(uuid())
+  organisationId     String
+  workerId           String
+  leaveTypeId        String
+  startDate          DateTime
+  endDate            DateTime
+  status             LeaveStatus @default(DRAFT)
+  /// Restricted field — permission-gated (medical_or_leave_reason)
+  reasonEncrypted    String?
+  approvalWorkflowId String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  createdBy          String
+
+  organisation     Organisation      @relation(fields: [organisationId], references: [id])
+  worker           Worker            @relation(fields: [workerId], references: [id])
+  leaveType        LeaveType         @relation(fields: [leaveTypeId], references: [id])
+  approvalWorkflow ApprovalWorkflow? @relation(fields: [approvalWorkflowId], references: [id])
+
+  @@index([organisationId])
+  @@index([workerId, status])
+  @@map("leave_requests")
+}
+
+model LeaveBalance {
+  id             String   @id @default(uuid())
+  organisationId String
+  workerId       String
+  leaveTypeId    String
+  balance        Decimal  @db.Decimal(5, 1)
+  accrued        Decimal  @db.Decimal(5, 1)
+  used           Decimal  @db.Decimal(5, 1)
+  year           Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  worker       Worker       @relation(fields: [workerId], references: [id])
+  leaveType    LeaveType    @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([organisationId, workerId, leaveTypeId, year])
+  @@index([organisationId])
+  @@map("leave_balances")
+}
+
+model AttendanceRecord {
+  id             String           @id @default(uuid())
+  organisationId String
+  workerId       String
+  date           DateTime         @db.Date
+  clockIn        DateTime?
+  clockOut       DateTime?
+  hoursWorked    Decimal?         @db.Decimal(4, 2)
+  source         AttendanceSource @default(MANUAL)
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  createdBy      String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  worker       Worker       @relation(fields: [workerId], references: [id])
+
+  @@unique([organisationId, workerId, date])
+  @@index([organisationId])
+  @@index([workerId, date])
+  @@map("attendance_records")
+}
+
+// ─── Payroll ─────────────────────────────────────────────────────────────────
+
+model PayCalendar {
+  id             String      @id @default(uuid())
+  organisationId String
+  name           String
+  frequency      PayFrequency
+  dayOfMonth     Int?
+  dayOfWeek      Int?
+  isActive       Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  createdBy      String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  payrollRuns  PayrollRun[]
+
+  @@index([organisationId])
+  @@map("pay_calendars")
+}
+
+/// Run states are strictly one-way: DRAFT → IN_REVIEW → PENDING_APPROVAL → APPROVED → PROCESSED → LOCKED
+/// Approved runs are immutable; fixes use reversal or next-run adjustments.
+model PayrollRun {
+  id                      String           @id @default(uuid())
+  organisationId          String
+  payCalendarId           String
+  periodStart             DateTime
+  periodEnd               DateTime
+  status                  PayrollRunStatus @default(DRAFT)
+  preparedById            String
+  /// Separation of duties: preparer != approver
+  approvedById            String?
+  approvedAt              DateTime?
+  lockedAt                DateTime?
+  /// All money in minor units
+  totalGrossMinorUnits    Int              @default(0)
+  totalNetMinorUnits      Int              @default(0)
+  totalDeductionsMinorUnits Int            @default(0)
+  currency                String
+  notes                   String?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  createdBy               String
+
+  organisation Organisation  @relation(fields: [organisationId], references: [id])
+  payCalendar  PayCalendar   @relation(fields: [payCalendarId], references: [id])
+  items        PayrollItem[]
+  payments     Payment[]
+
+  @@index([organisationId])
+  @@index([organisationId, status])
+  @@map("payroll_runs")
+}
+
+model PayrollItem {
+  id                 String          @id @default(uuid())
+  organisationId     String
+  payrollRunId       String
+  workerId           String
+  type               PayrollItemType
+  description        String
+  /// Positive for earnings, negative for deductions — integer minor units
+  amountMinorUnits   Int
+  currency           String
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  worker     Worker     @relation(fields: [workerId], references: [id])
+  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id])
+
+  @@index([organisationId])
+  @@index([payrollRunId])
+  @@index([workerId])
+  @@map("payroll_items")
+}
+
+/// Effective-dated country/statutory rule packs — NEVER hard-code tax rules
+model StatutoryRulePack {
+  id             String   @id @default(uuid())
+  organisationId String
+  country        String
+  version        String
+  rules          Json     /// Versioned rule configuration
+  validFrom      DateTime
+  validTo        DateTime?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdBy      String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId, country, validFrom])
+  @@map("statutory_rule_packs")
+}
+
+// ─── Payments ────────────────────────────────────────────────────────────────
+
+model Payment {
+  id                   String        @id @default(uuid())
+  organisationId       String
+  payrollRunId         String?
+  workerId             String
+  /// Integer minor units
+  amountMinorUnits     Int
+  currency             String
+  status               PaymentStatus @default(PENDING)
+  reference            String        @unique
+  description          String
+  processedAt          DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  createdBy            String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  payrollRun   PayrollRun?  @relation(fields: [payrollRunId], references: [id])
+  worker       Worker       @relation(fields: [workerId], references: [id])
+
+  @@index([organisationId])
+  @@index([workerId, status])
+  @@map("payments")
+}
+
+// ─── Approvals ───────────────────────────────────────────────────────────────
+
+model ApprovalWorkflow {
+  id             String         @id @default(uuid())
+  organisationId String
+  name           String
+  resourceType   String         /// "leave_request" | "payroll_run" | "payment" etc
+  resourceId     String
+  currentStep    Int            @default(0)
+  status         ApprovalStatus @default(PENDING)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  createdBy      String
+
+  organisation  Organisation    @relation(fields: [organisationId], references: [id])
+  steps         ApprovalStep[]
+  leaveRequests LeaveRequest[]
+
+  @@index([organisationId])
+  @@index([resourceType, resourceId])
+  @@map("approval_workflows")
+}
+
+model ApprovalStep {
+  id                 String         @id @default(uuid())
+  approvalWorkflowId String
+  stepOrder          Int
+  approverId         String
+  status             ApprovalStatus @default(PENDING)
+  actedAt            DateTime?
+  note               String?
+  delegatedToId      String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  workflow ApprovalWorkflow @relation(fields: [approvalWorkflowId], references: [id])
+
+  @@index([approvalWorkflowId])
+  @@map("approval_steps")
+}
+
+// ─── Documents ───────────────────────────────────────────────────────────────
+
+model Document {
+  id             String       @id @default(uuid())
+  organisationId String
+  workerId       String?
+  type           DocumentType
+  name           String
+  /// Private storage key — never expose directly; use signed URLs
+  storageKey     String
+  mimeType       String
+  sizeBytes      Int
+  uploadedBy     String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organisation Organisation? @relation(fields: [organisationId], references: [id])
+  worker       Worker?       @relation(fields: [workerId], references: [id])
+
+  @@index([organisationId])
+  @@index([workerId, type])
+  @@map("documents")
+}
+
+// ─── Audit Log ───────────────────────────────────────────────────────────────
+
+/// Append-only. Application DB role has INSERT only — no UPDATE or DELETE on this table.
+model AuditLog {
+  id             String      @id @default(uuid())
+  organisationId String
+  actorId        String
+  actorEmail     String
+  action         AuditAction
+  targetType     String
+  targetId       String
+  /// Sensitive values masked (e.g. bank number → "****1234")
+  previousValue  Json?
+  newValue       Json?
+  ipAddress      String
+  userAgent      String
+  timestamp      DateTime    @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  actor        User         @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([organisationId, timestamp])
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@map("audit_log")
+}

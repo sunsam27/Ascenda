@@ -1,0 +1,54 @@
+.card {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  transition: transform var(--duration-base) var(--easing-base), box-shadow var(--duration-base) var(--easing-base);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.13), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+
+/* Icon container — 38px rounded square per DESIGN_SYSTEM.md §6 */
+.iconWrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.label {
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.value {
+  font-size: var(--text-kpi);
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.change {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+}

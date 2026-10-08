@@ -1,0 +1,32 @@
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-left: var(--sidebar-width);
+  transition: margin-left var(--duration-base) var(--easing-base);
+}
+
+.content {
+  flex: 1;
+  padding: var(--space-6) var(--space-8);
+  padding-top: calc(var(--topbar-height) + var(--space-6));
+  max-width: var(--content-max-width);
+  width: 100%;
+}
+
+/* Mobile: sidebar becomes overlay */
+@media (max-width: 768px) {
+  .main {
+    margin-left: 0;
+  }
+  .content {
+    padding: var(--space-4);
+    padding-top: calc(var(--topbar-height) + var(--space-4));
+  }
+}

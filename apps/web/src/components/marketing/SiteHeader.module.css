@@ -1,0 +1,199 @@
+/* SiteHeader.module.css — sticky glass navigation per DESIGN_SYSTEM.md §6 */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--glass-bg-nav);
+  -webkit-backdrop-filter: blur(var(--glass-blur-nav)) saturate(var(--glass-saturate-nav));
+  backdrop-filter: blur(var(--glass-blur-nav)) saturate(var(--glass-saturate-nav));
+  border-bottom: 1px solid var(--glass-border-nav);
+  box-shadow: var(--glass-shadow-nav);
+}
+
+/* Solid fallbacks — DESIGN_SYSTEM.md §4 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .header { background: var(--color-surface); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .header {
+    background: var(--color-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .header {
+    background: var(--color-surface);
+    border-bottom-color: var(--color-border-strong);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* ── Skip link ─────────────────────────────────────────────────────────────── */
+.skipLink {
+  position: absolute;
+  left: var(--space-4);
+  top: var(--space-2);
+  z-index: 1;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-input);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform var(--duration-fast) var(--easing-base);
+}
+
+.skipLink:focus-visible { transform: translateY(0); }
+
+/* ── Bar ───────────────────────────────────────────────────────────────────── */
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  height: var(--topbar-height);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  text-decoration: none;
+}
+
+.brand:hover { text-decoration: none; }
+
+.logoMark {
+  display: block;
+  width: 60px;
+  height: 60px;
+  background: transparent;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.brandName {
+  font-size: var(--text-h3);
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+/* ── Desktop nav ───────────────────────────────────────────────────────────── */
+.nav {
+  display: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.navLink {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-input);
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  transition:
+    background-color var(--duration-fast) var(--easing-base),
+    color var(--duration-fast) var(--easing-base);
+}
+
+.navLink:hover {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+/* ── Actions ───────────────────────────────────────────────────────────────── */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.requestCta { display: none; }
+
+.menuButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  color: var(--color-text-secondary);
+  transition:
+    background-color var(--duration-fast) var(--easing-base),
+    color var(--duration-fast) var(--easing-base),
+    border-color var(--duration-fast) var(--easing-base);
+}
+
+.menuButton:hover {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+/* ── Mobile panel ──────────────────────────────────────────────────────────── */
+.mobilePanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4) var(--space-6);
+  background: var(--glass-bg-overlay);
+  -webkit-backdrop-filter: blur(var(--glass-blur-overlay));
+  backdrop-filter: blur(var(--glass-blur-overlay));
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--glass-shadow-overlay);
+}
+
+.mobilePanel nav {
+  display: flex;
+  flex-direction: column;
+}
+
+.mobileLink {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-input);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.mobileLink:hover {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.mobileActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.mobileActions > a { width: 100%; }
+
+/* ── Breakpoints ───────────────────────────────────────────────────────────── */
+@media (min-width: 960px) {
+  .nav { display: flex; }
+  .menuButton { display: none; }
+  .mobilePanel { display: none; }
+}
+
+@media (min-width: 720px) {
+  .requestCta { display: inline-flex; }
+}

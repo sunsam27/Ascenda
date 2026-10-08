@@ -1,0 +1,206 @@
+/* LoginForm.module.css — Solid surface for auth per DESIGN_SYSTEM.md §6 */
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12), 0 4px 16px rgba(15, 23, 42, 0.08);
+  padding: var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.logoMark {
+  display: block;
+  width: 70px;
+  height: 70px;
+  background: transparent;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.brandName {
+  font-size: var(--text-h3);
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-1);
+}
+
+.title {
+  font-size: var(--text-h1);
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  font-size: var(--text-body);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+}
+
+.errorBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-error-tint);
+  color: var(--color-error);
+  border: 1px solid rgba(185, 28, 28, 0.2);
+  border-radius: var(--radius-input);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-medium);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.forgotLink {
+  align-self: flex-end;
+  font-size: var(--text-caption);
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: opacity var(--duration-fast) var(--easing-base);
+}
+
+.forgotLink:hover {
+  opacity: 0.75;
+  text-decoration: underline;
+}
+
+/* Input — solid surface, border-strong, 2px primary focus ring (COLORS.md §4) */
+.input {
+  width: 100%;
+  height: 44px; /* DESIGN_SYSTEM.md §9: min 44px touch target */
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  font-size: var(--text-body); /* 16px prevents mobile zoom */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  transition:
+    border-color var(--duration-fast) var(--easing-base),
+    box-shadow var(--duration-fast) var(--easing-base);
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.25);
+}
+
+/* Primary submit button (COLORS.md §4) */
+.submitButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 44px;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-input);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--easing-base),
+    transform var(--duration-fast) var(--easing-base),
+    box-shadow var(--duration-fast) var(--easing-base);
+}
+
+.submitButton:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  box-shadow: 0 4px 12px rgba(29, 78, 216, 0.35);
+  transform: translateY(-1px);
+}
+
+.submitButton:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.submitButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.submitButton:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Loading spinner */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.footer {
+  text-align: center;
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+}
+
+.footer a {
+  color: var(--color-primary);
+  font-weight: var(--weight-medium);
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: var(--space-6);
+    border-radius: var(--radius-input);
+  }
+}
