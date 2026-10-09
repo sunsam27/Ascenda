@@ -93,6 +93,15 @@
   margin-top: var(--space-1);
 }
 
+/* Disabled until all required fields are filled — dimmed, not clickable */
+.submit:disabled,
+.submit:disabled:hover {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
 .spinner {
   display: inline-block;
   width: 16px;

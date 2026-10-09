@@ -29,22 +29,42 @@ export default function RequestAccessForm() {
   const [status, setStatus] = useState<Status>('idle');
   const [submittedEmail, setSubmittedEmail] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [values, setValues] = useState({
+    name: '',
+    email: '',
+    organisation: '',
+    orgType: '',
+    teamSize: '',
+  });
+
+  function nameError(value: string): string | undefined {
+    const v = value.trim();
+    return v.length < 2 || !NAME_PATTERN.test(v)
+      ? 'Please enter your full name.'
+      : undefined;
+  }
+
+  function emailError(value: string): string | undefined {
+    return EMAIL_PATTERN.test(value.trim())
+      ? undefined
+      : 'Please enter a valid work email address.';
+  }
+
+  function organisationError(value: string): string | undefined {
+    const v = value.trim();
+    return v.length < 2 || !ORGANISATION_PATTERN.test(v)
+      ? 'Please enter your organization name.'
+      : undefined;
+  }
 
   function validate(data: FormData): FieldErrors {
     const next: FieldErrors = {};
-    const name = String(data.get('name') ?? '').trim();
-    const email = String(data.get('email') ?? '').trim();
-    const organisation = String(data.get('organisation') ?? '').trim();
-
-    if (name.length < 2 || !NAME_PATTERN.test(name)) {
-      next.name = 'Please enter your full name.';
-    }
-    if (!EMAIL_PATTERN.test(email)) {
-      next.email = 'Please enter a valid work email address.';
-    }
-    if (organisation.length < 2 || !ORGANISATION_PATTERN.test(organisation)) {
-      next.organisation = 'Please enter your organization name.';
-    }
+    const name = nameError(String(data.get('name') ?? ''));
+    const email = emailError(String(data.get('email') ?? ''));
+    const organisation = organisationError(String(data.get('organisation') ?? ''));
+    if (name) next.name = name;
+    if (email) next.email = email;
+    if (organisation) next.organisation = organisation;
     if (!String(data.get('orgType') ?? '')) {
       next.orgType = 'Please select your organisation type.';
     }
@@ -54,6 +74,25 @@ export default function RequestAccessForm() {
     return next;
   }
 
+  function handleBlur(
+    field: 'name' | 'email' | 'organisation',
+    value: string,
+  ) {
+    const message =
+      field === 'name'
+        ? nameError(value)
+        : field === 'email'
+          ? emailError(value)
+          : organisationError(value);
+
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (message) next[field] = message;
+      else delete next[field];
+      return next;
+    });
+  }
+
   function clearError(field: keyof FieldErrors) {
     setErrors((prev) => {
       if (!prev[field]) return prev;
@@ -61,6 +100,11 @@ export default function RequestAccessForm() {
       delete next[field];
       return next;
     });
+  }
+
+  function handleChange(field: keyof typeof values, value: string) {
+    setValues((prev) => ({ ...prev, [field]: value }));
+    clearError(field);
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -88,6 +132,13 @@ export default function RequestAccessForm() {
     setSubmittedEmail(email);
     setStatus('done');
   }
+
+  const isComplete =
+    !nameError(values.name) &&
+    !emailError(values.email) &&
+    !organisationError(values.organisation) &&
+    values.orgType !== '' &&
+    values.teamSize !== '';
 
   if (status === 'done') {
     return (
@@ -126,9 +177,11 @@ export default function RequestAccessForm() {
           placeholder="Jane Adeyemi"
           autoComplete="name"
           required
+          value={values.name}
           aria-invalid={errors.name ? true : undefined}
           aria-describedby={errors.name ? 'ra-name-error' : undefined}
-          onChange={() => clearError('name')}
+          onChange={(e) => handleChange('name', e.currentTarget.value)}
+          onBlur={(e) => handleBlur('name', e.currentTarget.value)}
         />
         {errors.name && (
           <p id="ra-name-error" className={styles.errorText} role="alert">
@@ -147,9 +200,11 @@ export default function RequestAccessForm() {
           placeholder="you@yourorganisation.org"
           autoComplete="email"
           required
+          value={values.email}
           aria-invalid={errors.email ? true : undefined}
           aria-describedby={errors.email ? 'ra-email-error' : undefined}
-          onChange={() => clearError('email')}
+          onChange={(e) => handleChange('email', e.currentTarget.value)}
+          onBlur={(e) => handleBlur('email', e.currentTarget.value)}
         />
         {errors.email && (
           <p id="ra-email-error" className={styles.errorText} role="alert">
@@ -168,9 +223,11 @@ export default function RequestAccessForm() {
           placeholder="Grace Chapel / Acme Ltd"
           autoComplete="organization"
           required
+          value={values.organisation}
           aria-invalid={errors.organisation ? true : undefined}
           aria-describedby={errors.organisation ? 'ra-org-error' : undefined}
-          onChange={() => clearError('organisation')}
+          onChange={(e) => handleChange('organisation', e.currentTarget.value)}
+          onBlur={(e) => handleBlur('organisation', e.currentTarget.value)}
         />
         {errors.organisation && (
           <p id="ra-org-error" className={styles.errorText} role="alert">
@@ -187,10 +244,10 @@ export default function RequestAccessForm() {
             name="orgType"
             className={`${styles.input}${errors.orgType ? ` ${styles.inputError}` : ''}`}
             required
-            defaultValue=""
+            value={values.orgType}
             aria-invalid={errors.orgType ? true : undefined}
             aria-describedby={errors.orgType ? 'ra-type-error' : undefined}
-            onChange={() => clearError('orgType')}
+            onChange={(e) => handleChange('orgType', e.currentTarget.value)}
           >
             <option value="" disabled>Select one</option>
             {orgTypes.map((type) => (
@@ -211,10 +268,10 @@ export default function RequestAccessForm() {
             name="teamSize"
             className={`${styles.input}${errors.teamSize ? ` ${styles.inputError}` : ''}`}
             required
-            defaultValue=""
+            value={values.teamSize}
             aria-invalid={errors.teamSize ? true : undefined}
             aria-describedby={errors.teamSize ? 'ra-size-error' : undefined}
-            onChange={() => clearError('teamSize')}
+            onChange={(e) => handleChange('teamSize', e.currentTarget.value)}
           >
             <option value="" disabled>Select one</option>
             {teamSizes.map((size) => (
@@ -245,7 +302,7 @@ export default function RequestAccessForm() {
       <button
         type="submit"
         className={`${shared.btn} ${shared.btnPrimary} ${styles.submit}`}
-        disabled={status === 'sending'}
+        disabled={status === 'sending' || !isComplete}
         aria-busy={status === 'sending'}
       >
         {status === 'sending' ? (
