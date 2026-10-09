@@ -3,6 +3,7 @@ import { ArrowRight, CircleCheckBig } from 'lucide-react';
 import shared from './shared.module.css';
 import styles from './Hero.module.css';
 import ProductPreview from './ProductPreview';
+import Typewriter from './Typewriter';
 
 /** Marketing hero — display type scale reserved for this (TYPOGRAPHY.md §3) */
 export default function Hero() {
@@ -20,9 +21,7 @@ export default function Hero() {
           </h1>
 
           <p className={styles.lead}>
-            Ascenda brings your workers, leave, payroll runs, payments and
-            reporting into one secure workspace — built for churches, SMEs,
-            NGOs and schools.
+            <Typewriter text="Ascenda brings your workers, leave, payroll runs, payments and reporting into one secure workspace — built for churches, SMEs, NGOs and schools." />
           </p>
 
           <div className={styles.actions}>

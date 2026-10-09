@@ -128,6 +128,21 @@
   box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.25);
 }
 
+.inputError {
+  border-color: var(--color-error);
+}
+
+.inputError:focus {
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.25);
+}
+
+.errorText {
+  font-size: var(--text-body-sm);
+  color: var(--color-error);
+  font-weight: var(--weight-medium);
+}
+
 /* Primary submit button (COLORS.md §4) */
 .submitButton {
   display: flex;

@@ -1,0 +1,16 @@
+/* Typewriter.module.css — character-by-character reveal with reserved height */
+
+/* Grid stack keeps the full sentence as an invisible spacer so the typing
+   text never shifts the layout below it (no CLS). */
+.wrap {
+  display: grid;
+}
+
+.ghost,
+.text {
+  grid-area: 1 / 1;
+}
+
+.ghost {
+  visibility: hidden;
+}
