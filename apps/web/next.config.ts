@@ -3,6 +3,10 @@ import type { NextConfig } from 'next';
 // Next.js dev (webpack react-refresh) needs eval; production keeps a strict CSP.
 const isDev = process.env.NODE_ENV !== 'production';
 
+const apiUrl =
+  process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api/v1';
+const apiOrigin = new URL(apiUrl).origin;
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   isDev
@@ -11,6 +15,8 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: https:",
+  // The SPA calls the API on a different origin (and uses HMR websockets in dev).
+  `connect-src 'self' ${apiOrigin}${isDev ? ' ws: wss:' : ''}`,
   "frame-ancestors 'none'",
 ].join('; ');
 

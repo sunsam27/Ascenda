@@ -11,7 +11,7 @@ const productLinks = [
 ];
 
 const startLinks = [
-  { href: '/request-access', label: 'Request access' },
+  { href: '/signup', label: 'Get started' },
   { href: '/login', label: 'Sign in' },
 ];
 

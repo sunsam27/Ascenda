@@ -1,4 +1,4 @@
-/* request-access.module.css — conversion page shell */
+/* signup.module.css — self-serve signup page shell */
 
 .page {
   display: flex;
@@ -50,6 +50,6 @@
 
 @media (min-width: 768px) {
   .page {
-    padding-block: calc(var(--space-16) * 1.5);
+    padding-block: calc(var(--space-16) * 1.25);
   }
 }

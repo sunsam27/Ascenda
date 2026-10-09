@@ -20,6 +20,7 @@ generator client {
 datasource db {
   provider          = "postgresql"
   url               = env("DATABASE_URL")
+  directUrl         = env("DIRECT_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -67,6 +68,46 @@ enum SystemRole {
   AUDITOR
   VIEWER
   SUPPORT_READ_ONLY
+}
+
+// ── Billing / plans ──────────────────────────────────────────────────────────
+
+enum BillingPeriod {
+  MONTHLY
+  ANNUALLY
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentProvider {
+  NONE
+  PAYSTACK
+  FLUTTERWAVE
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  ABANDONED
+  REVERSED
+}
+
+/// Self-serve workspace signup. Created before an organisation exists.
+/// The password is hashed up-front so verification can complete atomically.
+enum RegistrationStatus {
+  PENDING
+  VERIFIED
+  COMPLETED
+  CANCELLED
+  EXPIRED
 }
 
 enum LeaveStatus {
@@ -163,6 +204,18 @@ enum AuditAction {
   SUPPORT_ACCESS
   DOCUMENT_UPLOADED
   DOCUMENT_ACCESSED
+  ACCESS_REQUEST_APPROVED
+  ACCESS_REQUEST_REJECTED
+  INVITATION_SENT
+  PASSWORD_SET
+  REGISTRATION_STARTED
+  REGISTRATION_VERIFIED
+  WORKSPACE_CREATED
+  SUBSCRIPTION_ACTIVATED
+  PAYMENT_RECEIVED
+  PLAN_CREATED
+  PLAN_UPDATED
+  PLAN_ARCHIVED
 }
 
 enum AttendanceSource {
@@ -183,6 +236,9 @@ model User {
   avatarUrl    String?
   isMfaEnabled Boolean  @default(false)
   mfaSecret    String?  /// Encrypted TOTP secret
+  /// Ascenda platform staff: may review/approve access requests and provision
+  /// workspaces across tenants (SECURITY.md §8 — every action is audited).
+  isPlatformAdmin Boolean  @default(false)
   lastLoginAt  DateTime?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -247,6 +303,8 @@ model Organisation {
   documents            Document[]
   auditLogs            AuditLog[]
   statutoryRulePacks   StatutoryRulePack[]
+  invitations          Invitation[]
+  subscription         Subscription?
 
   @@map("organisations")
 }
@@ -710,4 +768,161 @@ model AuditLog {
   @@index([actorId])
   @@index([targetType, targetId])
   @@map("audit_log")
+}
+
+// ─── Invitations (onboarding) ────────────────────────────────────────────────
+// Created when a platform admin invites someone (or during self-serve signup).
+// The raw token is emailed to the invitee; only its SHA-256 hash is stored.
+// Single-use and time-limited. NOT tenant-scoped: the public set-password
+// endpoint must look it up by token before any organisation context exists.
+// Organisation context is applied only to the write that finalises the
+// membership.
+
+model Invitation {
+  id             String    @id @default(uuid())
+  organisationId String
+  email          String
+  role           SystemRole
+  /// SHA-256 hex of the raw invitation token — never store the token itself.
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  /// Platform admin who created the invitation.
+  createdBy      String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId])
+  @@index([email])
+  @@map("invitations")
+}
+
+// ─── Plans (platform-editable pricing) ───────────────────────────────────────
+// NOT tenant-scoped. Publicly readable (active plans); writable by platform
+// admins only. Money is stored in minor units (kobo) — never floats.
+
+model Plan {
+  id              String        @id @default(uuid())
+  code            String        @unique
+  name            String
+  description     String?
+  /// Price per billing period, in minor currency units (e.g. kobo for NGN).
+  priceMinorUnits Int           @default(0)
+  currency        String        @default("NGN")
+  billingPeriod   BillingPeriod @default(ANNUALLY)
+  /// Inclusive headcount band this plan is recommended for (UI hint + limits).
+  minHeadcount    Int?
+  maxHeadcount    Int?
+  /// Max seats; null means unlimited.
+  maxSeats        Int?
+  /// Display bullet points, e.g. ["Unlimited payroll runs", "Priority support"].
+  features        Json          @default("[]")
+  isFree          Boolean       @default(false)
+  isActive        Boolean       @default(true)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([isActive])
+  @@map("plans")
+}
+
+// ─── Subscriptions (one active plan per organisation) ────────────────────────
+// Tenant-scoped (RLS). Created during signup provisioning.
+
+model Subscription {
+  id                 String             @id @default(uuid())
+  organisationId     String             @unique
+  planId             String
+  status             SubscriptionStatus @default(PENDING)
+  provider           PaymentProvider    @default(NONE)
+  providerRef        String?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  organisation Organisation          @relation(fields: [organisationId], references: [id])
+  plan         Plan                  @relation(fields: [planId], references: [id])
+  transactions BillingTransaction[]
+
+  @@index([planId])
+  @@map("subscriptions")
+}
+
+// ─── Billing transactions ────────────────────────────────────────────────────
+// One row per gateway charge attempt. NOT tenant-scoped at creation time (the
+// org may not exist yet), so it links to an organisation once provisioned.
+
+model BillingTransaction {
+  id              String            @id @default(uuid())
+  provider        PaymentProvider
+  /// Gateway reference we generated and send to the provider (unique).
+  reference       String            @unique
+  /// Provider-assigned transaction id (Paystack id / Flutterwave tx id).
+  providerTxnId   String?
+  amountMinorUnits Int
+  currency        String            @default("NGN")
+  status          TransactionStatus @default(PENDING)
+  payerEmail      String
+  planId          String?
+  registrationId  String?
+  organisationId  String?
+  subscriptionId  String?
+  /// Raw provider payload for reconciliation (never contains card data).
+  raw             Json?
+  paidAt          DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([status])
+  @@index([registrationId])
+  @@index([organisationId])
+  @@map("billing_transactions")
+}
+
+// ─── Registrations (self-serve signup) ───────────────────────────────────────
+// NOT tenant-scoped: created before an organisation exists. Email verification
+// is a 6-digit code; only its SHA-256 hash is stored. Single-use / time-limited.
+
+model Registration {
+  id                    String             @id @default(uuid())
+  firstName             String
+  lastName              String
+  email                 String
+  phone                 String?
+  /// Argon2id hash captured at signup; applied to the user on provisioning.
+  passwordHash          String
+  organisationName      String
+  organisationType      OrganisationType
+  teamSize              String
+  country               String             @default("NG")
+  role                  String?
+  message               String?
+  /// Selected plan (code snapshot kept so we can provision after payment).
+  planId                String
+  planCode              String
+  status                RegistrationStatus @default(PENDING)
+  /// SHA-256 hex of the 6-digit verification code — never store the code.
+  verificationCodeHash  String?
+  verificationExpiresAt DateTime?
+  verificationAttempts  Int                @default(0)
+  verifiedAt            DateTime?
+  /// Set once the workspace has been provisioned.
+  organisationId        String?
+  userId                String?
+  ipAddress             String?
+  userAgent             String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@map("registrations")
 }

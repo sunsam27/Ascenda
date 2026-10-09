@@ -1,22 +1,25 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { AuthGuard } from '@nestjs/passport';
+import { Controller, Get, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { PermissionScope } from '@ascenda/types';
+import { AuditLog } from '@ascenda/db';
+import { RequirePermission } from '../../common/rbac/permission.decorator';
 import { AuditService } from './audit.service';
 
-/**
- * Audit Controller
- * TODO: Implement PRD endpoints for this module.
- * Every route requires JWT + RBAC guard.
- */
 @ApiTags('audit')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'))
 @Controller('audit')
 export class AuditController {
   constructor(private readonly service: AuditService) {}
 
   @Get()
-  findAll() {
-    return { message: 'Audit module  coming soon' };
+  @ApiOperation({ summary: 'List the current organisation audit trail' })
+  @RequirePermission({
+    resource: 'audit_logs',
+    action: 'read',
+    scope: PermissionScope.ORGANISATION,
+  })
+  async findAll(@Query('limit') limit?: string): Promise<{ data: AuditLog[] }> {
+    const data = await this.service.findAll(limit ? Number(limit) : 50);
+    return { data };
   }
 }

@@ -1,64 +1,65 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-
-// Common
-import { TenantMiddleware } from './common/tenant/tenant.middleware';
+import { RequestContextMiddleware } from './common/context/context.middleware';
+import { JwtAuthGuard } from './common/auth/jwt-auth.guard';
+import { RbacGuard } from './common/rbac/rbac.guard';
+import { TenantContextInterceptor } from './common/tenant/tenant-context.interceptor';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
-
-// Modules
-import { IdentityAccessModule } from './modules/identity-access/identity-access.module';
-import { OrganisationsModule } from './modules/organisations/organisations.module';
-import { PeopleModule } from './modules/people/people.module';
-import { TimeLeaveModule } from './modules/time-leave/time-leave.module';
-import { PayrollModule } from './modules/payroll/payroll.module';
-import { PaymentsModule } from './modules/payments/payments.module';
-import { TalentModule } from './modules/talent/talent.module';
-import { ServiceModule } from './modules/service/service.module';
-import { DocumentsModule } from './modules/documents/documents.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
-import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { DocumentsModule } from './modules/documents/documents.module';
+import { IdentityAccessModule } from './modules/identity-access/identity-access.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { OrganisationsModule } from './modules/organisations/organisations.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
+import { PeopleModule } from './modules/people/people.module';
+import { PlansModule } from './modules/plans/plans.module';
+import { RegistrationsModule } from './modules/registrations/registrations.module';
+import { PrismaModule } from './common/prisma/prisma.module';
+import { ServiceModule } from './modules/service/service.module';
+import { TalentModule } from './modules/talent/talent.module';
+import { TimeLeaveModule } from './modules/time-leave/time-leave.module';
 
 @Module({
   imports: [
-    // ── Config ────────────────────────────────────────────────────────────────
     ConfigModule.forRoot({ isGlobal: true, cache: true }),
-
-    // ── Rate limiting (SECURITY.md §2) ────────────────────────────────────────
     ThrottlerModule.forRoot([
-      { name: 'short', ttl: 1000, limit: 10 },
-      { name: 'medium', ttl: 10000, limit: 50 },
-      { name: 'long', ttl: 60000, limit: 200 },
+      {
+        ttl: 60_000,
+        limit: 100,
+      },
     ]),
-
-    // ── Domain modules ────────────────────────────────────────────────────────
-    IdentityAccessModule,
-    OrganisationsModule,
-    PeopleModule,
-    TimeLeaveModule,
-    PayrollModule,
-    PaymentsModule,
-    TalentModule,
-    ServiceModule,
-    DocumentsModule,
+    PrismaModule,
     AnalyticsModule,
-    NotificationsModule,
     AuditModule,
     BillingModule,
+    DocumentsModule,
+    IdentityAccessModule,
+    NotificationsModule,
+    OrganisationsModule,
+    PaymentsModule,
+    PayrollModule,
+    PeopleModule,
+    PlansModule,
+    RegistrationsModule,
+    ServiceModule,
+    TalentModule,
+    TimeLeaveModule,
   ],
   providers: [
-    // Global rate limiting guard
     { provide: APP_GUARD, useClass: ThrottlerGuard },
-    // Global audit interceptor — runs on every state-changing request
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RbacGuard },
+    { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
 export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    // Tenant middleware runs on all routes — sets app.current_org in DB context
-    consumer.apply(TenantMiddleware).forRoutes('*');
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
   }
 }

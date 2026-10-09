@@ -2,6 +2,9 @@
 
 import { useState, FormEvent } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import axios from 'axios';
+import { api } from '@/lib/api';
 import styles from './LoginForm.module.css';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -9,6 +12,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 type FieldErrors = Partial<Record<'email' | 'password', string>>;
 
 export default function LoginForm() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -52,12 +56,23 @@ export default function LoginForm() {
     setError('');
     setIsLoading(true);
     try {
-      // TODO: Call auth API
-      await new Promise((r) => setTimeout(r, 800));
-      // router.push('/dashboard');
-    } catch {
-      setError('Invalid email or password. Please try again.');
-    } finally {
+      const { data } = await api.post<{ redirectTo?: string }>('/auth/login', {
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      // Keep the button disabled while navigation completes (avoids a flash).
+      router.push(data.redirectTo ?? '/dashboard');
+      router.refresh();
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        setError('Invalid email or password. Please try again.');
+      } else if (axios.isAxiosError(err) && !err.response) {
+        setError(
+          'We couldn’t reach the server. Please check your connection and try again.',
+        );
+      } else {
+        setError('Something went wrong. Please try again.');
+      }
       setIsLoading(false);
     }
   }
@@ -142,7 +157,6 @@ export default function LoginForm() {
               {errors.password}
             </p>
           )}
-          <a href="/forgot-password" className={styles.forgotLink}>Forgot password?</a>
         </div>
 
         <button
@@ -164,8 +178,8 @@ export default function LoginForm() {
       </form>
 
       <p className={styles.footer}>
-        Don&apos;t have an account?{' '}
-        <a href="/register">Contact your administrator</a>
+        Don&apos;t have a workspace?{' '}
+        <a href="/signup">Create a workspace</a>
       </p>
     </div>
   );

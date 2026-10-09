@@ -1,0 +1,52 @@
+.wrapper { display: flex; flex-direction: column; gap: var(--space-5); }
+
+.muted { font-size: var(--text-body-sm); color: var(--color-text-muted); }
+
+.summaryRow { display: flex; align-items: baseline; gap: var(--space-2); }
+
+.summaryCount {
+  font-size: var(--text-h2);
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
+}
+
+.message {
+  padding: var(--space-10);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2); text-align: center; min-height: 220px;
+}
+
+.messageTitle {
+  font-size: var(--text-h3);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+
+.item {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-5); padding: var(--space-5);
+}
+
+.itemMain { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+
+.itemHeader { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+
+.orgName { font-size: var(--text-h3); font-weight: var(--weight-semibold); color: var(--color-text); }
+
+.meta { font-size: var(--text-body-sm); color: var(--color-text-secondary); }
+
+.badge {
+  font-size: var(--text-overline);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+}
+
+.pending { background: var(--color-primary-light); color: var(--color-primary); }
+.verified { background: rgba(217, 119, 6, 0.14); color: #b45309; }
+.completed { background: rgba(22, 163, 74, 0.12); color: #16a34a; }
+.cancelled, .expired { background: var(--color-error-tint); color: var(--color-error); }

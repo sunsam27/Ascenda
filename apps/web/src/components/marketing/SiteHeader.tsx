@@ -50,8 +50,8 @@ export default function SiteHeader() {
           <Link href="/login" className={`${shared.btn} ${shared.btnQuiet}`}>
             Sign in
           </Link>
-          <Link href="/request-access" className={`${shared.btn} ${shared.btnPrimary} ${styles.requestCta}`}>
-            Request access
+          <Link href="/signup" className={`${shared.btn} ${shared.btnPrimary} ${styles.requestCta}`}>
+            Get started
             <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
           </Link>
           <button
@@ -85,8 +85,8 @@ export default function SiteHeader() {
             <Link href="/login" className={`${shared.btn} ${shared.btnSecondary}`}>
               Sign in
             </Link>
-            <Link href="/request-access" className={`${shared.btn} ${shared.btnPrimary}`}>
-              Request access
+            <Link href="/signup" className={`${shared.btn} ${shared.btnPrimary}`}>
+              Get started
             </Link>
           </div>
         </div>

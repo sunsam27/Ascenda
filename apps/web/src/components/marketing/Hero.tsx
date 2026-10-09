@@ -25,8 +25,8 @@ export default function Hero() {
           </p>
 
           <div className={styles.actions}>
-            <Link href="/request-access" className={`${shared.btn} ${shared.btnPrimary}`}>
-              Request access
+            <Link href="/signup" className={`${shared.btn} ${shared.btnPrimary}`}>
+              Get started
               <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
             </Link>
             <a href="#how-it-works" className={`${shared.btn} ${shared.btnSecondary}`}>

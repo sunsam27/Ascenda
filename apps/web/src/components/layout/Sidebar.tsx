@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { api } from '@/lib/api';
 import {
   LayoutDashboard,
   Users,
@@ -28,6 +29,17 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleSignOut() {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // Even if the request fails, clear the client-side session view.
+    }
+    router.replace('/login');
+    router.refresh();
+  }
 
   return (
     <aside className={`glass-nav ${styles.sidebar}`} aria-label="Main navigation">
@@ -86,7 +98,7 @@ export default function Sidebar() {
         <button
           className={`${styles.navItem} ${styles.signOut}`}
           aria-label="Sign out"
-          onClick={() => { /* TODO: clear session and redirect to login */ }}
+          onClick={handleSignOut}
         >
           <LogOut size={20} strokeWidth={1.75} aria-hidden="true" />
           <span>Sign out</span>

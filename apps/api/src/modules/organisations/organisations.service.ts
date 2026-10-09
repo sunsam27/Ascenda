@@ -1,11 +1,16 @@
 import { Injectable } from '@nestjs/common';
+import { Organisation } from '@ascenda/db';
+import { PrismaService } from '../../common/prisma/prisma.service';
 
 /**
  * Organisations Service
- * TODO: Implement PRD requirements for this module.
- * All methods MUST accept organisationId and NEVER query without it.
+ * Reads are scoped by RLS to the caller's active organisation (SECURITY.md §3).
  */
 @Injectable()
 export class OrganisationsService {
-  // TODO: Inject PrismaService and implement methods
+  constructor(private readonly prisma: PrismaService) {}
+
+  async getCurrent(): Promise<Organisation[]> {
+    return this.prisma.withRequestContext((tx) => tx.organisation.findMany());
+  }
 }

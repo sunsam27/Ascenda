@@ -18,8 +18,8 @@ export default function FinalCTA() {
           </p>
 
           <div className={styles.actions}>
-            <Link href="/request-access" className={`${shared.btn} ${shared.btnLight}`}>
-              Request access
+            <Link href="/signup" className={`${shared.btn} ${shared.btnLight}`}>
+              Get started
               <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
             </Link>
             <Link href="/login" className={`${shared.btn} ${shared.btnOutlineLight}`}>

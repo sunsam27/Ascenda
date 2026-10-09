@@ -11,6 +11,8 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug'],
+    // Retain the raw request body so payment webhooks can verify signatures.
+    rawBody: true,
   });
 
   const config = app.get(ConfigService);

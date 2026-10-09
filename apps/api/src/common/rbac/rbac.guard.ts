@@ -1,68 +1,47 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// RBAC GUARD
-// SECURITY.md §4: Default deny. Permissions model is resource:action:scope.
-// Applied after JwtAuthGuard. Use @RequirePermission() on controllers.
+// RBAC GUARD (global)
+// Evaluates the `@RequirePermission()` metadata against the caller's role using
+// the permission matrix (SECURITY.md §4). Registered after JwtAuthGuard, so
+// `req.user` is guaranteed to be present for protected routes.
+//
+// Routes without permission metadata are reachable by any authenticated user
+// (e.g. `GET /auth/me`). Data-bearing endpoints MUST declare a permission; the
+// matrix itself is default-deny.
 // ─────────────────────────────────────────────────────────────────────────────
 import {
-  Injectable,
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { PERMISSION_KEY } from './permission.decorator';
 import { Permission } from '@ascenda/types';
+import { PERMISSION_KEY } from './permission.decorator';
+import { roleHasPermission } from './permissions';
 
 @Injectable()
 export class RbacGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredPermission = this.reflector.getAllAndOverride<Permission>(
+    const required = this.reflector.getAllAndOverride<Permission>(
       PERMISSION_KEY,
       [context.getHandler(), context.getClass()],
     );
 
-    // If no permission required, route is open post-auth (e.g. /me)
-    if (!requiredPermission) {
+    if (!required) {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<Record<string, unknown>>();
-    const user = request['user'] as { permissions?: Permission[]; role?: string } | undefined;
+    const req = context.switchToHttp().getRequest<{ user?: { role?: string } }>();
+    const role = req.user?.role;
 
-    if (!user) {
-      throw new ForbiddenException('Authenticated user required');
-    }
-
-    const hasPermission = (user.permissions ?? []).some(
-      (p) =>
-        p.resource === requiredPermission.resource &&
-        p.action === requiredPermission.action &&
-        this.scopeCoversRequired(p.scope, requiredPermission.scope),
-    );
-
-    if (!hasPermission) {
+    if (!role || !roleHasPermission(role, required)) {
       throw new ForbiddenException(
-        `Permission denied: ${requiredPermission.resource}:${requiredPermission.action}`,
+        `Missing permission: ${required.resource}:${required.action}:${required.scope}`,
       );
     }
 
     return true;
-  }
-
-  /**
-   * Higher scopes cover lower ones:
-   * organisation > department > team > self
-   */
-  private scopeCoversRequired(
-    granted: string,
-    required: string,
-  ): boolean {
-    const hierarchy = ['self', 'team', 'department', 'location', 'organisation'];
-    const grantedIdx = hierarchy.indexOf(granted);
-    const requiredIdx = hierarchy.indexOf(required);
-    if (grantedIdx === -1 || requiredIdx === -1) return false;
-    return grantedIdx >= requiredIdx;
   }
 }

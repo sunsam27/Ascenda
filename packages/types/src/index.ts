@@ -13,6 +13,44 @@ export enum OrganisationType {
   OTHER = 'OTHER',
 }
 
+// ── Billing / plans ──────────────────────────────────────────────────────────
+
+export enum BillingPeriod {
+  MONTHLY = 'MONTHLY',
+  ANNUALLY = 'ANNUALLY',
+}
+
+export enum SubscriptionStatus {
+  PENDING = 'PENDING',
+  ACTIVE = 'ACTIVE',
+  PAST_DUE = 'PAST_DUE',
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',
+}
+
+export enum PaymentProvider {
+  NONE = 'NONE',
+  PAYSTACK = 'PAYSTACK',
+  FLUTTERWAVE = 'FLUTTERWAVE',
+}
+
+export enum TransactionStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  ABANDONED = 'ABANDONED',
+  REVERSED = 'REVERSED',
+}
+
+export enum RegistrationStatus {
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',
+}
+
 export enum WorkerCategory {
   EMPLOYEE = 'EMPLOYEE',
   MINISTER = 'MINISTER',
@@ -175,6 +213,18 @@ export enum AuditAction {
   SUPPORT_ACCESS = 'SUPPORT_ACCESS',
   DOCUMENT_UPLOADED = 'DOCUMENT_UPLOADED',
   DOCUMENT_ACCESSED = 'DOCUMENT_ACCESSED',
+  ACCESS_REQUEST_APPROVED = 'ACCESS_REQUEST_APPROVED',
+  ACCESS_REQUEST_REJECTED = 'ACCESS_REQUEST_REJECTED',
+  INVITATION_SENT = 'INVITATION_SENT',
+  PASSWORD_SET = 'PASSWORD_SET',
+  REGISTRATION_STARTED = 'REGISTRATION_STARTED',
+  REGISTRATION_VERIFIED = 'REGISTRATION_VERIFIED',
+  WORKSPACE_CREATED = 'WORKSPACE_CREATED',
+  SUBSCRIPTION_ACTIVATED = 'SUBSCRIPTION_ACTIVATED',
+  PAYMENT_RECEIVED = 'PAYMENT_RECEIVED',
+  PLAN_CREATED = 'PLAN_CREATED',
+  PLAN_UPDATED = 'PLAN_UPDATED',
+  PLAN_ARCHIVED = 'PLAN_ARCHIVED',
 }
 
 // ── Core Domain Interfaces ────────────────────────────────────────────────────
@@ -447,6 +497,169 @@ export interface AuthUser extends User {
   currentOrganisation: Organisation;
   currentRole: SystemRole;
   permissions: Permission[];
+}
+
+// ── Onboarding ────────────────────────────────────────────────────────────────
+
+export interface InvitationDetails {
+  email: string;
+  organisationName: string;
+  expiresAt: string;
+}
+
+export interface SetPasswordDto {
+  token: string;
+  password: string;
+}
+
+// ── Plans & billing ───────────────────────────────────────────────────────────
+
+/** Public-facing plan returned by GET /plans and used to render tier cards. */
+export interface PlanSummary {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  /** Price per billing period, in minor units (kobo). */
+  priceMinorUnits: number;
+  currency: string;
+  billingPeriod: BillingPeriod;
+  minHeadcount?: number | null;
+  maxHeadcount?: number | null;
+  maxSeats?: number | null;
+  features: string[];
+  isFree: boolean;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface CreatePlanDto {
+  code: string;
+  name: string;
+  description?: string;
+  priceMinorUnits: number;
+  currency?: string;
+  billingPeriod?: BillingPeriod;
+  minHeadcount?: number | null;
+  maxHeadcount?: number | null;
+  maxSeats?: number | null;
+  features?: string[];
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
+export type UpdatePlanDto = Partial<CreatePlanDto>;
+
+// ── Self-serve signup ─────────────────────────────────────────────────────────
+
+export interface StartRegistrationDto {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  phone?: string;
+  organisationName: string;
+  organisationType: OrganisationType;
+  teamSize: string;
+  country?: string;
+  role?: string;
+  message?: string;
+  /** Plan code selected on the signup form. */
+  planCode: string;
+}
+
+export interface StartRegistrationResult {
+  registrationId: string;
+  email: string;
+  /** Masked email for display, e.g. s*****@gmail.com */
+  emailMasked: string;
+  /** True when the selected plan requires payment before activation. */
+  requiresPayment: boolean;
+  plan: PlanSummary;
+  /** Seconds until the verification code expires. */
+  expiresIn: number;
+}
+
+export interface VerifyRegistrationDto {
+  registrationId: string;
+  code: string;
+}
+
+/**
+ * Result of a successful (free) registration. Paid plans return a checkout
+ * session instead and only produce a session after payment is confirmed.
+ */
+export interface VerifyRegistrationResult {
+  completed: boolean;
+  redirectTo?: string;
+  /** Present when a paid plan must be paid for before provisioning. */
+  checkout?: CheckoutSession;
+  plan?: PlanSummary;
+}
+
+export interface CheckoutSession {
+  provider: PaymentProvider;
+  /** Gateway reference for this charge attempt. */
+  reference: string;
+  /** URL to redirect the browser to (Paystack/Flutterwave hosted checkout). */
+  authorizationUrl: string;
+  amountMinorUnits: number;
+  currency: string;
+}
+
+export interface InitializePaymentDto {
+  registrationId: string;
+  provider: PaymentProvider;
+}
+
+export interface PaymentVerificationDto {
+  reference: string;
+  provider: PaymentProvider;
+}
+
+export interface PaymentResult {
+  status: TransactionStatus;
+  completed: boolean;
+  redirectTo?: string;
+  organisationId?: string;
+}
+
+/**
+ * Authenticated view of the current organisation's billing: its active plan
+ * (if any) and the most recent charge attempts.
+ */
+export interface BillingSummary {
+  plan: PlanSummary | null;
+  status: SubscriptionStatus | 'NONE';
+  provider: PaymentProvider;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  recentTransactions: BillingTransactionSummary[];
+}
+
+export interface BillingTransactionSummary {
+  reference: string;
+  provider: PaymentProvider;
+  amountMinorUnits: number;
+  currency: string;
+  status: TransactionStatus;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+/** Admin view of a workspace signup. */
+export interface RegistrationSummary {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  organisationName: string;
+  organisationType: OrganisationType;
+  teamSize: string;
+  planCode: string;
+  status: RegistrationStatus;
+  organisationId?: string | null;
+  createdAt: string;
 }
 
 // ── KPI / Analytics ───────────────────────────────────────────────────────────
