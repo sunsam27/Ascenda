@@ -2,7 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Check, Loader2, Pencil, Plus, X } from 'lucide-react';
+import {
+  Building2,
+  Check,
+  CircleCheckBig,
+  Loader2,
+  Pencil,
+  Plus,
+  Rocket,
+  ShieldCheck,
+  Sparkles,
+  X,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   BillingPeriod,
@@ -13,6 +26,16 @@ import {
 import styles from './PlansPanel.module.css';
 
 type LoadState = 'loading' | 'ready' | 'forbidden' | 'error';
+
+const planIcons: Record<string, LucideIcon> = {
+  free: Sparkles,
+  starter: Rocket,
+  growth: Zap,
+  scale: Building2,
+  enterprise: ShieldCheck,
+};
+
+const planTilts = [styles.tilt0, styles.tilt1, styles.tilt2];
 
 interface Draft {
   code: string;
@@ -95,6 +118,17 @@ function formatPrice(plan: PlanSummary): string {
     currency: plan.currency,
     minimumFractionDigits: 0,
   }).format(plan.priceMinorUnits / 100);
+}
+
+function sizeLabel(plan: PlanSummary): string {
+  if (plan.minHeadcount != null && plan.maxHeadcount != null) {
+    return `${plan.minHeadcount}–${plan.maxHeadcount} people`;
+  }
+  if (plan.maxHeadcount == null && plan.minHeadcount != null) {
+    return `${plan.minHeadcount}+ people`;
+  }
+  if (plan.maxSeats) return `Up to ${plan.maxSeats} people`;
+  return 'Flexible size';
 }
 
 export default function PlansPanel() {
@@ -243,25 +277,36 @@ export default function PlansPanel() {
       )}
 
       <ul className={styles.list} role="list">
-        {plans.map((plan) =>
-          editingId === plan.id ? (
-            <li key={plan.id}>
-              <PlanEditor
-                title={`Edit ${plan.name}`}
-                draft={draft}
-                setDraft={setDraft}
-                busy={busy}
-                onCancel={cancel}
-                onSave={() => save(plan.id)}
-                onArchive={
-                  plan.isActive ? () => archive(plan) : null
-                }
-              />
-            </li>
-          ) : (
+        {plans.map((plan, index) => {
+          if (editingId === plan.id) {
+            return (
+              <li key={plan.id}>
+                <PlanEditor
+                  title={`Edit ${plan.name}`}
+                  draft={draft}
+                  setDraft={setDraft}
+                  busy={busy}
+                  onCancel={cancel}
+                  onSave={() => save(plan.id)}
+                  onArchive={plan.isActive ? () => archive(plan) : null}
+                />
+              </li>
+            );
+          }
+
+          const Icon = planIcons[plan.code] ?? Sparkles;
+          const tilt = planTilts[index % planTilts.length];
+
+          return (
             <li key={plan.id} className={`glass ${styles.item}`}>
               <div className={styles.itemMain}>
                 <div className={styles.itemHeader}>
+                  <span
+                    className={`${styles.planIcon} ${tilt}`}
+                    aria-hidden="true"
+                  >
+                    <Icon size={20} strokeWidth={2} />
+                  </span>
                   <span className={styles.planName}>{plan.name}</span>
                   <span className={styles.planCode}>{plan.code}</span>
                   {plan.isFree && <span className={styles.freeTag}>Free</span>}
@@ -269,25 +314,31 @@ export default function PlansPanel() {
                     <span className={styles.archivedTag}>Archived</span>
                   )}
                 </div>
-                <p className={styles.meta}>
-                  <strong>{formatPrice(plan)}</strong>
-                  {!plan.isFree &&
-                    (plan.billingPeriod === BillingPeriod.ANNUALLY
-                      ? ' / year'
-                      : ' / month')}
-                  {' · '}
-                  {plan.minHeadcount != null && plan.maxHeadcount != null
-                    ? `${plan.minHeadcount}–${plan.maxHeadcount} people`
-                    : plan.maxHeadcount == null && plan.minHeadcount != null
-                      ? `${plan.minHeadcount}+ people`
-                      : plan.maxSeats
-                        ? `Up to ${plan.maxSeats} people`
-                        : 'Flexible size'}
+                <p className={styles.priceRow}>
+                  <span className={styles.price}>{formatPrice(plan)}</span>
+                  {!plan.isFree && (
+                    <span className={styles.period}>
+                      {plan.billingPeriod === BillingPeriod.ANNUALLY
+                        ? '/ year'
+                        : '/ month'}
+                    </span>
+                  )}
+                  <span className={styles.dot}>·</span>
+                  <span className={styles.size}>{sizeLabel(plan)}</span>
                 </p>
                 {plan.features.length > 0 && (
-                  <p className={styles.features}>
-                    {plan.features.join(' · ')}
-                  </p>
+                  <ul className={styles.features} role="list">
+                    {plan.features.map((feature) => (
+                      <li key={feature}>
+                        <CircleCheckBig
+                          size={15}
+                          strokeWidth={2.2}
+                          aria-hidden="true"
+                        />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
               <div className={styles.actions}>
@@ -302,8 +353,8 @@ export default function PlansPanel() {
                 </button>
               </div>
             </li>
-          ),
-        )}
+          );
+        })}
       </ul>
     </div>
   );

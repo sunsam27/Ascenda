@@ -133,3 +133,16 @@
 /* ── Dark mode placeholder (COLORS.md §5) ─────────────────────────────────── */
 /* Reserved — do not hard-code light values in components.
    [data-theme="dark"] { ... } will be defined in Release 2.             */
+
+/* ── Mobile typography scale (TYPOGRAPHY.md §3) ─────────────────────────────── */
+/* Heading/KPI tokens step down under 640px. Because components size headings
+   via var(--text-*), redefining the tokens here shrinks every headline
+   (marketing hero, page titles, KPI figures) on phones in one place. */
+@media (max-width: 640px) {
+  :root {
+    --text-display: 2rem;    /* 40px → 32px marketing hero */
+    --text-h1:      1.75rem;  /* 32px → 28px page titles */
+    --text-h2:      1.25rem;  /* 24px → 20px section titles */
+    --text-kpi:     2rem;     /* 38px → 32px dashboard numbers */
+  }
+}

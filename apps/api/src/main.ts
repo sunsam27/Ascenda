@@ -30,6 +30,10 @@ async function bootstrap() {
         },
       },
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      // The SPA reads the API cross-origin (NEXT_PUBLIC_API_URL), so responses
+      // must not be locked to same-origin (helmet's default) or browsers block
+      // the fetch despite valid CORS headers.
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );
 

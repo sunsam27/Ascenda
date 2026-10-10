@@ -8,6 +8,11 @@
   gap: var(--space-6);
 }
 
+/* The plan step shows three tier cards side by side, so it needs more room. */
+.wrapperWide {
+  max-width: 1000px;
+}
+
 /* ── Progress steps ────────────────────────────────────────────────────────── */
 .steps {
   display: flex;
@@ -218,6 +223,32 @@
   color: var(--color-error);
 }
 
+/* ── Password rules checklist ──────────────────────────────────────────────── */
+.passwordRules {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.passwordRule {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+  transition: color var(--duration-fast) var(--easing-base);
+}
+
+.passwordRule > svg {
+  flex-shrink: 0;
+}
+
+.passwordRuleMet {
+  color: var(--color-success);
+}
+
 .errorBanner {
   margin: 0;
   padding: var(--space-3) var(--space-4);
@@ -293,90 +324,181 @@
 
 /* ── Tier grid ─────────────────────────────────────────────────────────────── */
 .tierGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: var(--space-5);
+  padding-top: var(--space-6); /* headroom for the featured card’s lift + badge */
 }
 
 .tier {
   position: relative;
+  flex: 1 1 260px;
+  max-width: 340px;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-5);
+  padding: var(--space-6);
   text-align: left;
-  background: var(--color-surface);
-  border: 1.5px solid var(--color-border-strong);
-  border-radius: var(--radius-card);
-  cursor: pointer;
+  background: var(--tier-accent, var(--color-primary));
+  border: 2px solid var(--tier-accent, var(--color-primary));
+  border-radius: 28px;
+  cursor: default;
   font-family: var(--font-sans);
+  color: #fff;
+  box-shadow:
+    0 18px 50px -30px rgba(15, 23, 42, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
   transition:
-    border-color var(--duration-fast) var(--easing-base),
-    box-shadow var(--duration-fast) var(--easing-base),
-    transform var(--duration-fast) var(--easing-base);
+    box-shadow var(--duration-base) var(--easing-base),
+    transform var(--duration-base) var(--easing-base),
+    filter var(--duration-base) var(--easing-base);
 }
 
+/* Hover: the card lifts, swells slightly and casts a glow in its own colour. */
 .tier:hover {
-  border-color: var(--color-primary);
-  transform: translateY(-2px);
-}
-
-.tierSelected {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.18);
-}
-
-.tierFeatured {
-  background: linear-gradient(180deg, var(--color-primary-light), var(--color-surface) 60%);
+  transform: translateY(-6px) scale(1.02);
+  box-shadow:
+    0 30px 60px -22px var(--tier-accent, rgba(15, 23, 42, 0.6)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  filter: brightness(1.07) saturate(1.05);
+  z-index: 1;
 }
 
 .tierBadge {
   position: absolute;
-  top: -11px;
-  left: var(--space-5);
-  padding: 3px var(--space-3);
-  background: var(--color-primary);
-  color: #fff;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px var(--space-3);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border: 1.5px solid var(--color-primary);
   border-radius: var(--radius-pill);
   font-size: var(--text-overline);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.04em;
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 12px 26px -10px rgba(29, 78, 216, 0.5);
 }
 
+.tierMascot {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  color: #fff;
+  transform: rotate(12deg);
+}
+
+.tierTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-1);
+}
+
+.tierIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 12px 26px -18px rgba(15, 23, 42, 0.6);
+}
+
+.tilt0 { transform: rotate(-6deg); }
+.tilt1 { transform: rotate(4deg); }
+.tilt2 { transform: rotate(-4deg); }
+
 .tierName {
-  font-size: var(--text-body-lg);
-  font-weight: var(--weight-semibold);
-  color: var(--color-text);
+  font-size: var(--text-h3);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.tierDesc {
+  font-size: var(--text-body-sm);
+  line-height: var(--leading-normal);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .tierPrice {
   display: flex;
   align-items: baseline;
   gap: var(--space-1);
-  font-size: var(--text-h2);
+  margin-top: var(--space-1);
+  font-size: var(--text-h1);
   font-weight: var(--weight-bold);
-  letter-spacing: -0.02em;
-  color: var(--color-text);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: #fff;
 }
 
 .tierPeriod {
   font-size: var(--text-caption);
   font-weight: var(--weight-regular);
-  color: var(--color-text-muted);
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .tierHead {
   font-size: var(--text-caption);
   font-weight: var(--weight-medium);
-  color: var(--color-primary);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.tierCta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1.5px solid #fff;
+  border-radius: var(--radius-pill);
+  background: #fff;
+  color: var(--tier-accent, var(--color-primary));
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  transition:
+    background var(--duration-fast) var(--easing-base),
+    color var(--duration-fast) var(--easing-base),
+    border-color var(--duration-fast) var(--easing-base),
+    box-shadow var(--duration-fast) var(--easing-base);
+}
+
+.tierCtaOn {
+  background: #fff;
+  border-color: #fff;
+  color: var(--tier-accent, var(--color-primary));
+  box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.08);
 }
 
 .tierFeatures {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  margin: var(--space-2) 0 0;
+  gap: 0;
+  margin: var(--space-4) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -385,34 +507,37 @@
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px dashed rgba(255, 255, 255, 0.28);
   font-size: var(--text-body-sm);
   line-height: var(--leading-normal);
-  color: var(--color-text-secondary);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.tierFeatures li:first-child {
+  border-top: none;
 }
 
 .tierFeatures svg {
   flex-shrink: 0;
   margin-top: 2px;
-  color: var(--color-success);
-}
-
-.tierCheck {
-  position: absolute;
-  top: var(--space-4);
-  right: var(--space-4);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1.5px solid var(--color-border-strong);
   color: #fff;
 }
 
-.tierCheckOn {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
+.tierReassure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: var(--space-5) 0 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.tierReassure svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
 }
 
 .tierNote {
@@ -433,7 +558,8 @@
 .payOptions {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
+  margin-block: var(--space-3);
 }
 
 .payButton {
@@ -535,6 +661,13 @@
 }
 
 /* ── Responsive ────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  /* Below three-up the cards wrap; the featured badge moves off the top row. */
+  .tierGrid {
+    padding-top: var(--space-2);
+  }
+}
+
 @media (max-width: 560px) {
   .card,
   .cardWide {

@@ -1,11 +1,12 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
 /**
- * Shared API client. `withCredentials` ensures the HttpOnly auth cookies set by
- * the API (SECURITY.md §2) are sent on every request.
+ * Shared API client. The SPA calls the API same-origin through the Next.js
+ * rewrites in next.config.ts (source `/api/:path*` → the API), so the browser
+ * never makes cross-origin requests. `withCredentials` ensures the HttpOnly
+ * auth cookies set by the API (SECURITY.md §2) are sent on every request.
  */
-const baseURL =
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+const baseURL = '/api/v1';
 
 export const api = axios.create({
   baseURL,

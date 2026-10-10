@@ -328,11 +328,20 @@
   .kpiValue { font-size: var(--text-h4); }
 }
 
+@media (max-width: 880px) {
+  /* Icon + padding leaves too little width for single-line 7-figure balances
+     below 880px, so drop icons and pack the KPI tiles instead of truncating. */
+  .kpiRow { grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); }
+  .kpiIcon { display: none; }
+  .kpi { padding: var(--space-2); }
+  .kpiValue { overflow-wrap: anywhere; }
+}
+
 @media (max-width: 560px) {
   .colType { display: none; }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 920px) {
   .toast {
     position: static;
     margin-top: var(--space-3);

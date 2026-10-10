@@ -21,11 +21,11 @@
 /* KPI grid — 4 columns, responsive */
 .kpiGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-5);
 }
 
-@media (max-width: 1024px) { .kpiGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 1024px) { .kpiGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px)  { .kpiGrid { grid-template-columns: 1fr; } }
 
 /* Content below KPI row */
@@ -62,17 +62,4 @@
 .placeholderText {
   color: var(--color-text-muted);
   font-size: var(--text-body-sm);
-}
-
-/* Screen-reader only utility */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }

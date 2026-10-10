@@ -14,13 +14,39 @@
   transition: left var(--duration-base) var(--easing-base);
 }
 
-.left { display: flex; align-items: center; }
+.left { display: flex; align-items: center; min-width: 0; }
+
+.menuButton {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  margin-right: var(--space-2);
+  flex-shrink: 0;
+  transition:
+    background-color var(--duration-fast) var(--easing-base),
+    color var(--duration-fast) var(--easing-base);
+}
+
+.menuButton:hover {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
 
 .pageTitle {
   font-size: var(--text-h3);
   font-weight: var(--weight-semibold);
   color: var(--color-text);
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .right {
@@ -31,8 +57,8 @@
 
 .iconButton {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -73,7 +99,9 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 0;
+  padding: 4px; /* 36px avatar + padding = 44px touch target */
+  border-radius: 50%;
+  display: flex;
 }
 
 .avatar {
@@ -96,5 +124,8 @@
   .topbar {
     left: 0;
     padding: 0 var(--space-4);
+  }
+  .menuButton {
+    display: flex;
   }
 }

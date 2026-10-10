@@ -6,6 +6,7 @@
   left: 0;
   width: var(--sidebar-width);
   height: 100vh;
+  height: 100dvh; /* avoids iOS dynamic-toolbar overflow */
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--glass-border-nav);

@@ -3,6 +3,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -26,6 +27,9 @@ export class StartRegistrationDto {
   @IsString()
   @MinLength(12)
   @MaxLength(200)
+  @Matches(/[A-Z]/, { message: 'Password must include an uppercase letter' })
+  @Matches(/[a-z]/, { message: 'Password must include a lowercase letter' })
+  @Matches(/[0-9]/, { message: 'Password must include a number' })
   password!: string;
 
   @IsOptional()

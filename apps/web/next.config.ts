@@ -15,8 +15,9 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: https:",
-  // The SPA calls the API on a different origin (and uses HMR websockets in dev).
-  `connect-src 'self' ${apiOrigin}${isDev ? ' ws: wss:' : ''}`,
+  // The SPA calls the API same-origin via rewrites (no cross-origin requests);
+  // dev additionally needs HMR websockets.
+  `connect-src 'self'${isDev ? ' ws: wss:' : ''}`,
   "frame-ancestors 'none'",
 ].join('; ');
 
@@ -38,6 +39,17 @@ const nextConfig: NextConfig = {
 
   // Strict mode for better dev warnings
   reactStrictMode: true,
+
+  // Relay API calls same-origin: the browser fetches /api/v1/... on :3000 and
+  // Next forwards them to the API (SECURITY.md — no CORS-exposed client).
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${apiOrigin}/api/:path*`,
+      },
+    ];
+  },
 
   // Security headers per SECURITY.md §9
   async headers() {

@@ -28,6 +28,18 @@ const navItems = [
 ];
 
 export default function Sidebar() {
+  return (
+    <aside className={`glass-nav ${styles.sidebar}`} aria-label="Main navigation">
+      <SidebarContent />
+    </aside>
+  );
+}
+
+/**
+ * Presentational sidebar contents (brand, nav, account row). Reused as-is by
+ * the desktop fixed sidebar and the mobile drawer (MobileNav.tsx).
+ */
+export function SidebarContent() {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -42,7 +54,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className={`glass-nav ${styles.sidebar}`} aria-label="Main navigation">
+    <>
       {/* Brand */}
       <div className={styles.brand}>
         <Image
@@ -104,6 +116,6 @@ export default function Sidebar() {
           <span>Sign out</span>
         </button>
       </div>
-    </aside>
+    </>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useRef, useState, FormEvent, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
@@ -14,7 +14,13 @@ import {
   CreditCard,
   Loader2,
   MailCheck,
+  Rocket,
   ShieldCheck,
+  Smile,
+  Sparkles,
+  X,
+  Zap,
+  type LucideIcon,
 } from 'lucide-react';
 import {
   OrganisationType,
@@ -36,6 +42,26 @@ const orgTypes: { value: OrganisationType; label: string }[] = [
 
 const teamSizes = ['1', '1–20', '21–100', '101–500', '501+'];
 
+const tierIcons: Record<string, LucideIcon> = {
+  free: Sparkles,
+  starter: Rocket,
+  growth: Zap,
+  scale: Building2,
+  enterprise: ShieldCheck,
+};
+
+const tierTilts = [styles.tilt0, styles.tilt1, styles.tilt2];
+
+const tierAccents: Record<string, string> = {
+  free: 'var(--color-secondary)',
+  starter: 'var(--color-chart-5)',
+  growth: 'var(--color-primary)',
+  scale: 'var(--color-success)',
+  enterprise: 'var(--color-warning)',
+};
+
+const DEFAULT_ACCENT = 'var(--color-primary)';
+
 const countries = [
   { value: 'NG', label: 'Nigeria' },
   { value: 'GH', label: 'Ghana' },
@@ -45,9 +71,52 @@ const countries = [
   { value: 'US', label: 'United States' },
 ];
 
-const NAME_PATTERN = /^[A-Za-z][A-Za-z' -]*$/;
+const NAME_PATTERN = /^[\p{L}][\p{L}' .-]*$/u;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const PHONE_PATTERN = /^\+?[\d\s().-]{7,20}$/;
 const MIN_PASSWORD_LENGTH = 12;
+
+interface PasswordRule {
+  id: string;
+  label: string;
+  test: (candidate: string) => boolean;
+}
+
+/** Live checklist shown under the password field. */
+const PASSWORD_RULES: PasswordRule[] = [
+  {
+    id: 'length',
+    label: `At least ${MIN_PASSWORD_LENGTH} characters`,
+    test: (candidate) => candidate.length >= MIN_PASSWORD_LENGTH,
+  },
+  {
+    id: 'upper',
+    label: 'An uppercase letter (A–Z)',
+    test: (candidate) => /[A-Z]/.test(candidate),
+  },
+  {
+    id: 'lower',
+    label: 'A lowercase letter (a–z)',
+    test: (candidate) => /[a-z]/.test(candidate),
+  },
+  {
+    id: 'number',
+    label: 'A number (0–9)',
+    test: (candidate) => /[0-9]/.test(candidate),
+  },
+];
+
+function getPasswordRules(candidate: string): {
+  id: string;
+  label: string;
+  met: boolean;
+}[] {
+  return PASSWORD_RULES.map((rule) => ({
+    id: rule.id,
+    label: rule.label,
+    met: rule.test(candidate),
+  }));
+}
 
 type Step = 'details' | 'plan' | 'verify' | 'payment' | 'done';
 
@@ -135,6 +204,9 @@ export default function SignupForm() {
 
   const [pending, setPending] = useState<PendingSignup | null>(null);
 
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const submitted = useRef(false);
+
   useEffect(() => {
     setPending(loadPending());
   }, []);
@@ -146,8 +218,6 @@ export default function SignupForm() {
       .then(({ data }) => {
         if (!active) return;
         setPlans(data.data);
-        const firstPaid = data.data.find((p) => !p.isFree) ?? data.data[0];
-        if (firstPaid) setSelectedCode(firstPaid.code);
       })
       .catch(() => active && setPlansError(true));
     return () => {
@@ -158,30 +228,105 @@ export default function SignupForm() {
   function set<K extends keyof Fields>(key: K, value: string) {
     setFields((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => {
-      if (!prev[key]) return prev;
       const next = { ...prev };
       delete next[key];
+      if (key === 'confirm' && value.length > 0 && value !== fields.password) {
+        next.confirm = 'Passwords do not match.';
+      }
+      return next;
+    });
+  }
+
+  type ValidatableKey =
+    | 'firstName'
+    | 'lastName'
+    | 'email'
+    | 'password'
+    | 'confirm'
+    | 'phone'
+    | 'organisationName'
+    | 'organisationType'
+    | 'teamSize'
+    | 'role';
+
+  /** Single source of truth for field-level validation. */
+  function validateField(
+    key: ValidatableKey,
+    value: Fields,
+  ): string | undefined {
+    const raw = value[key];
+    const trimmed = raw.trim();
+    switch (key) {
+      case 'firstName':
+      case 'lastName':
+        if (trimmed.length < 2)
+          return `Please enter your ${key === 'firstName' ? 'first' : 'last'} name.`;
+        if (!NAME_PATTERN.test(trimmed))
+          return 'Names may only contain letters, spaces, hyphens and apostrophes.';
+        return;
+      case 'email':
+        if (!EMAIL_PATTERN.test(trimmed))
+          return 'Enter a valid email, e.g. you@yourorganisation.org.';
+        return;
+      case 'password':
+        if (raw.length > 200) return 'Keep your password under 200 characters.';
+        if (raw.length < MIN_PASSWORD_LENGTH)
+          return `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+        if (!/[A-Z]/.test(raw)) return 'Add at least one uppercase letter.';
+        if (!/[a-z]/.test(raw)) return 'Add at least one lowercase letter.';
+        if (!/[0-9]/.test(raw)) return 'Add at least one number.';
+        return;
+      case 'confirm':
+        if (raw !== value.password) return 'Passwords do not match.';
+        return;
+      case 'phone':
+        if (raw && !PHONE_PATTERN.test(trimmed))
+          return 'Enter a valid phone number.';
+        return;
+      case 'organisationName':
+        if (trimmed.length < 2) return 'Enter your organisation name.';
+        return;
+      case 'organisationType':
+        if (!raw) return 'Select your organisation type.';
+        return;
+      case 'teamSize':
+        if (!raw) return 'Select your team size.';
+        return;
+      case 'role':
+        if (raw.length > 80) return 'Keep your role under 80 characters.';
+        return;
+      default:
+        return;
+    }
+  }
+
+  /** Validate on blur — skip empty fields until the form has been submitted. */
+  function validateOnBlur(key: ValidatableKey) {
+    if (!submitted.current && fields[key].trim() === '') return;
+    const message = validateField(key, fields);
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (message) next[key] = message;
+      else if (prev[key]) delete next[key];
       return next;
     });
   }
 
   function validateDetails(): boolean {
     const next: Record<string, string> = {};
-    if (fields.firstName.trim().length < 2 || !NAME_PATTERN.test(fields.firstName.trim()))
-      next.firstName = 'Please enter your first name.';
-    if (fields.lastName.trim().length < 2 || !NAME_PATTERN.test(fields.lastName.trim()))
-      next.lastName = 'Please enter your last name.';
-    if (!EMAIL_PATTERN.test(fields.email.trim()))
-      next.email = 'Please enter a valid work email address.';
-    if (fields.password.length < MIN_PASSWORD_LENGTH)
-      next.password = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
-    if (fields.confirm !== fields.password)
-      next.confirm = 'Passwords do not match.';
-    if (fields.organisationName.trim().length < 2)
-      next.organisationName = 'Please enter your organisation name.';
-    if (!fields.organisationType)
-      next.organisationType = 'Please select your organisation type.';
-    if (!fields.teamSize) next.teamSize = 'Please select your team size.';
+    for (const key of [
+      'firstName',
+      'lastName',
+      'email',
+      'password',
+      'confirm',
+      'organisationName',
+      'organisationType',
+      'teamSize',
+    ] satisfies ValidatableKey[]) {
+      const message = validateField(key, fields);
+      if (message) next[key] = message;
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -189,6 +334,7 @@ export default function SignupForm() {
   function goToPlan(e: FormEvent) {
     e.preventDefault();
     setSubmitError(null);
+    submitted.current = true;
     if (validateDetails()) setStep('plan');
   }
 
@@ -369,7 +515,9 @@ export default function SignupForm() {
   const showPaymentStep = Boolean(flowPlan && !flowPlan.isFree && step !== 'details');
 
   return (
-    <div className={styles.wrapper}>
+    <div
+      className={`${styles.wrapper} ${step === 'plan' ? styles.wrapperWide : ''}`}
+    >
       {pending && step === 'details' && (
         <div className={styles.resumeBanner} role="status">
           <span className={styles.resumeIcon} aria-hidden="true">
@@ -425,6 +573,7 @@ export default function SignupForm() {
                 value={fields.firstName}
                 autoComplete="given-name"
                 onChange={(e) => set('firstName', e.currentTarget.value)}
+                onBlur={() => validateOnBlur('firstName')}
               />
             </Field>
             <Field label="Last name" error={errors.lastName}>
@@ -433,6 +582,7 @@ export default function SignupForm() {
                 value={fields.lastName}
                 autoComplete="family-name"
                 onChange={(e) => set('lastName', e.currentTarget.value)}
+                onBlur={() => validateOnBlur('lastName')}
               />
             </Field>
           </div>
@@ -445,6 +595,7 @@ export default function SignupForm() {
               autoComplete="email"
               placeholder="you@yourorganisation.org"
               onChange={(e) => set('email', e.currentTarget.value)}
+              onBlur={() => validateOnBlur('email')}
             />
           </Field>
 
@@ -456,8 +607,37 @@ export default function SignupForm() {
                 value={fields.password}
                 autoComplete="new-password"
                 placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                aria-describedby="signup-password-rules"
+                onFocus={() => setPasswordFocused(true)}
+                onBlur={() => {
+                  setPasswordFocused(false);
+                  validateOnBlur('password');
+                }}
                 onChange={(e) => set('password', e.currentTarget.value)}
               />
+              {(passwordFocused || fields.password.length > 0) && (
+                <ul
+                  id="signup-password-rules"
+                  className={styles.passwordRules}
+                  aria-label="Password requirements"
+                >
+                  {getPasswordRules(fields.password).map((rule) => (
+                    <li
+                      key={rule.id}
+                      className={`${styles.passwordRule} ${
+                        rule.met ? styles.passwordRuleMet : ''
+                      }`}
+                    >
+                      {rule.met ? (
+                        <Check size={13} strokeWidth={3} aria-hidden="true" />
+                      ) : (
+                        <X size={13} strokeWidth={3} aria-hidden="true" />
+                      )}
+                      {rule.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </Field>
             <Field label="Confirm password" error={errors.confirm}>
               <input
@@ -466,6 +646,7 @@ export default function SignupForm() {
                 value={fields.confirm}
                 autoComplete="new-password"
                 onChange={(e) => set('confirm', e.currentTarget.value)}
+                onBlur={() => validateOnBlur('confirm')}
               />
             </Field>
           </div>
@@ -477,6 +658,7 @@ export default function SignupForm() {
                 value={fields.phone}
                 autoComplete="tel"
                 onChange={(e) => set('phone', e.currentTarget.value)}
+                onBlur={() => validateOnBlur('phone')}
               />
             </Field>
             <Field label="Your role" optional>
@@ -485,6 +667,7 @@ export default function SignupForm() {
                 value={fields.role}
                 placeholder="e.g. HR lead"
                 onChange={(e) => set('role', e.currentTarget.value)}
+                onBlur={() => validateOnBlur('role')}
               />
             </Field>
           </div>
@@ -496,6 +679,7 @@ export default function SignupForm() {
               autoComplete="organization"
               placeholder="Grace Chapel / Acme Ltd"
               onChange={(e) => set('organisationName', e.currentTarget.value)}
+              onBlur={() => validateOnBlur('organisationName')}
             />
           </Field>
 
@@ -505,6 +689,7 @@ export default function SignupForm() {
                 className={inputClass(errors.organisationType)}
                 value={fields.organisationType}
                 onChange={(e) => set('organisationType', e.currentTarget.value)}
+                onBlur={() => validateOnBlur('organisationType')}
               >
                 <option value="" disabled>
                   Select one
@@ -521,6 +706,7 @@ export default function SignupForm() {
                 className={inputClass(errors.teamSize)}
                 value={fields.teamSize}
                 onChange={(e) => set('teamSize', e.currentTarget.value)}
+                onBlur={() => validateOnBlur('teamSize')}
               >
                 <option value="" disabled>
                   Select one
@@ -600,54 +786,100 @@ export default function SignupForm() {
               We couldn’t load the plans. Please refresh and try again.
             </p>
           ) : (
-            <div className={styles.tierGrid} role="radiogroup" aria-label="Plans">
-              {plans.map((plan) => {
-                const selected = plan.code === selectedCode;
-                const featured = plan.code === 'growth';
-                return (
-                  <button
-                    type="button"
-                    key={plan.id}
-                    role="radio"
-                    aria-checked={selected}
-                    className={`${styles.tier} ${selected ? styles.tierSelected : ''} ${featured ? styles.tierFeatured : ''}`}
-                    onClick={() => setSelectedCode(plan.code)}
-                  >
-                    {featured && <span className={styles.tierBadge}>Most popular</span>}
-                    <span className={styles.tierName}>{plan.name}</span>
-                    <span className={styles.tierPrice}>
-                      {formatPrice(plan)}
-                      {!plan.isFree && (
-                        <span className={styles.tierPeriod}>{pricePeriod(plan)}</span>
-                      )}
-                    </span>
-                    <span className={styles.tierHead}>
-                      {plan.minHeadcount != null && plan.maxHeadcount != null
-                        ? `${plan.minHeadcount}–${plan.maxHeadcount} people`
-                        : plan.maxHeadcount == null && plan.minHeadcount != null
-                          ? `${plan.minHeadcount}+ people`
-                          : plan.maxSeats
-                            ? `Up to ${plan.maxSeats} people`
-                            : 'Flexible team size'}
-                    </span>
-                    <ul className={styles.tierFeatures}>
-                      {plan.features.map((f) => (
-                        <li key={f}>
-                          <Check size={15} strokeWidth={2.5} aria-hidden="true" />
-                          {f}
-                        </li>
-                      ))}
-                    </ul>
-                    <span
-                      className={`${styles.tierCheck} ${selected ? styles.tierCheckOn : ''}`}
-                      aria-hidden="true"
+            <>
+              <div className={styles.tierGrid} role="radiogroup" aria-label="Plans">
+                {plans.map((plan, i) => {
+                  const selected = plan.code === selectedCode;
+                  const featured = plan.code === 'growth';
+                  const Icon = tierIcons[plan.code] ?? Sparkles;
+                  return (
+                    <div
+                      key={plan.id}
+                      className={styles.tier}
+                      style={
+                        {
+                          '--tier-accent': tierAccents[plan.code] ?? DEFAULT_ACCENT,
+                        } as CSSProperties
+                      }
                     >
-                      {selected && <Check size={14} strokeWidth={3} />}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                      {featured && (
+                        <span className={styles.tierBadge}>
+                          <Sparkles size={12} strokeWidth={2.5} aria-hidden="true" />
+                          Most loved
+                        </span>
+                      )}
+                      {featured && (
+                        <span className={styles.tierMascot} aria-hidden="true">
+                          <Smile size={17} strokeWidth={2.2} />
+                        </span>
+                      )}
+
+                      <span className={styles.tierTop}>
+                        <span className={`${styles.tierIcon} ${tierTilts[i % tierTilts.length]}`}>
+                          <Icon size={20} strokeWidth={2} aria-hidden="true" />
+                        </span>
+                      </span>
+
+                      <span className={styles.tierName}>{plan.name}</span>
+                      {plan.description && (
+                        <span className={styles.tierDesc}>{plan.description}</span>
+                      )}
+
+                      <span className={styles.tierPrice}>
+                        {formatPrice(plan)}
+                        {!plan.isFree && (
+                          <span className={styles.tierPeriod}>{pricePeriod(plan)}</span>
+                        )}
+                      </span>
+                      <span className={styles.tierHead}>
+                        {plan.minHeadcount != null && plan.maxHeadcount != null
+                          ? `${plan.minHeadcount}–${plan.maxHeadcount} people`
+                          : plan.maxHeadcount == null && plan.minHeadcount != null
+                            ? `${plan.minHeadcount}+ people`
+                            : plan.maxSeats
+                              ? `Up to ${plan.maxSeats} people`
+                              : 'Flexible team size'}
+                      </span>
+
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        className={`${styles.tierCta} ${selected ? styles.tierCtaOn : ''}`}
+                        onClick={() => setSelectedCode(plan.code)}
+                      >
+                        {selected ? (
+                          <>
+                            <Check size={15} strokeWidth={3} aria-hidden="true" />
+                            Selected
+                          </>
+                        ) : (
+                          `Choose ${plan.name}`
+                        )}
+                      </button>
+
+                      <ul className={styles.tierFeatures}>
+                        {plan.features.map((f) => (
+                          <li key={f}>
+                            <CircleCheckBig
+                              size={16}
+                              strokeWidth={2.2}
+                              aria-hidden="true"
+                            />
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className={styles.tierReassure}>
+                <ShieldCheck size={16} strokeWidth={2} aria-hidden="true" />
+                No card to start. Cancel any time. Change plans whenever you need.
+              </p>
+            </>
           )}
 
           {submitError && (

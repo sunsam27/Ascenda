@@ -75,6 +75,8 @@
 }
 
 .link {
+  padding: 12px 4px;
+  margin: -12px -4px;
   font-size: var(--text-body-sm);
   color: var(--color-text-secondary);
   text-decoration: none;
