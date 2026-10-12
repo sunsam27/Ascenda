@@ -590,10 +590,19 @@
   cursor: not-allowed;
 }
 
+.payButton > svg:first-child,
+.payButton > .payLogo {
+    flex-shrink: 0;
+  }
+
+.payButton > .payLogo {
+    height: 32px;
+    width: auto;
+  }
+
 .payButton > svg:first-child {
-  color: var(--color-primary);
-  flex-shrink: 0;
-}
+    color: var(--color-primary);
+  }
 
 .payText {
   display: flex;

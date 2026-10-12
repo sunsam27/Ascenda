@@ -1117,24 +1117,38 @@ function PayButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      className={styles.payButton}
-      onClick={onClick}
-      disabled={disabled}
-      aria-busy={loading}
-    >
-      <Building2 size={20} strokeWidth={1.75} aria-hidden="true" />
-      <span className={styles.payText}>
-        <span className={styles.payLabel}>{label}</span>
-        <span className={styles.paySub}>{sub}</span>
-      </span>
-      {loading ? (
-        <Loader2 className={styles.spin} size={16} aria-hidden="true" />
-      ) : (
-        <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
-      )}
-    </button>
+      <button
+        type="button"
+        className={styles.payButton}
+        onClick={onClick}
+        disabled={disabled}
+        aria-busy={loading}
+      >
+        {label === "Pay with Paystack" ? (
+          <img
+            src="/paystack.png"
+            alt="Paystack logo"
+            className={styles.payLogo}
+          />
+        ) : label === "Pay with Flutterwave" ? (
+          <img
+            src="/flutterwave.png"
+            alt="Flutterwave logo"
+            className={styles.payLogo}
+          />
+        ) : (
+          <Building2 size={20} strokeWidth={1.75} aria-hidden="true" />
+        )}
+        <span className={styles.payText}>
+          <span className={styles.payLabel}>{label}</span>
+          <span className={styles.paySub}>{sub}</span>
+        </span>
+        {loading ? (
+          <Loader2 className={styles.spin} size={16} aria-hidden="true" />
+        ) : (
+          <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
+        )}
+      </button>
   );
 }
 
