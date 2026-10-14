@@ -13,7 +13,7 @@ interface KpiCardProps {
 }
 
 const colorMap = {
-  primary:   { bg: 'var(--color-primary-light)',  icon: 'var(--color-primary)' },
+  primary:   { bg: 'var(--color-primary-light)',  icon: 'var(--color-primary-text)' },
   secondary: { bg: 'rgba(15,118,110,.12)',         icon: 'var(--color-secondary)' },
   success:   { bg: 'var(--color-success-tint)',    icon: 'var(--color-success)' },
   warning:   { bg: 'var(--color-warning-tint)',    icon: 'var(--color-warning)' },

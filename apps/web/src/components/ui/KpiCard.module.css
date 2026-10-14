@@ -52,3 +52,15 @@
   font-size: var(--text-caption);
   font-weight: var(--weight-medium);
 }
+
+/* ── Soft-UI override (scoped to the [data-theme="soft"] shell) ─────────────── */
+[data-theme='soft'] .card:hover {
+  box-shadow: var(--nm-shadow-flat);
+  transform: translateY(-3px);
+}
+
+/* ── Dark override (base hover hard-codes light shadow values) ──────────────── */
+[data-theme='dark'] .card:hover {
+  box-shadow: var(--glass-shadow);
+  transform: translateY(-3px);
+}

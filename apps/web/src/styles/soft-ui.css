@@ -1,0 +1,273 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   ASCENDA SOFT-UI (NEUMORPHIC) THEME — scoped
+   Applied only when a dashboard shell sets [data-theme="soft"]. Depth comes from
+   paired light/shadow on a single mid-neutral base (--nm-base), not colour.
+   Built entirely on design tokens (COLORS.md / DESIGN_SYSTEM.md); glass remains
+   the default identity. Dense data surfaces stay solid (DESIGN_SYSTEM.md §6).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Soft theme retunes the muted token so captions keep 4.5:1 on the darker
+   --nm-base surface (COLORS.md §2 — muted barely passes on #F8FAFC). */
+[data-theme='soft'] {
+  --color-text-muted: #5a6675;
+}
+
+/* ── Page background: flat base (neumorphism needs surface = background) ───── */
+[data-theme='soft'].app-bg {
+  background: var(--nm-base);
+}
+
+/* ── Remap the shared glass surfaces to soft-UI while the theme is active ──── */
+[data-theme='soft'] .glass {
+  background: var(--nm-base);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: none;
+  box-shadow: var(--nm-shadow-flat);
+}
+
+[data-theme='soft'] .glass-nav {
+  background: var(--nm-base);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: none;
+  box-shadow: var(--nm-shadow-flat);
+}
+
+[data-theme='soft'] .glass-overlay {
+  background: var(--nm-base);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: none;
+  box-shadow: var(--nm-shadow-flat);
+}
+
+/* ── Soft-UI utility classes (opt-in, token-driven) ───────────────────────── */
+
+/* Flat raised surface */
+.nm-flat {
+  background: var(--nm-base);
+  border: none;
+  box-shadow: var(--nm-shadow-flat);
+}
+
+/* Carved-in surface */
+.nm-inset {
+  background: var(--nm-base);
+  border: none;
+  box-shadow: var(--nm-shadow-inset);
+}
+
+/* Interactive button: lifts on hover, presses in on active */
+.nm-button {
+  background: var(--nm-base);
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--nm-shadow-flat);
+  transition:
+    box-shadow var(--duration-soft) var(--easing-base),
+    transform var(--duration-soft) var(--easing-base),
+    color var(--duration-soft) var(--easing-base);
+}
+
+.nm-button:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.nm-button:active {
+  transform: translateY(0) scale(1);
+  box-shadow: var(--nm-shadow-press);
+}
+
+/* Carved form input */
+.nm-input {
+  background: var(--nm-base);
+  border: none;
+  outline: none;
+  box-shadow: var(--nm-shadow-inset);
+  border-radius: var(--radius-input);
+  padding: 14px 20px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-body-sm);
+}
+
+.nm-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.nm-input:focus-visible {
+  outline: 2px solid var(--color-primary); /* focus ring is never removed */
+  outline-offset: 2px;
+}
+
+/* Toggle switch — 48×24 track, 16px thumb (spec), on-tokens */
+.nm-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 48px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.nm-toggle input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.nm-toggleTrack {
+  width: 48px;
+  height: 24px;
+  border-radius: 34px;
+  background: var(--nm-base);
+  box-shadow: var(--nm-shadow-inset);
+  display: flex;
+  align-items: center;
+  padding: 4px;
+}
+
+.nm-toggleThumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--nm-dark-soft);
+  box-shadow: 2px 2px 4px var(--nm-dark);
+  transition:
+    transform 0.4s ease,
+    background 0.4s ease;
+}
+
+.nm-toggle input:checked + .nm-toggleTrack .nm-toggleThumb {
+  transform: translateX(24px);
+  background: var(--color-primary);
+}
+
+.nm-toggle input:focus-visible + .nm-toggleTrack {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Accordion — height animated through grid-template-rows (no fixed heights) */
+.nm-accordion {
+  border-radius: 28px;
+  background: var(--nm-base);
+  box-shadow: var(--nm-shadow-flat);
+  overflow: hidden;
+}
+
+.nm-accordionHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-text);
+  font-size: var(--text-h4);
+  font-weight: var(--weight-semibold);
+}
+
+.nm-accordionIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--nm-base);
+  box-shadow: var(--nm-shadow-inset);
+  color: var(--color-primary);
+}
+
+.nm-accordionChevron {
+  margin-left: auto;
+  transition: transform var(--duration-soft) var(--easing-base);
+}
+
+.nm-accordion[data-open='true'] .nm-accordionChevron {
+  transform: rotate(180deg);
+}
+
+.nm-accordionPanel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s var(--easing-base);
+}
+
+.nm-accordion[data-open='true'] .nm-accordionPanel {
+  grid-template-rows: 1fr;
+}
+
+.nm-accordionPanelInner {
+  overflow: hidden;
+}
+
+/* ── Cascade-in entry (stagger children of a .cascade container) ───────────── */
+@keyframes nm-cascade {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cascade > * {
+  animation: nm-cascade 0.6s var(--easing-base) both;
+}
+
+.cascade > *:nth-child(1) { animation-delay: 0ms; }
+.cascade > *:nth-child(2) { animation-delay: 60ms; }
+.cascade > *:nth-child(3) { animation-delay: 120ms; }
+.cascade > *:nth-child(4) { animation-delay: 180ms; }
+.cascade > *:nth-child(5) { animation-delay: 240ms; }
+.cascade > *:nth-child(6) { animation-delay: 300ms; }
+
+/* ── Accessibility + print fallbacks (DESIGN_SYSTEM.md §5, §8, §9) ─────────── */
+@media (prefers-reduced-motion: reduce) {
+  .nm-button:hover {
+    transform: none;
+  }
+  .nm-toggleThumb,
+  .nm-accordionChevron,
+  .nm-accordionPanel {
+    transition: none;
+  }
+  .cascade > * {
+    animation: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  [data-theme='soft'] .glass,
+  [data-theme='soft'] .glass-nav,
+  [data-theme='soft'] .glass-overlay,
+  .nm-flat,
+  .nm-inset,
+  .nm-accordion {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
+    box-shadow: none;
+  }
+}
+
+@media print {
+  [data-theme='soft'].app-bg {
+    background: #fff !important;
+  }
+  .nm-flat,
+  .nm-inset,
+  .nm-accordion,
+  [data-theme='soft'] .glass,
+  [data-theme='soft'] .glass-nav {
+    box-shadow: none !important;
+    background: #fff !important;
+    border: 1px solid #ddd !important;
+  }
+}

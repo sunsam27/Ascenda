@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: 'Settings | Ascenda' };
 
 export default function SettingsPage() {
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} cascade`}>
       <div className={styles.pageHeader}>
         <h1 className={styles.pageTitle}>Settings</h1>
         <p className={styles.pageSubtitle}>Organisation configuration</p>

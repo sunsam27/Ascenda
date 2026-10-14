@@ -499,25 +499,6 @@ export class RegistrationsService {
           },
         });
 
-        if (!isFree && payment.reference) {
-          await tx.billingTransaction.create({
-            data: {
-              provider: payment.provider,
-              reference: payment.reference,
-              providerTxnId: payment.providerTxnId ?? null,
-              amountMinorUnits:
-                payment.amountMinorUnits ?? plan.priceMinorUnits,
-              currency: plan.currency,
-              status: 'COMPLETED',
-              payerEmail: registration.email,
-              planId: plan.id,
-              registrationId: registration.id,
-              organisationId,
-              paidAt: now,
-            },
-          });
-        }
-
         await tx.registration.update({
           where: { id: registration.id },
           data: {

@@ -52,7 +52,7 @@ const kpis = [
 
 export default function DashboardPage() {
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} cascade`}>
       <div className={styles.pageHeader}>
         <h1 className={styles.pageTitle}>Dashboard</h1>
         <p className={styles.pageSubtitle}>

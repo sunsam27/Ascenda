@@ -1,14 +1,27 @@
 'use client';
 
-import { Bell, Menu, X } from 'lucide-react';
+import { Bell, Droplet, Menu, Moon, Sparkles, X, type LucideIcon } from 'lucide-react';
+import { useCurrentUser, initialsOf } from '@/lib/useCurrentUser';
+import type { ShellTheme } from './AppShell';
 import styles from './TopBar.module.css';
 
 type TopBarProps = {
   menuOpen: boolean;
   onMenuClick: () => void;
+  theme: ShellTheme;
+  onToggleTheme: () => void;
 };
 
-export default function TopBar({ menuOpen, onMenuClick }: TopBarProps) {
+const THEME_META: Record<ShellTheme, { label: string; Icon: LucideIcon }> = {
+  soft: { label: 'Soft-UI', Icon: Sparkles },
+  glass: { label: 'Glass', Icon: Droplet },
+  dark: { label: 'Black', Icon: Moon },
+};
+
+export default function TopBar({ menuOpen, onMenuClick, theme, onToggleTheme }: TopBarProps) {
+  const { user } = useCurrentUser();
+  const { label: themeLabel, Icon: ThemeIcon } = THEME_META[theme];
+
   return (
     <header className={`glass-nav ${styles.topbar}`} role="banner">
       <div className={styles.left}>
@@ -29,6 +42,17 @@ export default function TopBar({ menuOpen, onMenuClick }: TopBarProps) {
         <h1 className={styles.pageTitle} id="page-title">Dashboard</h1>
       </div>
       <div className={styles.right}>
+        {/* Theme toggle — cycles Soft-UI → Glass → Black */}
+        <button
+          type="button"
+          className={styles.themeButton}
+          onClick={onToggleTheme}
+          aria-label={`Theme: ${themeLabel}. Click to change.`}
+          title={`Theme: ${themeLabel}`}
+        >
+          <ThemeIcon size={20} strokeWidth={1.75} aria-hidden="true" />
+        </button>
+
         {/* Notifications */}
         <button
           className={styles.iconButton}
@@ -40,7 +64,7 @@ export default function TopBar({ menuOpen, onMenuClick }: TopBarProps) {
 
         {/* User avatar */}
         <button className={styles.avatarButton} aria-label="Open user menu">
-          <div className={styles.avatar} aria-hidden="true">JD</div>
+          <div className={styles.avatar} aria-hidden="true">{initialsOf(user)}</div>
         </button>
       </div>
     </header>

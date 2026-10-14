@@ -1,0 +1,75 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   ASCENDA "BLACK" (DARK) THEME — scoped to [data-theme="dark"] on the shell.
+   Fills the dark block reserved in COLORS.md §5. Glass remains the identity
+   (dark glass). Text colours are re-verified for AA on the dark surfaces.
+   --color-primary-text exists so primary can be a bright blue as text on dark
+   while primary fills keep sufficient contrast with white text.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+[data-theme='dark'] {
+  /* ── Semantic colour, re-tuned for dark surfaces ───────────────────────── */
+  --color-primary:          #2563EB; /* fills — white text = 5.1:1 */
+  --color-primary-hover:    #1D4ED8;
+  --color-primary-light:    #1B2540; /* selected / hover backgrounds */
+  --color-primary-text:     #60A5FA; /* primary as text on dark = 7.3:1 */
+  --color-secondary:        #0F766E; /* white initials = 5.5:1 */
+  --color-accent:           #F59E0B;
+  --color-success:          #22C55E;
+  --color-warning:          #F59E0B;
+  --color-error:            #EF4444;
+  --color-info:             #60A5FA;
+
+  /* ── Text — verified against --color-surface #151A22 ───────────────────── */
+  --color-text:             #E6EAF2; /* ≈14.6:1 */
+  --color-text-secondary:   #B4BECC; /* ≈9.6:1 */
+  --color-text-muted:       #8B95A7; /* ≈5.9:1 */
+
+  /* ── Borders & surfaces ─────────────────────────────────────────────────── */
+  --color-border:           #232A36;
+  --color-border-strong:    #3A4556;
+
+  --color-bg:               #0B0E14;
+  --color-surface:          #151A22;
+
+  /* ── Status tints — low alpha, read over dark ──────────────────────────── */
+  --color-success-tint:     rgba(34, 197, 94, 0.14);
+  --color-warning-tint:     rgba(245, 158, 11, 0.16);
+  --color-accent-tint:      rgba(245, 158, 11, 0.20);
+  --color-error-tint:       rgba(239, 68, 68, 0.16);
+  --color-info-tint:        #1B2540;
+  --color-muted-tint:       rgba(139, 149, 167, 0.16);
+
+  /* ── Glass — dark, translucent (globals read these automatically) ──────── */
+  --glass-bg:               rgba(21, 26, 34, 0.72);
+  --glass-bg-nav:           rgba(17, 22, 29, 0.72);
+  --glass-bg-overlay:       rgba(21, 26, 34, 0.92);
+  --glass-border:           rgba(255, 255, 255, 0.08);
+  --glass-border-nav:       rgba(255, 255, 255, 0.08);
+  --glass-border-overlay:   rgba(255, 255, 255, 0.12);
+  --glass-shadow:           0 8px 28px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --glass-shadow-nav:       0 8px 28px rgba(0, 0, 0, 0.55);
+  --glass-shadow-overlay:   0 20px 60px rgba(0, 0, 0, 0.65);
+  --solid-shadow:           0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* App background — dark colour fields (kept subtle for text contrast) */
+[data-theme='dark'].app-bg {
+  background:
+    radial-gradient(640px 440px at 8% 6%,   rgba(37, 99, 235, 0.20), transparent 70%),
+    radial-gradient(560px 460px at 94% 10%, rgba(20, 184, 166, 0.10), transparent 70%),
+    radial-gradient(620px 480px at 70% 100%, rgba(245, 158, 11, 0.08), transparent 70%),
+    var(--color-bg);
+}
+
+/* Keep the divider seams visible against dark surfaces */
+[data-theme='dark'] .sidebar,
+[data-theme='dark'] .topbar {
+  border-color: var(--color-border);
+}
+
+/* ── Print ─────────────────────────────────────────────────────────────── */
+@media print {
+  [data-theme='dark'].app-bg {
+    background: #fff !important;
+  }
+}

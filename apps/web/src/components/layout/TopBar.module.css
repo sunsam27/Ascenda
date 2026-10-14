@@ -36,7 +36,7 @@
 
 .menuButton:hover {
   background: var(--color-primary-light);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .pageTitle {
@@ -74,7 +74,7 @@
 
 .iconButton:hover {
   background: var(--color-primary-light);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   border-color: var(--color-primary-light);
 }
 
@@ -119,6 +119,62 @@
 }
 
 .avatarButton:hover .avatar { opacity: 0.85; }
+
+.themeButton {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--easing-base),
+    color var(--duration-fast) var(--easing-base);
+}
+
+.themeButton:hover {
+  background: var(--color-primary-light);
+  color: var(--color-primary-text);
+  border-color: var(--color-primary-light);
+}
+
+/* ── Soft-UI overrides (scoped to the [data-theme="soft"] shell) ────────────── */
+[data-theme='soft'] .menuButton,
+[data-theme='soft'] .iconButton,
+[data-theme='soft'] .themeButton {
+  background: var(--nm-base);
+  border: none;
+  box-shadow: var(--nm-shadow-flat);
+  color: var(--color-text-secondary);
+  transition:
+    box-shadow var(--duration-soft) var(--easing-base),
+    transform var(--duration-soft) var(--easing-base),
+    color var(--duration-soft) var(--easing-base);
+}
+
+[data-theme='soft'] .menuButton:hover,
+[data-theme='soft'] .iconButton:hover,
+[data-theme='soft'] .themeButton:hover {
+  background: var(--nm-base);
+  color: var(--color-primary);
+  border-color: transparent;
+  transform: translateY(-2px) scale(1.02);
+}
+
+[data-theme='soft'] .menuButton:active,
+[data-theme='soft'] .iconButton:active,
+[data-theme='soft'] .themeButton:active {
+  transform: none;
+  box-shadow: var(--nm-shadow-press);
+}
+
+[data-theme='soft'] .badge {
+  border-color: var(--nm-base);
+}
 
 @media (max-width: 768px) {
   .topbar {

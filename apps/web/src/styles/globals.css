@@ -5,6 +5,8 @@
    ───────────────────────────────────────────────────────────────────────────── */
 
 @import './tokens.css';
+@import './soft-ui.css';
+@import './dark-theme.css';
 
 /* ── Reset ───────────────────────────────────────────────────────────────────── */
 *, *::before, *::after {
@@ -60,7 +62,7 @@ input, select, textarea {
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   text-decoration: none;
 }
 
@@ -251,7 +253,7 @@ h4, .text-h4 {
 }
 
 /* ── Colour utilities ─────────────────────────────────────────────────────────── */
-.text-primary        { color: var(--color-primary); }
+.text-primary        { color: var(--color-primary-text); }
 .text-secondary-text { color: var(--color-text-secondary); }
 .text-muted          { color: var(--color-text-muted); }
 .text-success        { color: var(--color-success); }

@@ -5,6 +5,12 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import {
+  useCurrentUser,
+  displayNameOf,
+  initialsOf,
+  roleLabelOf,
+} from '@/lib/useCurrentUser';
+import {
   LayoutDashboard,
   Users,
   CalendarClock,
@@ -42,6 +48,7 @@ export default function Sidebar() {
 export function SidebarContent() {
   const pathname = usePathname();
   const router = useRouter();
+  const { user } = useCurrentUser();
 
   async function handleSignOut() {
     try {
@@ -100,10 +107,10 @@ export function SidebarContent() {
         <div className={styles.divider} role="separator" />
 
         <div className={styles.userRow}>
-          <div className={styles.avatar} aria-hidden="true">JD</div>
+          <div className={styles.avatar} aria-hidden="true">{initialsOf(user)}</div>
           <div className={styles.userInfo}>
-            <span className={styles.userName}>Jane Doe</span>
-            <span className={styles.userRole}>HR Administrator</span>
+            <span className={styles.userName}>{displayNameOf(user)}</span>
+            <span className={styles.userRole}>{roleLabelOf(user)}</span>
           </div>
         </div>
 

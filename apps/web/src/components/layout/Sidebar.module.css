@@ -84,12 +84,12 @@
 /* Active state — Primary text on Primary light (COLORS.md §4 navigation rule) */
 .navItem.active {
   background: var(--color-primary-light);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   font-weight: var(--weight-semibold);
 }
 
 .navItem.active svg {
-  stroke: var(--color-primary);
+  stroke: var(--color-primary-text);
 }
 
 .navItem:focus-visible {
@@ -164,6 +164,33 @@
 .signOut:hover {
   color: var(--color-error);
   background: var(--color-error-tint);
+}
+
+/* ── Soft-UI overrides (scoped to the [data-theme="soft"] shell) ────────────── */
+[data-theme='soft'] .sidebar {
+  border-right: none;
+}
+
+[data-theme='soft'] .navItem:hover {
+  background: var(--nm-base);
+  color: var(--color-text);
+  box-shadow: var(--nm-shadow-sm);
+}
+
+[data-theme='soft'] .navItem.active {
+  background: var(--nm-base);
+  color: var(--color-primary-text);
+  box-shadow: var(--nm-shadow-inset);
+}
+
+[data-theme='soft'] .navItem.active svg {
+  stroke: var(--color-primary-text);
+}
+
+[data-theme='soft'] .signOut:hover {
+  background: var(--nm-base);
+  color: var(--color-error);
+  box-shadow: var(--nm-shadow-sm);
 }
 
 /* Mobile: hide sidebar — TODO: implement drawer */

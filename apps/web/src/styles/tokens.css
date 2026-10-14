@@ -15,6 +15,9 @@
   --color-primary:          #1D4ED8;
   --color-primary-hover:    #1E40AF;
   --color-primary-light:    #DBEAFE;
+  /* Primary used as *text* — equal to --color-primary in light; the dark theme
+     overrides it with a lighter blue so links/active nav pass AA on dark. */
+  --color-primary-text:     #1D4ED8;
   --color-secondary:        #0F766E;
   --color-accent:           #F59E0B;
   --color-success:          #15803D;
@@ -128,6 +131,19 @@
   --sidebar-collapsed-width: 72px;
   --topbar-height:          64px;
   --content-max-width:      1280px;
+
+  /* ── Soft-UI / Neumorphic palette (scoped theme — see styles/soft-ui.css) ─── */
+  /* Tactile depth comes from paired light/shadow on a single mid-neutral base.
+     Only used under [data-theme="soft"]; glass remains the default identity.  */
+  --nm-base:                #e8ecf2;
+  --nm-light:               #ffffff;
+  --nm-dark:                #b6c0cd;
+  --nm-dark-soft:           #c8d0db;
+  --nm-shadow-flat:         6px 6px 12px var(--nm-dark), -6px -6px 12px var(--nm-light);
+  --nm-shadow-inset:        inset 4px 4px 8px var(--nm-dark), inset -4px -4px 8px var(--nm-light);
+  --nm-shadow-press:        inset 3px 3px 6px var(--nm-dark), inset -3px -3px 6px var(--nm-light);
+  --nm-shadow-sm:           3px 3px 6px var(--nm-dark-soft), -3px -3px 6px var(--nm-light);
+  --duration-soft:          350ms;
 }
 
 /* ── Dark mode placeholder (COLORS.md §5) ─────────────────────────────────── */
