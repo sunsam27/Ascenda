@@ -512,7 +512,11 @@ export default function SignupForm() {
     step === 'plan'
       ? selectedPlan
       : activePlan;
-  const showPaymentStep = Boolean(flowPlan && !flowPlan.isFree && step !== 'details');
+  const paymentsRequired =
+    registration?.requiresPayment ?? Boolean(flowPlan && !flowPlan.isFree);
+  const showPaymentStep = Boolean(
+    flowPlan && paymentsRequired && step !== 'details',
+  );
 
   return (
     <div

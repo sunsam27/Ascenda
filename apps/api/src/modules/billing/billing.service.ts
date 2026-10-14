@@ -138,6 +138,11 @@ export class BillingService {
     if (plan.isFree || plan.priceMinorUnits === 0) {
       throw new BadRequestException('This plan does not require payment');
     }
+    if (!this.paymentsEnabled()) {
+      throw new BadRequestException(
+        'Payments are temporarily disabled — workspaces activate without payment.',
+      );
+    }
 
     const reference = `ASC-${randomUUID().slice(0, 8).toUpperCase()}-${Date.now()}`;
 
@@ -406,6 +411,14 @@ export class BillingService {
       workspace,
       plan: toPlanSummary(plan),
     };
+  }
+
+  private paymentsEnabled(): boolean {
+    return (
+      (this.config.get<string>('PAYMENTS_ENABLED') ?? 'false')
+        .trim()
+        .toLowerCase() === 'true'
+    );
   }
 
   private paystackSecret(): string {

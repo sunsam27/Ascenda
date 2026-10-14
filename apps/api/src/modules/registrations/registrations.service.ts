@@ -119,6 +119,19 @@ export class RegistrationsService {
     private readonly config: ConfigService,
   ) {}
 
+  /**
+   * Payments are paused while the product body is built out. When disabled,
+   * paid plans provision immediately like free plans; set PAYMENTS_ENABLED=true
+   * to restore the checkout gate. The payment code stays intact either way.
+   */
+  private paymentsEnabled(): boolean {
+    return (
+      (this.config.get<string>('PAYMENTS_ENABLED') ?? 'false')
+        .trim()
+        .toLowerCase() === 'true'
+    );
+  }
+
   /** Public: begin a signup and email a verification code. */
   async start(
     dto: StartRegistrationDto,
@@ -215,7 +228,8 @@ export class RegistrationsService {
       registrationId: registration.id,
       email,
       emailMasked: maskEmail(email),
-      requiresPayment: !plan.isFree && plan.priceMinorUnits > 0,
+      requiresPayment:
+        this.paymentsEnabled() && !plan.isFree && plan.priceMinorUnits > 0,
       plan: toPlanSummary(plan),
       expiresIn: CODE_TTL_MINUTES * 60,
     };
@@ -307,7 +321,8 @@ export class RegistrationsService {
       },
     });
 
-    const requiresPayment = !plan.isFree && plan.priceMinorUnits > 0;
+    const requiresPayment =
+      this.paymentsEnabled() && !plan.isFree && plan.priceMinorUnits > 0;
 
     if (requiresPayment) {
       return {
