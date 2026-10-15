@@ -8,6 +8,9 @@ dist/
 out/
 build/
 
+# Local object storage (documents/uploads in dev)
+.storage/
+
 # Turbo
 .turbo/
 

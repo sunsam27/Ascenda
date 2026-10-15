@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@ascenda/db';
+import { AuditAction, Prisma } from '@ascenda/db';
 import type {
   PaginationMeta,
   WorkerCategory as WorkerCategoryType,
@@ -19,6 +19,7 @@ import type {
 } from '@ascenda/types';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { getRequestContext } from '../../common/context/request-context';
+import { AuditService } from '../audit/audit.service';
 import {
   resolveReadScope,
   scopeWhereRestricts,
@@ -81,7 +82,10 @@ function isUniqueViolation(error: unknown): boolean {
 
 @Injectable()
 export class WorkersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async list(
     query: ListWorkersQueryDto,
@@ -425,6 +429,19 @@ export class WorkersService {
       if (identityRows.length > 0) {
         await tx.workerIdentity.createMany({ data: identityRows });
       }
+
+      // Audit a summary only — never the raw CSV (which can be megabytes and
+      // contain personal data). The interceptor skips /import routes for this.
+      await this.audit.record({
+        action: AuditAction.WORKER_CREATED,
+        targetType: 'workers',
+        newValue: {
+          source: 'csv_import',
+          total,
+          created: result.count,
+          skipped: total - result.count,
+        },
+      });
 
       return { created: result.count, skipped: total - result.count, total };
     });

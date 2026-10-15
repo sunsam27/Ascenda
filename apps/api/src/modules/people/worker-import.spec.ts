@@ -68,6 +68,31 @@ describe('mapHeader', () => {
     expect(mapHeader('Start Date')).toBe('startDate');
     expect(mapHeader('Nonsense')).toBeNull();
   });
+
+  it('accepts camelCase / no-space spellings for every field', () => {
+    expect(mapHeader('employeeNumber')).toBe('employeeNumber');
+    expect(mapHeader('EmployeeNumber')).toBe('employeeNumber');
+    expect(mapHeader('firstName')).toBe('firstName');
+    expect(mapHeader('lastName')).toBe('lastName');
+    expect(mapHeader('preferredName')).toBe('preferredName');
+    expect(mapHeader('employmentType')).toBe('employmentType');
+    expect(mapHeader('jobTitle')).toBe('jobTitle');
+    expect(mapHeader('startDate')).toBe('startDate');
+    expect(mapHeader('endDate')).toBe('endDate');
+    expect(mapHeader('dateOfBirth')).toBe('dateOfBirth');
+    expect(mapHeader('phoneNumber')).toBe('phone');
+    expect(mapHeader('mobileNumber')).toBe('phone');
+  });
+
+  it('maps a full camelCase header row with no header errors', () => {
+    const csv = [
+      'employeeNumber,firstName,lastName,email,jobTitle,startDate',
+      'EMP-1,Ada,Okafor,ada@example.com,Pastor,2026-01-05',
+    ].join('\n');
+    const { rawRows, headerErrors } = mapCsvToRawWorkers(csv);
+    expect(headerErrors).toEqual([]);
+    expect(rawRows[0]!.values.employeeNumber).toBe('EMP-1');
+  });
 });
 
 describe('mapCsvToRawWorkers', () => {

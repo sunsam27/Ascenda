@@ -39,10 +39,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (pathname === '/login' && hasSession) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-
   return NextResponse.next();
 }
 
@@ -56,6 +52,5 @@ export const config = {
     '/documents/:path*',
     '/analytics/:path*',
     '/settings/:path*',
-    '/login',
   ],
 };

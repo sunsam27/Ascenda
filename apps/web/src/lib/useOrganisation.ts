@@ -23,6 +23,11 @@ function fetchOrganisation(): Promise<Organisation | null> {
   return cache;
 }
 
+/** Drop the cached organisation so the next mount re-fetches (e.g. after a save). */
+export function invalidateOrganisation(): void {
+  cache = null;
+}
+
 export function useOrganisation(): {
   organisation: Organisation | null;
   loading: boolean;

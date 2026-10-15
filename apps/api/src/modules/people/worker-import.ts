@@ -34,6 +34,7 @@ export type CanonicalField =
 const HEADER_ALIASES: Record<CanonicalField, string[]> = {
   employeeNumber: [
     'employee number',
+    'employeenumber',
     'employee id',
     'employee no',
     'emp no',
@@ -45,12 +46,22 @@ const HEADER_ALIASES: Record<CanonicalField, string[]> = {
   ],
   firstName: ['first name', 'firstname', 'given name', 'given names'],
   lastName: ['last name', 'lastname', 'surname', 'family name'],
-  preferredName: ['preferred name', 'preferred', 'nickname'],
+  preferredName: ['preferred name', 'preferredname', 'preferred', 'nickname'],
   email: ['email', 'email address', 'e mail', 'mail'],
-  phone: ['phone', 'phone number', 'mobile', 'mobile number', 'telephone', 'tel'],
+  phone: [
+    'phone',
+    'phone number',
+    'phonenumber',
+    'mobile',
+    'mobile number',
+    'mobilenumber',
+    'telephone',
+    'tel',
+  ],
   category: ['category', 'worker category', 'worker type', 'category of worker'],
   employmentType: [
     'employment type',
+    'employmenttype',
     'employment',
     'contract type',
     'engagement type',
@@ -69,7 +80,14 @@ const HEADER_ALIASES: Record<CanonicalField, string[]> = {
     'join date',
   ],
   endDate: ['end date', 'enddate', 'end', 'date ended', 'exit date'],
-  dateOfBirth: ['date of birth', 'dob', 'birthday', 'birth date', 'birthdate'],
+  dateOfBirth: [
+    'date of birth',
+    'dateofbirth',
+    'dob',
+    'birthday',
+    'birth date',
+    'birthdate',
+  ],
   gender: ['gender', 'sex'],
 };
 

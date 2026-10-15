@@ -12,6 +12,8 @@ import {
   type WorkerSummary,
 } from '@ascenda/types';
 import { api } from '@/lib/api';
+import { useOrganisation } from '@/lib/useOrganisation';
+import CompensationPanel from './CompensationPanel';
 import styles from './people.module.css';
 
 interface Draft {
@@ -136,6 +138,7 @@ export default function WorkerEditor({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const { organisation } = useOrganisation();
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -418,6 +421,18 @@ export default function WorkerEditor({
                 onChange={(e) => set('gender', e.currentTarget.value)}
               />
             </label>
+
+            {worker && (
+              <>
+                <p className={styles.sectionLabel}>Compensation</p>
+                <div className={styles.fieldFull}>
+                  <CompensationPanel
+                    worker={worker}
+                    currency={organisation?.currency ?? 'NGN'}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
 

@@ -3,17 +3,22 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log', 'debug'],
     // Retain the raw request body so payment webhooks can verify signatures.
     rawBody: true,
   });
+
+  // Document uploads arrive as base64 JSON; the default 100kb limit is far too
+  // small for an 8 MB file (~11 MB once base64-encoded).
+  app.useBodyParser('json', { limit: '12mb' });
 
   const config = app.get(ConfigService);
   const port = config.get<number>('API_PORT', 3001);

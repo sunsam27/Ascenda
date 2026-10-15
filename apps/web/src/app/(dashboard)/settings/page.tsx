@@ -12,6 +12,18 @@ export default function SettingsPage() {
         <p className={styles.pageSubtitle}>Organisation configuration</p>
       </div>
 
+      <Link href="/settings/organisation" className={`glass ${styles.linkCard}`}>
+        <div>
+          <p className={styles.comingText}>Organisation</p>
+          <p className={styles.comingNote}>
+            Country, currency, timezone and organisation-type terminology.
+          </p>
+        </div>
+        <span className={styles.linkArrow} aria-hidden="true">
+          →
+        </span>
+      </Link>
+
       <Link href="/settings/plans" className={`glass ${styles.linkCard}`}>
         <div>
           <p className={styles.comingText}>Plans</p>
@@ -37,9 +49,9 @@ export default function SettingsPage() {
       </Link>
 
       <div className={`glass ${styles.comingSoon}`}>
-        <p className={styles.phaseLabel}>Phase 0</p>
-        <p className={styles.comingText}>Settings module — Part of Phase 0</p>
-        <p className={styles.comingNote}>Organisation setup: country, currency, terminology overrides, user roles and permissions.</p>
+        <p className={styles.phaseLabel}>Coming soon</p>
+        <p className={styles.comingText}>Users &amp; permissions</p>
+        <p className={styles.comingNote}>Invite team members, assign roles and fine-tune access.</p>
       </div>
     </div>
   );

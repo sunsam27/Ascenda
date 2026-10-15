@@ -42,9 +42,22 @@ function maskSensitiveFields(
   return masked;
 }
 
+/**
+ * Controller-relative route segments. Express reports the full URL, so the
+ * global `api/v1` prefix has to come off before segment 1 means anything.
+ */
+function routeSegments(path: string): string[] {
+  const parts = path.split('/').filter(Boolean);
+  if (parts[0] === 'api' && /^v\d+$/.test(parts[1] ?? '')) return parts.slice(2);
+  return parts;
+}
+
 /** Map a state-changing route to an AuditAction, or undefined to skip. */
 function resolveAction(method: string, path: string): AuditAction | undefined {
-  const segment = path.split('/').filter(Boolean)[1] ?? '';
+  // Nested under /workers/:workerId/compensation — pay changes are their own
+  // audit event, not a generic worker update.
+  if (path.includes('/compensation')) return AuditAction.COMPENSATION_CHANGED;
+  const segment = routeSegments(path)[0] ?? '';
   switch (segment) {
     case 'people':
     case 'workers':
@@ -89,15 +102,25 @@ export class AuditInterceptor implements NestInterceptor {
       return next.handle();
     }
 
+    // The worker CSV import is audited explicitly by WorkersService with a
+    // summary (never the raw CSV). Skip both the read-only preview and the
+    // commit here so previews don't emit a WORKER_CREATED event and the audit
+    // trail never stores the whole file.
+    if (routeSegments(path)[1] === 'import') {
+      return next.handle();
+    }
+
     return next.handle().pipe(
       tap({
         next: () => {
           const action = resolveAction(method, path);
           if (!action) return;
-          const segment = path.split('/').filter(Boolean)[1] ?? '';
+          const targetType = path.includes('/compensation')
+            ? 'compensation'
+            : routeSegments(path)[0] ?? '';
           void this.audit.record({
             action,
-            targetType: segment,
+            targetType,
             targetId: request.params?.['id'] ?? '',
             newValue: request.body
               ? maskSensitiveFields(request.body)

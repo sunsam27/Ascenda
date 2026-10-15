@@ -1,4 +1,7 @@
-import { toWorkerSummary } from './workers.service';
+import { requestContext } from '../../common/context/request-context';
+import type { PrismaService } from '../../common/prisma/prisma.service';
+import type { AuditService } from '../audit/audit.service';
+import { toWorkerSummary, WorkersService } from './workers.service';
 
 const base = {
   id: 'w1',
@@ -70,5 +73,61 @@ describe('toWorkerSummary', () => {
       endDate: new Date('2026-09-30T00:00:00.000Z'),
     } as never);
     expect(summary.endDate).toBe('2026-09-30T00:00:00.000Z');
+  });
+});
+
+/** Minimal Prisma transaction double for the import path. */
+function fakeTx() {
+  return {
+    department: { findMany: async () => [] },
+    location: { findMany: async () => [] },
+    worker: {
+      findMany: async () => [],
+      createMany: async ({ data }: { data: unknown[] }) => ({
+        count: data.length,
+      }),
+    },
+    workerIdentity: { createMany: async () => ({ count: 0 }) },
+  };
+}
+
+const CSV = [
+  'Employee Number,First Name,Last Name,Email,Job Title,Start Date',
+  'IMP-1,Ada,Okafor,ada@example.com,Pastor,2026-01-05',
+].join('\n');
+
+describe('commitImport', () => {
+  it('audits a summary (never the raw CSV) when rows are created', async () => {
+    const record = jest.fn().mockResolvedValue(undefined);
+    const prisma = {
+      withRequestContext: (fn: (tx: unknown) => Promise<unknown>) =>
+        fn(fakeTx()),
+    } as unknown as PrismaService;
+    const service = new WorkersService(
+      prisma,
+      { record } as unknown as AuditService,
+    );
+
+    const result = await requestContext.run(
+      { organisationId: 'org1', userId: 'u1' },
+      () => service.commitImport(CSV),
+    );
+
+    expect(result).toMatchObject({ created: 1, skipped: 0, total: 1 });
+    expect(record).toHaveBeenCalledTimes(1);
+
+    const entry = record.mock.calls[0]![0] as {
+      action: string;
+      newValue: Record<string, unknown>;
+    };
+    expect(entry.action).toBe('WORKER_CREATED');
+    expect(entry.newValue).toMatchObject({
+      source: 'csv_import',
+      total: 1,
+      created: 1,
+      skipped: 0,
+    });
+    // The CSV payload / PII must never land in the audit value.
+    expect(JSON.stringify(entry.newValue)).not.toContain('ada@example.com');
   });
 });

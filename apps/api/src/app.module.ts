@@ -21,6 +21,7 @@ import { PeopleModule } from './modules/people/people.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { RegistrationsModule } from './modules/registrations/registrations.module';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { StorageModule } from './common/storage/storage.module';
 import { ServiceModule } from './modules/service/service.module';
 import { TalentModule } from './modules/talent/talent.module';
 import { TimeLeaveModule } from './modules/time-leave/time-leave.module';
@@ -35,6 +36,7 @@ import { TimeLeaveModule } from './modules/time-leave/time-leave.module';
       },
     ]),
     PrismaModule,
+    StorageModule,
     AnalyticsModule,
     AuditModule,
     BillingModule,

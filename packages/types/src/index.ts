@@ -199,6 +199,7 @@ export enum AuditAction {
   PASSWORD_CHANGED = 'PASSWORD_CHANGED',
   ROLE_CHANGED = 'ROLE_CHANGED',
   PERMISSION_CHANGED = 'PERMISSION_CHANGED',
+  ORGANISATION_UPDATED = 'ORGANISATION_UPDATED',
   WORKER_CREATED = 'WORKER_CREATED',
   WORKER_UPDATED = 'WORKER_UPDATED',
   WORKER_DELETED = 'WORKER_DELETED',
@@ -250,6 +251,17 @@ export interface Organisation extends BaseEntity {
   terminology: Record<string, string>;
   logoUrl?: string;
   isActive: boolean;
+}
+
+/** Fields an owner may change on their own organisation (Phase 1 setup flow). */
+export interface UpdateOrganisationDto {
+  name?: string;
+  type?: OrganisationType;
+  country?: string; // ISO 3166-1 alpha-2
+  currency?: string; // ISO 4217
+  timezone?: string; // IANA
+  terminology?: Record<string, string>;
+  logoUrl?: string | null;
 }
 
 export interface User extends BaseEntity {
@@ -317,6 +329,20 @@ export interface WorkerListQuery extends PaginatedQuery {
   locationId?: string;
 }
 
+/** Create an effective-dated compensation record. Amount is integer minor units. */
+export interface CreateCompensationDto {
+  grossAmountMinorUnits: number;
+  /** ISO 4217 code; defaults to the organisation currency server-side. */
+  currency?: string;
+  payFrequency: PayFrequency;
+  validFrom: string;
+  /** Open-ended when omitted. */
+  validTo?: string | null;
+  notes?: string | null;
+}
+
+export type UpdateCompensationDto = Partial<CreateCompensationDto>;
+
 /** Per-row outcome after validating an imported CSV row. */
 export type WorkerImportRowStatus = 'valid' | 'duplicate' | 'error';
 
@@ -360,6 +386,7 @@ export interface CompensationRecord extends TenantEntity {
   payFrequency: PayFrequency;
   validFrom: string;
   validTo?: string;
+  notes?: string;
   createdBy: string;
 }
 
@@ -504,6 +531,33 @@ export interface Document extends TenantEntity {
   sizeBytes: number;
   expiresAt?: string;
   uploadedBy: string;
+}
+
+/** Directory row for the document store — metadata only, never a storage key. */
+export interface DocumentSummary extends TenantEntity {
+  workerId?: string;
+  workerName?: string;
+  type: DocumentType;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedBy: string;
+  /** Authenticated, same-origin endpoint that streams the file. */
+  downloadUrl: string;
+}
+
+/** Upload a document. `content` is base64 (no `data:` prefix). */
+export interface CreateDocumentDto {
+  name: string;
+  type: DocumentType;
+  workerId?: string | null;
+  mimeType: string;
+  content: string;
+}
+
+export interface DocumentListQuery extends PaginatedQuery {
+  workerId?: string;
+  type?: DocumentType;
 }
 
 export interface AuditLog extends TenantEntity {
