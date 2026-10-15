@@ -287,6 +287,36 @@ export interface Worker extends TenantEntity {
   createdBy: string;
 }
 
+/** Directory list/detail row — worker plus resolved department/location names. */
+export interface WorkerSummary extends TenantEntity {
+  employeeNumber: string;
+  firstName: string;
+  lastName: string;
+  preferredName?: string;
+  email: string;
+  phone?: string;
+  category: WorkerCategory;
+  employmentType: EmploymentType;
+  status: WorkerStatus;
+  jobTitle: string;
+  departmentId?: string;
+  departmentName?: string;
+  locationId?: string;
+  locationName?: string;
+  managerId?: string;
+  startDate: string;
+  endDate?: string;
+  dateOfBirth?: string;
+  gender?: string;
+}
+
+export interface WorkerListQuery extends PaginatedQuery {
+  status?: WorkerStatus;
+  category?: WorkerCategory;
+  departmentId?: string;
+  locationId?: string;
+}
+
 /** Integer minor units only — no floats, ever */
 export interface CompensationRecord extends TenantEntity {
   workerId: string;
@@ -315,6 +345,14 @@ export interface Department extends TenantEntity {
   name: string;
   parentId?: string;
   managerId?: string;
+}
+
+export interface Location extends TenantEntity {
+  name: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  isActive: boolean;
 }
 
 export interface LeaveType extends TenantEntity {
@@ -671,4 +709,65 @@ export interface DashboardKpis {
   nextPayrollDate: string;
   lastPayrollTotalMinorUnits: number;
   currency: string;
+}
+
+/** Compact view of the most recent payroll run for the dashboard KPI card. */
+export interface DashboardPayrollRun {
+  id: string;
+  status: PayrollRunStatus;
+  /** Period the run covers, e.g. "October 2026". */
+  periodLabel: string;
+  totalNetMinorUnits: number;
+  currency: string;
+  approvedAt: string | null;
+}
+
+/** Headline numbers for the dashboard KPI row. All org-scoped. */
+export interface DashboardSummary {
+  /** Workers with status ACTIVE. */
+  totalWorkers: number;
+  /** Leave requests awaiting approval (status PENDING). */
+  pendingLeaveRequests: number;
+  /** Most recent payroll run, or null until the first run exists. */
+  lastPayrollRun: DashboardPayrollRun | null;
+  /** Workers who joined (startDate) during the current calendar month. */
+  newThisMonth: number;
+}
+
+/** A leave entry shown in the dashboard insights rail. */
+export interface LeaveInsight {
+  id: string;
+  workerName: string;
+  leaveTypeName: string;
+  /** ISO 8601 date (date only). */
+  startDate: string;
+  /** ISO 8601 date (date only). */
+  endDate: string;
+}
+
+/** An upcoming birthday — only day/month are exposed, never the birth year. */
+export interface BirthdayInsight {
+  workerId: string;
+  workerName: string;
+  /** ISO 8601 date of the next occurrence of the birthday. */
+  date: string;
+}
+
+/** A public holiday in the organisation's country for the current month. */
+export interface HolidayInsight {
+  name: string;
+  /** ISO 8601 date (date only). */
+  date: string;
+}
+
+/** Everything the dashboard insights rail needs in one payload. */
+export interface DashboardInsights {
+  /** Approved leave spanning today. */
+  onLeaveNow: LeaveInsight[];
+  /** Approved leave starting within the next 30 days. */
+  upcomingLeave: LeaveInsight[];
+  /** Birthdays in the next 60 days. */
+  upcomingBirthdays: BirthdayInsight[];
+  /** Public holidays in the current calendar month. */
+  holidays: HolidayInsight[];
 }

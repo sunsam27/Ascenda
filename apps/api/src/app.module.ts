@@ -10,6 +10,7 @@ import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { IdentityAccessModule } from './modules/identity-access/identity-access.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -37,6 +38,7 @@ import { TimeLeaveModule } from './modules/time-leave/time-leave.module';
     AnalyticsModule,
     AuditModule,
     BillingModule,
+    DashboardModule,
     DocumentsModule,
     IdentityAccessModule,
     NotificationsModule,

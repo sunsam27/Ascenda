@@ -1,0 +1,188 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.pageHeader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.pageTitle {
+  font-size: var(--text-h1);
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+}
+
+.pageSubtitle {
+  font-size: var(--text-body);
+  color: var(--color-text-muted);
+}
+
+/* ── Empty-state banner ──────────────────────────────────────────────────────── */
+.emptyBanner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-5);
+}
+
+.emptyTitle {
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.emptyText {
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+}
+
+/* ── KPI grid — 4 columns, responsive ───────────────────────────────────────── */
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+
+@media (max-width: 1024px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .kpiGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Content below the KPI row ──────────────────────────────────────────────── */
+.contentGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.activityCard {
+  padding: var(--space-6);
+  min-height: 300px;
+}
+
+.cardHeader {
+  margin-bottom: var(--space-4);
+}
+
+.cardTitle {
+  font-size: var(--text-h3);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-input);
+}
+
+.placeholderText {
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm);
+}
+
+/* ── Loading / state cards ──────────────────────────────────────────────────── */
+.stateCard {
+  grid-column: 1 / -1;
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.stateTitle {
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.stateText {
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+}
+
+.kpiSkeleton {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.skeletonIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--color-muted-tint);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skeletonLine,
+.skeletonLineShort,
+.skeletonLineTall {
+  display: block;
+  border-radius: var(--radius-pill);
+  background: var(--color-muted-tint);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonLine {
+  width: 70%;
+  height: 12px;
+}
+
+.skeletonLineShort {
+  width: 40%;
+  height: 10px;
+}
+
+.skeletonLineTall {
+  width: 55%;
+  height: 28px;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonIcon,
+  .skeletonLine,
+  .skeletonLineShort,
+  .skeletonLineTall {
+    animation: none;
+  }
+}
