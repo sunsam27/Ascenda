@@ -19,7 +19,7 @@ export class DashboardController {
   @RequirePermission({
     resource: 'analytics',
     action: 'read',
-    scope: PermissionScope.ORGANISATION,
+    scope: PermissionScope.TEAM,
   })
   async summary(): Promise<{ data: DashboardSummary }> {
     return { data: await this.service.getSummary() };
@@ -32,7 +32,7 @@ export class DashboardController {
   @RequirePermission({
     resource: 'leave',
     action: 'read',
-    scope: PermissionScope.ORGANISATION,
+    scope: PermissionScope.TEAM,
   })
   async insights(): Promise<{ data: DashboardInsights }> {
     return { data: await this.service.getInsights() };

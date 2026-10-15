@@ -9,8 +9,10 @@ import {
   type HolidayInsight,
   type LeaveInsight,
   PayrollRunStatus,
+  PermissionScope,
 } from '@ascenda/types';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { resolveReadScope, scopeWhereRestricts } from '../../common/rbac/worker-scope';
 import { getHolidaysForMonth } from './ng-holidays';
 import {
   addDays,
@@ -94,16 +96,37 @@ export class DashboardService {
       const monthStart = startOfDay(startOfMonth(today), timeZone);
       const nextMonthStart = startOfDay(startOfNextMonth(today), timeZone);
 
+      const { scope, where: scopeWhere } = await resolveReadScope(
+        tx,
+        'analytics',
+        'read',
+      );
+      const restricts = scopeWhereRestricts(scopeWhere);
+      const withWorkerScope = (
+        where: Prisma.WorkerWhereInput,
+      ): Prisma.WorkerWhereInput =>
+        restricts ? { AND: [where, scopeWhere] } : where;
+
       const [totalWorkers, pendingLeaveRequests, newThisMonth, lastRun] =
         await Promise.all([
-          tx.worker.count({ where: { status: WorkerStatus.ACTIVE } }),
-          tx.leaveRequest.count({ where: { status: LeaveStatus.PENDING } }),
+          tx.worker.count({ where: withWorkerScope({ status: WorkerStatus.ACTIVE }) }),
+          tx.leaveRequest.count({
+            where: restricts
+              ? { status: LeaveStatus.PENDING, worker: { is: scopeWhere } }
+              : { status: LeaveStatus.PENDING },
+          }),
           tx.worker.count({
-            where: { startDate: { gte: monthStart, lt: nextMonthStart } },
+            where: withWorkerScope({
+              startDate: { gte: monthStart, lt: nextMonthStart },
+            }),
           }),
-          tx.payrollRun.findFirst({
-            orderBy: [{ periodEnd: 'desc' }, { createdAt: 'desc' }],
-          }),
+          // Payroll totals are organisation-level and not team-scoped, so they
+          // are only surfaced to organisation-wide callers.
+          scope === PermissionScope.ORGANISATION
+            ? tx.payrollRun.findFirst({
+                orderBy: [{ periodEnd: 'desc' }, { createdAt: 'desc' }],
+              })
+            : Promise.resolve(null),
         ]);
 
       const lastPayrollRun: DashboardPayrollRun | null = lastRun
@@ -148,12 +171,17 @@ export class DashboardService {
       );
       const birthdayHorizon = addDays(today, BIRTHDAY_HORIZON_DAYS);
 
+      const { where: scopeWhere } = await resolveReadScope(tx, 'leave', 'read');
+      const restricts = scopeWhereRestricts(scopeWhere);
+      const leaveScope = restricts ? { worker: { is: scopeWhere } } : {};
+
       const [onLeaveNowRows, upcomingLeaveRows, workers] = await Promise.all([
         tx.leaveRequest.findMany({
           where: {
             status: LeaveStatus.APPROVED,
             startDate: { lte: todayEnd },
             endDate: { gte: todayStart },
+            ...leaveScope,
           },
           orderBy: { endDate: 'asc' },
           select: LEAVE_SELECT,
@@ -162,15 +190,26 @@ export class DashboardService {
           where: {
             status: LeaveStatus.APPROVED,
             startDate: { gt: todayEnd, lte: leaveHorizonEnd },
+            ...leaveScope,
           },
           orderBy: { startDate: 'asc' },
           select: LEAVE_SELECT,
         }),
         tx.worker.findMany({
-          where: {
-            status: { not: WorkerStatus.TERMINATED },
-            workerIdentity: { is: { dateOfBirth: { not: null } } },
-          },
+          where: restricts
+            ? {
+                AND: [
+                  {
+                    status: { not: WorkerStatus.TERMINATED },
+                    workerIdentity: { is: { dateOfBirth: { not: null } } },
+                  },
+                  scopeWhere,
+                ],
+              }
+            : {
+                status: { not: WorkerStatus.TERMINATED },
+                workerIdentity: { is: { dateOfBirth: { not: null } } },
+              },
           select: {
             id: true,
             firstName: true,

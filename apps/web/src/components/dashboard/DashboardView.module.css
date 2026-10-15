@@ -60,17 +60,32 @@
   }
 }
 
-/* ── Content below the KPI row ──────────────────────────────────────────────── */
-.contentGrid {
+/* ── Dashboard layout with right-side utility rail ──────────────────────────── */
+.dashboardLayout {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: minmax(0, 1fr) 360px;
   gap: var(--space-5);
   align-items: start;
 }
 
-@media (max-width: 900px) {
-  .contentGrid {
+.mainColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.sideColumn {
+  min-width: 0;
+}
+
+@media (max-width: 1024px) {
+  .dashboardLayout {
     grid-template-columns: 1fr;
+  }
+
+  .sideColumn {
+    order: 2;
   }
 }
 

@@ -130,7 +130,7 @@
   --sidebar-width:          260px;
   --sidebar-collapsed-width: 72px;
   --topbar-height:          64px;
-  --content-max-width:      1280px;
+  --content-max-width:      1680px;
 
   /* ── Soft-UI / Neumorphic palette (scoped theme — see styles/soft-ui.css) ─── */
   /* Tactile depth comes from paired light/shadow on a single mid-neutral base.

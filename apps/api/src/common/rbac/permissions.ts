@@ -159,3 +159,24 @@ export function roleHasPermission(
       scopeSatisfies(p.scope, required.scope),
   );
 }
+
+/**
+ * The broadest scope a role has been granted for a resource+action, or null
+ * when the role has no such grant. Services use this to decide *how much* data
+ * to return once the guard has admitted the caller.
+ */
+export function getEffectiveScope(
+  role: string | undefined,
+  resource: string,
+  action: Action,
+): PermissionScope | null {
+  if (!role) return null;
+  const matches = getPermissionsForRole(role).filter(
+    (p) => p.resource === resource && p.action === action,
+  );
+  if (matches.length === 0) return null;
+  return matches.reduce<PermissionScope>(
+    (best, p) => (SCOPE_RANK[p.scope] > SCOPE_RANK[best] ? p.scope : best),
+    matches[0]!.scope,
+  );
+}

@@ -1,0 +1,157 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.panel {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.panelTitle {
+  font-size: var(--text-h3);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.panelSub {
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+}
+
+.tableWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+}
+
+.th {
+  text-align: left;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.row {
+  transition: background-color var(--duration-fast) var(--easing-base);
+}
+
+.row:hover {
+  background: var(--color-primary-light);
+}
+
+.cell {
+  padding: var(--space-3);
+  font-size: var(--text-body-sm);
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.worker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.workerName {
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.moreText {
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-input);
+  align-items: center;
+  text-align: center;
+}
+
+.emptyTitle {
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.emptyText {
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+}
+
+.stateCard {
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.stateTitle {
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.stateText {
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+}
+
+.skeletonGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skeletonLine {
+  display: block;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  background: var(--color-muted-tint);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonLine {
+    animation: none;
+  }
+}

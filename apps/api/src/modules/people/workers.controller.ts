@@ -15,8 +15,10 @@ import { WorkersService } from './workers.service';
 import { CreateWorkerDto } from './dto/create-worker.dto';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
 import { ListWorkersQueryDto } from './dto/list-workers.dto';
+import { ImportWorkersDto } from './dto/import-workers.dto';
 
 const ORG = PermissionScope.ORGANISATION;
+const TEAM = PermissionScope.TEAM;
 
 @ApiTags('workers')
 @ApiBearerAuth()
@@ -26,7 +28,7 @@ export class WorkersController {
 
   @Get()
   @ApiOperation({ summary: 'List workers (directory, search + pagination)' })
-  @RequirePermission({ resource: 'workers', action: 'read', scope: ORG })
+  @RequirePermission({ resource: 'workers', action: 'read', scope: TEAM })
   async list(@Query() query: ListWorkersQueryDto) {
     const { data, meta } = await this.service.list(query);
     return { data, meta };
@@ -34,7 +36,7 @@ export class WorkersController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single worker' })
-  @RequirePermission({ resource: 'workers', action: 'read', scope: ORG })
+  @RequirePermission({ resource: 'workers', action: 'read', scope: TEAM })
   async get(@Param('id') id: string) {
     return { data: await this.service.get(id) };
   }
@@ -44,6 +46,20 @@ export class WorkersController {
   @RequirePermission({ resource: 'workers', action: 'create', scope: ORG })
   async create(@Body() dto: CreateWorkerDto) {
     return { data: await this.service.create(dto) };
+  }
+
+  @Post('import/preview')
+  @ApiOperation({ summary: 'Validate a worker CSV without writing' })
+  @RequirePermission({ resource: 'workers', action: 'create', scope: ORG })
+  async previewImport(@Body() dto: ImportWorkersDto) {
+    return { data: await this.service.previewImport(dto.csv) };
+  }
+
+  @Post('import')
+  @ApiOperation({ summary: 'Import workers from a CSV' })
+  @RequirePermission({ resource: 'workers', action: 'create', scope: ORG })
+  async commitImport(@Body() dto: ImportWorkersDto) {
+    return { data: await this.service.commitImport(dto.csv) };
   }
 
   @Patch(':id')

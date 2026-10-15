@@ -107,6 +107,9 @@
 .pagerInfo { font-size: var(--text-body-sm); color: var(--color-text-muted); }
 .pagerButtons { display: flex; gap: var(--space-2); }
 
+/* ── Toolbar actions ───────────────────────────────────────────────────────── */
+.toolbarActions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+
 /* ── Messages & states ─────────────────────────────────────────────────────── */
 .message {
   padding: var(--space-10);
@@ -149,6 +152,7 @@
   position: sticky; top: 0; background: inherit; z-index: 1;
 }
 .drawerTitle { font-size: var(--text-h3); font-weight: var(--weight-semibold); color: var(--color-text); }
+.drawerWide { width: min(820px, 100%); }
 .drawerBody { padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-5); }
 .drawerActions {
   display: flex; justify-content: flex-end; gap: var(--space-3);
@@ -175,6 +179,31 @@
   text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-muted);
   grid-column: 1 / -1; margin-top: var(--space-2);
 }
+
+/* ── CSV import ────────────────────────────────────────────────────────────── */
+.importIntro { display: flex; flex-direction: column; gap: var(--space-3); }
+.importIntro p { font-size: var(--text-body-sm); color: var(--color-text-secondary); }
+.importFileRow { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.importSummary { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.statChip {
+  display: flex; flex-direction: column; gap: 2px; min-width: 96px;
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-input);
+  background: var(--color-muted-tint);
+}
+.statValue { font-size: var(--text-h3); font-weight: var(--weight-bold); color: var(--color-text); }
+.statLabel { font-size: var(--text-overline); letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-text-muted); }
+.statValid { background: var(--color-success-tint); }
+.statValid .statValue { color: var(--color-success); }
+.statDuplicate { background: var(--color-warning-tint); }
+.statDuplicate .statValue { color: var(--color-warning); }
+.statError { background: var(--color-error-tint); }
+.statError .statValue { color: var(--color-error); }
+
+.importTableWrap { max-height: 46vh; overflow: auto; border: 1px solid var(--color-border); border-radius: var(--radius-card); }
+.importTable { width: 100%; border-collapse: collapse; min-width: 720px; }
+.importTable .th { position: sticky; top: 0; background: var(--color-surface); z-index: 1; }
+.importRowNum { font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
+.importErrors { font-size: var(--text-caption); color: var(--color-error); overflow-wrap: anywhere; }
 
 .spin { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

@@ -1,22 +1,40 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@ascenda/db';
 import type {
   PaginationMeta,
   WorkerCategory as WorkerCategoryType,
+  WorkerImportPreview,
+  WorkerImportPreviewRow,
+  WorkerImportResult,
   EmploymentType as EmploymentTypeType,
   WorkerStatus as WorkerStatusType,
   WorkerSummary,
 } from '@ascenda/types';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { getRequestContext } from '../../common/context/request-context';
+import {
+  resolveReadScope,
+  scopeWhereRestricts,
+} from '../../common/rbac/worker-scope';
 import { CreateWorkerDto } from './dto/create-worker.dto';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
 import { ListWorkersQueryDto } from './dto/list-workers.dto';
+import {
+  evaluateRow,
+  mapCsvToRawWorkers,
+  type ImportContext,
+  type NormalizedWorker,
+} from './worker-import';
+
+/** Upper bound on rows accepted in a single import. */
+const MAX_IMPORT_ROWS = 5000;
 
 export const WORKER_INCLUDE = {
   department: { select: { name: true } },
@@ -78,6 +96,9 @@ export class WorkersService {
       if (query.departmentId) where.departmentId = query.departmentId;
       if (query.locationId) where.locationId = query.locationId;
 
+      const scopeWhere = await this.resolveScopeWhere(tx);
+      if (scopeWhereRestricts(scopeWhere)) where.AND = [scopeWhere];
+
       const search = query.search?.trim();
       if (search) {
         where.OR = [
@@ -114,8 +135,9 @@ export class WorkersService {
 
   async get(id: string): Promise<WorkerSummary> {
     return this.prisma.withRequestContext(async (tx) => {
+      const scopeWhere = await this.resolveScopeWhere(tx);
       const worker = await tx.worker.findFirst({
-        where: { id },
+        where: { AND: [{ id }, scopeWhere] },
         include: WORKER_INCLUDE,
       });
       if (!worker) throw new NotFoundException('Worker not found');
@@ -291,6 +313,172 @@ export class WorkersService {
       });
       return toWorkerSummary(worker);
     });
+  }
+
+  /** Validate a CSV without writing — powers the import preview. */
+  async previewImport(csv: string): Promise<WorkerImportPreview> {
+    const { rawRows, headerErrors } = this.parseImport(csv);
+
+    return this.prisma.withRequestContext(async (tx) => {
+      const ctx = await this.buildImportContext(tx);
+
+      const rows: WorkerImportPreviewRow[] = rawRows.map((raw) => {
+        const evaluated = evaluateRow(raw, ctx);
+        const worker = evaluated.worker;
+        const status = worker
+          ? 'valid'
+          : evaluated.duplicate
+            ? 'duplicate'
+            : 'error';
+        return {
+          rowNumber: raw.rowNumber,
+          status,
+          errors: evaluated.errors,
+          employeeNumber: raw.values.employeeNumber || undefined,
+          name:
+            [raw.values.firstName, raw.values.lastName]
+              .filter(Boolean)
+              .join(' ') || undefined,
+          email: raw.values.email || undefined,
+          category: worker ? worker.category : raw.values.category || undefined,
+          jobTitle: raw.values.jobTitle || undefined,
+          department: worker
+            ? worker.departmentName
+            : raw.values.department || undefined,
+          location: worker
+            ? worker.locationName
+            : raw.values.location || undefined,
+          startDate: worker ? worker.startDate : undefined,
+        } satisfies WorkerImportPreviewRow;
+      });
+
+      return {
+        summary: {
+          total: rows.length,
+          valid: rows.filter((r) => r.status === 'valid').length,
+          duplicate: rows.filter((r) => r.status === 'duplicate').length,
+          error: rows.filter((r) => r.status === 'error').length,
+        },
+        rows,
+      };
+    });
+  }
+
+  /** Commit a CSV — creates only the rows that validate cleanly. */
+  async commitImport(csv: string): Promise<WorkerImportResult> {
+    const { organisationId, userId } = this.requireContext();
+    const { rawRows } = this.parseImport(csv);
+
+    return this.prisma.withRequestContext(async (tx) => {
+      const ctx = await this.buildImportContext(tx);
+      const workers: NormalizedWorker[] = [];
+      for (const raw of rawRows) {
+        const evaluated = evaluateRow(raw, ctx);
+        if (evaluated.worker) workers.push(evaluated.worker);
+      }
+
+      const total = rawRows.length;
+      if (workers.length === 0) {
+        return { created: 0, skipped: total, total };
+      }
+
+      const workerRows = workers.map((w) => ({
+        id: randomUUID(),
+        organisationId,
+        createdBy: userId,
+        employeeNumber: w.employeeNumber,
+        firstName: w.firstName,
+        lastName: w.lastName,
+        preferredName: w.preferredName ?? null,
+        email: w.email,
+        phone: w.phone ?? null,
+        category: w.category,
+        employmentType: w.employmentType,
+        status: w.status,
+        jobTitle: w.jobTitle,
+        departmentId: w.departmentId ?? null,
+        locationId: w.locationId ?? null,
+        startDate: new Date(w.startDate),
+        endDate: w.endDate ? new Date(w.endDate) : null,
+      }));
+
+      const result = await tx.worker.createMany({
+        data: workerRows,
+        skipDuplicates: true,
+      });
+
+      const identityRows = workers
+        .map((w, index) =>
+          w.dateOfBirth || w.gender
+            ? {
+                id: randomUUID(),
+                organisationId,
+                workerId: workerRows[index]!.id,
+                createdBy: userId,
+                dateOfBirth: w.dateOfBirth ? new Date(w.dateOfBirth) : null,
+                gender: w.gender ?? null,
+              }
+            : null,
+        )
+        .filter((row): row is NonNullable<typeof row> => row !== null);
+
+      if (identityRows.length > 0) {
+        await tx.workerIdentity.createMany({ data: identityRows });
+      }
+
+      return { created: result.count, skipped: total - result.count, total };
+    });
+  }
+
+  private parseImport(csv: string): {
+    rawRows: ReturnType<typeof mapCsvToRawWorkers>['rawRows'];
+    headerErrors: string[];
+  } {
+    const { rawRows, headerErrors } = mapCsvToRawWorkers(csv);
+    if (headerErrors.length > 0) throw new BadRequestException(headerErrors);
+    if (rawRows.length === 0) {
+      throw new BadRequestException('The file has no data rows.');
+    }
+    if (rawRows.length > MAX_IMPORT_ROWS) {
+      throw new BadRequestException(
+        `Too many rows — the maximum is ${MAX_IMPORT_ROWS}.`,
+      );
+    }
+    return { rawRows, headerErrors };
+  }
+
+  private async buildImportContext(
+    tx: Prisma.TransactionClient,
+  ): Promise<ImportContext> {
+    const [departments, locations, existing] = await Promise.all([
+      tx.department.findMany({ select: { id: true, name: true } }),
+      tx.location.findMany({ select: { id: true, name: true } }),
+      tx.worker.findMany({ select: { employeeNumber: true } }),
+    ]);
+    return {
+      departmentByName: new Map(
+        departments.map((d) => [d.name.trim().toLowerCase(), d.id]),
+      ),
+      locationByName: new Map(
+        locations.map((l) => [l.name.trim().toLowerCase(), l.id]),
+      ),
+      existingEmployeeNumbers: new Set(
+        existing.map((w) => w.employeeNumber.trim().toLowerCase()),
+      ),
+      seenEmployeeNumbers: new Set<string>(),
+    };
+  }
+
+  /**
+   * Resolve the read scope for the acting user and translate it into a Prisma
+   * `where` fragment. ORGANISATION callers see everything in the tenant; a
+   * MANAGER (TEAM) sees only themselves and their direct reports.
+   */
+  private async resolveScopeWhere(
+    tx: Prisma.TransactionClient,
+  ): Promise<Prisma.WorkerWhereInput> {
+    const { where } = await resolveReadScope(tx, 'workers', 'read');
+    return where;
   }
 
   private requireContext(): { organisationId: string; userId: string } {

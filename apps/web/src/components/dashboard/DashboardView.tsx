@@ -6,7 +6,8 @@ import { Clock, DollarSign, TrendingUp, Users } from 'lucide-react';
 import type { DashboardInsights, DashboardSummary } from '@ascenda/types';
 import { api } from '@/lib/api';
 import KpiCard from '@/components/ui/KpiCard';
-import InsightsRail from './InsightsRail';
+import DashboardLeftColumn from './DashboardLeftColumn';
+import UtilityPanel from './UtilityPanel';
 import styles from './DashboardView.module.css';
 
 type LoadState = 'loading' | 'ready' | 'forbidden' | 'error';
@@ -196,28 +197,26 @@ export default function DashboardView() {
           kpis.map((kpi) => <KpiCard key={kpi.id} {...kpi} />)}
       </section>
 
-      <div className={styles.contentGrid}>
-        <section
-          className={`glass ${styles.activityCard}`}
-          aria-label="Recent activity"
-        >
-          <div className={styles.cardHeader}>
-            <h2 className={styles.cardTitle}>Recent Activity</h2>
-          </div>
-          <div className={styles.placeholder}>
-            <p className={styles.placeholderText}>
-              Activity feed coming in Phase 1
-            </p>
-          </div>
-        </section>
-
-        <InsightsRail
-          data={insights}
-          loading={insightsState === 'loading'}
-          unavailable={
-            insightsState === 'forbidden' || insightsState === 'error'
-          }
-        />
+      <div className={styles.dashboardLayout}>
+        <div className={styles.mainColumn}>
+          <DashboardLeftColumn
+            insights={insights}
+            insightsLoading={insightsState === 'loading'}
+            insightsUnavailable={
+              insightsState === 'forbidden' || insightsState === 'error'
+            }
+          />
+        </div>
+        <div className={styles.sideColumn}>
+          <UtilityPanel
+            summaryPendingCount={summary?.pendingLeaveRequests ?? 0}
+            insights={insights}
+            insightsLoading={insightsState === 'loading'}
+            insightsUnavailable={
+              insightsState === 'forbidden' || insightsState === 'error'
+            }
+          />
+        </div>
       </div>
     </div>
   );

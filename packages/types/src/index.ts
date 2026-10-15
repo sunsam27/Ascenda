@@ -317,6 +317,40 @@ export interface WorkerListQuery extends PaginatedQuery {
   locationId?: string;
 }
 
+/** Per-row outcome after validating an imported CSV row. */
+export type WorkerImportRowStatus = 'valid' | 'duplicate' | 'error';
+
+export interface WorkerImportPreviewRow {
+  /** 1-based spreadsheet row (header is row 1). */
+  rowNumber: number;
+  status: WorkerImportRowStatus;
+  errors: string[];
+  employeeNumber?: string;
+  name?: string;
+  email?: string;
+  category?: string;
+  jobTitle?: string;
+  department?: string;
+  location?: string;
+  startDate?: string;
+}
+
+export interface WorkerImportPreview {
+  summary: {
+    total: number;
+    valid: number;
+    duplicate: number;
+    error: number;
+  };
+  rows: WorkerImportPreviewRow[];
+}
+
+export interface WorkerImportResult {
+  created: number;
+  skipped: number;
+  total: number;
+}
+
 /** Integer minor units only — no floats, ever */
 export interface CompensationRecord extends TenantEntity {
   workerId: string;

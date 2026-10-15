@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { Loader2, Pencil, Plus, Search, UserPlus } from 'lucide-react';
+import { Loader2, Pencil, Plus, Search, Upload, UserPlus } from 'lucide-react';
 import {
   WorkerCategory,
   WorkerStatus,
@@ -12,7 +12,9 @@ import {
   type WorkerSummary,
 } from '@ascenda/types';
 import { api } from '@/lib/api';
+import { useCurrentUser } from '@/lib/useCurrentUser';
 import WorkerEditor from './WorkerEditor';
+import ImportWorkersDrawer from './ImportWorkersDrawer';
 import styles from './people.module.css';
 
 type LoadState = 'loading' | 'ready' | 'forbidden' | 'error';
@@ -70,8 +72,15 @@ export default function WorkersPanel({
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<WorkerSummary | null>(null);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  const { user } = useCurrentUser();
+
+  // Only organisation-level roles may create/update/terminate workers. Managers
+  // (and any narrower scope) get a read-only directory of their team.
+  const canManage =
+    user?.role === 'OWNER' || user?.role === 'HR_ADMINISTRATOR';
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -197,17 +206,29 @@ export default function WorkersPanel({
             aria-label="Search directory"
           />
         </div>
-        <button
-          type="button"
-          className={`${styles.btn} ${styles.btnPrimary}`}
-          onClick={() => {
-            setCreating(true);
-            setEditing(null);
-          }}
-        >
-          <Plus size={16} strokeWidth={2.2} />
-          Add {t('Employee')}
-        </button>
+        {canManage && (
+          <div className={styles.toolbarActions}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnGhost}`}
+              onClick={() => setImporting(true)}
+            >
+              <Upload size={16} strokeWidth={2} />
+              Import CSV
+            </button>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={() => {
+                setCreating(true);
+                setEditing(null);
+              }}
+            >
+              <Plus size={16} strokeWidth={2.2} />
+              Add {t('Employee')}
+            </button>
+          </div>
+        )}
       </div>
 
       {actionError && (
@@ -227,7 +248,9 @@ export default function WorkersPanel({
           <p className={styles.muted}>
             {debounced
               ? 'Try a different name, email or employee number.'
-              : 'Add your first person to bring the dashboard to life.'}
+              : canManage
+                ? 'Add your first person to bring the dashboard to life.'
+                : `No ${t('Employee').toLowerCase()}s are assigned to you yet.`}
           </p>
         </div>
       ) : (
@@ -241,9 +264,11 @@ export default function WorkersPanel({
                 <th className={styles.th}>{t('Department')}</th>
                 <th className={styles.th}>{t('Location')}</th>
                 <th className={styles.th}>Status</th>
-                <th className={styles.th}>
-                  <span className="sr-only">Actions</span>
-                </th>
+                {canManage && (
+                  <th className={styles.th}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -279,36 +304,38 @@ export default function WorkersPanel({
                       {STATUS_LABEL[worker.status]}
                     </span>
                   </td>
-                  <td className={`${styles.td} ${styles.colActions}`}>
-                    <button
-                      type="button"
-                      className={styles.iconButton}
-                      onClick={() => {
-                        setEditing(worker);
-                        setCreating(false);
-                      }}
-                      aria-label={`Edit ${displayName(worker)}`}
-                      title="Edit"
-                    >
-                      <Pencil size={15} strokeWidth={2} />
-                    </button>
-                    {worker.status !== WorkerStatus.TERMINATED && (
+                  {canManage && (
+                    <td className={`${styles.td} ${styles.colActions}`}>
                       <button
                         type="button"
                         className={styles.iconButton}
-                        onClick={() => terminate(worker)}
-                        disabled={busyId === worker.id}
-                        aria-label={`Terminate ${displayName(worker)}`}
-                        title="Terminate"
+                        onClick={() => {
+                          setEditing(worker);
+                          setCreating(false);
+                        }}
+                        aria-label={`Edit ${displayName(worker)}`}
+                        title="Edit"
                       >
-                        {busyId === worker.id ? (
-                          <Loader2 className={styles.spin} size={15} />
-                        ) : (
-                          <UserPlus size={15} strokeWidth={2} />
-                        )}
+                        <Pencil size={15} strokeWidth={2} />
                       </button>
-                    )}
-                  </td>
+                      {worker.status !== WorkerStatus.TERMINATED && (
+                        <button
+                          type="button"
+                          className={styles.iconButton}
+                          onClick={() => terminate(worker)}
+                          disabled={busyId === worker.id}
+                          aria-label={`Terminate ${displayName(worker)}`}
+                          title="Terminate"
+                        >
+                          {busyId === worker.id ? (
+                            <Loader2 className={styles.spin} size={15} />
+                          ) : (
+                            <UserPlus size={15} strokeWidth={2} />
+                          )}
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -353,6 +380,17 @@ export default function WorkersPanel({
             setEditing(null);
           }}
           onSaved={handleSaved}
+        />
+      )}
+
+      {importing && (
+        <ImportWorkersDrawer
+          t={t}
+          onClose={() => setImporting(false)}
+          onImported={() => {
+            setPage(1);
+            void load();
+          }}
         />
       )}
     </div>

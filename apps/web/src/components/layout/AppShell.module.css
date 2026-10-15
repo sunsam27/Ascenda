@@ -17,8 +17,8 @@
   flex: 1;
   padding: var(--space-6) var(--space-8);
   padding-top: calc(var(--topbar-height) + var(--space-6));
-  max-width: var(--content-max-width);
-  width: 100%;
+  width: min(100%, var(--content-max-width));
+  margin-inline: auto;
 }
 
 /* Mobile: sidebar becomes overlay */
