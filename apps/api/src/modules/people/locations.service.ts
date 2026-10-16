@@ -18,6 +18,10 @@ function toLocation(row: {
   city: string | null;
   country: string | null;
   isActive: boolean;
+  workDays: number[];
+  workDayStart: string | null;
+  workDayEnd: string | null;
+  lateGraceMinutes: number | null;
   createdAt: Date;
   updatedAt: Date;
 }): Location {
@@ -29,6 +33,10 @@ function toLocation(row: {
     city: row.city ?? undefined,
     country: row.country ?? undefined,
     isActive: row.isActive,
+    workDays: row.workDays,
+    workDayStart: row.workDayStart ?? undefined,
+    workDayEnd: row.workDayEnd ?? undefined,
+    lateGraceMinutes: row.lateGraceMinutes ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -57,6 +65,10 @@ export class LocationsService {
           city: dto.city ?? null,
           country: dto.country ?? null,
           isActive: dto.isActive ?? true,
+          workDays: dto.workDays ?? [],
+          workDayStart: dto.workDayStart ?? null,
+          workDayEnd: dto.workDayEnd ?? null,
+          lateGraceMinutes: dto.lateGraceMinutes ?? null,
         },
       });
       return toLocation(row);
@@ -79,6 +91,14 @@ export class LocationsService {
           ...(dto.city !== undefined ? { city: dto.city || null } : {}),
           ...(dto.country !== undefined ? { country: dto.country || null } : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+          ...(dto.workDays !== undefined ? { workDays: dto.workDays } : {}),
+          ...(dto.workDayStart !== undefined
+            ? { workDayStart: dto.workDayStart }
+            : {}),
+          ...(dto.workDayEnd !== undefined ? { workDayEnd: dto.workDayEnd } : {}),
+          ...(dto.lateGraceMinutes !== undefined
+            ? { lateGraceMinutes: dto.lateGraceMinutes }
+            : {}),
         },
       });
       return toLocation(row);

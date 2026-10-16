@@ -63,6 +63,29 @@ export function toCompensationRecord(row: CompensationRow): CompensationRecord {
 export class CompensationService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * The rate in force on `asOf` for a payroll calculation. Unlike `getCurrent`
+   * this does NOT apply the caller's worker read-scope: the payroll endpoints
+   * gate access with `payroll:*` permissions, and this is only reachable from
+   * that trusted path.
+   */
+  async getCurrentForPayroll(
+    workerId: string,
+    asOf: Date,
+  ): Promise<CompensationRecord | null> {
+    return this.prisma.withRequestContext(async (tx) => {
+      const row = await tx.compensationRecord.findFirst({
+        where: {
+          workerId,
+          validFrom: { lte: asOf },
+          OR: [{ validTo: null }, { validTo: { gt: asOf } }],
+        },
+        orderBy: { validFrom: 'desc' },
+      });
+      return row ? toCompensationRecord(row) : null;
+    });
+  }
+
   async listForWorker(workerId: string): Promise<CompensationRecord[]> {
     return this.prisma.withRequestContext(async (tx) => {
       await this.assertWorkerInScope(tx, workerId);

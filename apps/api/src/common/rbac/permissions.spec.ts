@@ -28,6 +28,29 @@ describe('getEffectiveScope', () => {
     expect(getEffectiveScope('UNKNOWN_ROLE', 'workers', 'read')).toBeNull();
     expect(getEffectiveScope(undefined, 'workers', 'read')).toBeNull();
   });
+
+  it('lets a manager request their own leave without widening team scope', () => {
+    // A manager files their own request (SELF) …
+    expect(getEffectiveScope(SystemRole.MANAGER, 'leave', 'create')).toBe(
+      PermissionScope.SELF,
+    );
+    // … while remaining able to approve their team (TEAM) and read it.
+    expect(getEffectiveScope(SystemRole.MANAGER, 'leave', 'approve')).toBe(
+      PermissionScope.TEAM,
+    );
+    expect(getEffectiveScope(SystemRole.MANAGER, 'leave', 'read')).toBe(
+      PermissionScope.TEAM,
+    );
+  });
+
+  it('lets a manager capture their team attendance (ATT-01)', () => {
+    expect(getEffectiveScope(SystemRole.MANAGER, 'attendance', 'create')).toBe(
+      PermissionScope.TEAM,
+    );
+    expect(getEffectiveScope(SystemRole.MANAGER, 'attendance', 'read')).toBe(
+      PermissionScope.TEAM,
+    );
+  });
 });
 
 describe('getEffectiveScope agrees with the guard', () => {

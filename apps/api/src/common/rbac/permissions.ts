@@ -43,6 +43,7 @@ const BUSINESS_RESOURCES = [
   'leave',
   'attendance',
   'holidays',
+  'blackout_periods',
   'compensation',
   'bank_accounts',
   'payroll',
@@ -68,6 +69,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('leave', ['read', 'create', 'update', 'approve'], PermissionScope.ORGANISATION),
     ...perm('attendance', CRUD, PermissionScope.ORGANISATION),
     ...perm('holidays', CRUD, PermissionScope.ORGANISATION),
+    ...perm('blackout_periods', CRUD, PermissionScope.ORGANISATION),
     ...perm('compensation', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.ORGANISATION),
   ],
@@ -90,8 +92,15 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
   [SystemRole.MANAGER]: [
     ...perm('workers', READ, PermissionScope.TEAM),
     ...perm('leave', ['read', 'approve'], PermissionScope.TEAM),
+    // A manager may also request leave for *themselves* (SELF), which still
+    // routes through their own manager / HR approval chain.
+    ...perm('leave', ['create'], PermissionScope.SELF),
     ...perm('attendance', READ, PermissionScope.TEAM),
+    // Managers capture their team's attendance (ATT-01: "manual entry by
+    // manager / HR") and clock in/out for themselves.
+    ...perm('attendance', ['create'], PermissionScope.TEAM),
     ...perm('holidays', READ, PermissionScope.ORGANISATION),
+    ...perm('blackout_periods', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.TEAM),
   ],
 
@@ -100,6 +109,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('leave', ['read', 'create'], PermissionScope.SELF),
     ...perm('attendance', ['read', 'create'], PermissionScope.SELF),
     ...perm('holidays', READ, PermissionScope.ORGANISATION),
+    ...perm('blackout_periods', READ, PermissionScope.ORGANISATION),
     ...perm('documents', READ, PermissionScope.SELF),
   ],
 
@@ -108,6 +118,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('leave', ['read', 'create'], PermissionScope.SELF),
     ...perm('attendance', ['read', 'create'], PermissionScope.SELF),
     ...perm('holidays', READ, PermissionScope.ORGANISATION),
+    ...perm('blackout_periods', READ, PermissionScope.ORGANISATION),
     ...perm('documents', READ, PermissionScope.SELF),
   ],
 
@@ -123,6 +134,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('locations', READ, PermissionScope.ORGANISATION),
     ...perm('leave', READ, PermissionScope.ORGANISATION),
     ...perm('holidays', READ, PermissionScope.ORGANISATION),
+    ...perm('blackout_periods', READ, PermissionScope.ORGANISATION),
     ...perm('payroll', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.ORGANISATION),
   ],

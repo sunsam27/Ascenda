@@ -110,6 +110,14 @@ export class OrganisationsService {
         if (dto.terminology !== undefined) {
           data.terminology = sanitizeTerminology(dto.terminology);
         }
+        if (dto.workDays !== undefined) {
+          data.workDays = [...new Set(dto.workDays)].sort((a, b) => a - b);
+        }
+        if (dto.workDayStart !== undefined) data.workDayStart = dto.workDayStart;
+        if (dto.workDayEnd !== undefined) data.workDayEnd = dto.workDayEnd;
+        if (dto.lateGraceMinutes !== undefined) {
+          data.lateGraceMinutes = dto.lateGraceMinutes;
+        }
 
         const beforeValue: Record<string, unknown> = {};
         if (dto.name !== undefined) beforeValue.name = current.name;
@@ -120,6 +128,14 @@ export class OrganisationsService {
         if (dto.logoUrl !== undefined) beforeValue.logoUrl = current.logoUrl;
         if (dto.terminology !== undefined) {
           beforeValue.terminology = current.terminology as Prisma.JsonValue;
+        }
+        if (dto.workDays !== undefined) beforeValue.workDays = current.workDays;
+        if (dto.workDayStart !== undefined) {
+          beforeValue.workDayStart = current.workDayStart;
+        }
+        if (dto.workDayEnd !== undefined) beforeValue.workDayEnd = current.workDayEnd;
+        if (dto.lateGraceMinutes !== undefined) {
+          beforeValue.lateGraceMinutes = current.lateGraceMinutes;
         }
 
         const row = await tx.organisation.update({
@@ -143,6 +159,10 @@ export class OrganisationsService {
         timezone: updated.timezone,
         logoUrl: updated.logoUrl ?? null,
         terminology: updated.terminology as Prisma.JsonValue,
+        workDays: updated.workDays,
+        workDayStart: updated.workDayStart,
+        workDayEnd: updated.workDayEnd,
+        lateGraceMinutes: updated.lateGraceMinutes,
       },
     });
 

@@ -152,6 +152,87 @@ async function main() {
     ids.holA = holA.rows[0].id;
     ids.holB = holB.rows[0].id;
 
+    // Workers, leave requests, approval workflow + steps (PRD LVE-02).
+    const workerA = await admin.query(
+      `INSERT INTO workers (id, "organisationId", "employeeNumber", "firstName", "lastName", email, category, "employmentType", status, "jobTitle", "startDate", "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, $2, 'Work', 'A', $3, 'EMPLOYEE', 'FULL_TIME', 'ACTIVE', 'Staff', now(), $4, now()) RETURNING id`,
+      [ids.orgA, `A-${stamp}`, `work-a-${stamp}@example.test`, ids.userA],
+    );
+    const workerB = await admin.query(
+      `INSERT INTO workers (id, "organisationId", "employeeNumber", "firstName", "lastName", email, category, "employmentType", status, "jobTitle", "startDate", "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, $2, 'Work', 'B', $3, 'EMPLOYEE', 'FULL_TIME', 'ACTIVE', 'Staff', now(), $4, now()) RETURNING id`,
+      [ids.orgB, `B-${stamp}`, `work-b-${stamp}@example.test`, ids.userB],
+    );
+    ids.workerA = workerA.rows[0].id;
+    ids.workerB = workerB.rows[0].id;
+
+    const lrA = await admin.query(
+      `INSERT INTO leave_requests (id, "organisationId", "workerId", "leaveTypeId", "startDate", "endDate", days, status, "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, $2, $3, '2026-03-02', '2026-03-06', 5, 'PENDING', $4, now()) RETURNING id`,
+      [ids.orgA, ids.workerA, ids.ltA, ids.userA],
+    );
+    const lrB = await admin.query(
+      `INSERT INTO leave_requests (id, "organisationId", "workerId", "leaveTypeId", "startDate", "endDate", days, status, "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, $2, $3, '2026-03-02', '2026-03-06', 5, 'PENDING', $4, now()) RETURNING id`,
+      [ids.orgB, ids.workerB, ids.ltB, ids.userB],
+    );
+    ids.lrA = lrA.rows[0].id;
+    ids.lrB = lrB.rows[0].id;
+
+    const wfA = await admin.query(
+      `INSERT INTO approval_workflows (id, "organisationId", name, "resourceType", "resourceId", "currentStep", status, "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, 'WF A', 'leave_request', $2, 0, 'PENDING', $3, now()) RETURNING id`,
+      [ids.orgA, ids.lrA, ids.userA],
+    );
+    const wfB = await admin.query(
+      `INSERT INTO approval_workflows (id, "organisationId", name, "resourceType", "resourceId", "currentStep", status, "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, 'WF B', 'leave_request', $2, 0, 'PENDING', $3, now()) RETURNING id`,
+      [ids.orgB, ids.lrB, ids.userB],
+    );
+    ids.wfA = wfA.rows[0].id;
+    ids.wfB = wfB.rows[0].id;
+
+    const stepA = await admin.query(
+      `INSERT INTO approval_steps (id, "approvalWorkflowId", "stepOrder", "approverId", status, "updatedAt")
+       VALUES (gen_random_uuid(), $1, 0, $2, 'PENDING', now()) RETURNING id`,
+      [ids.wfA, ids.userA],
+    );
+    const stepB = await admin.query(
+      `INSERT INTO approval_steps (id, "approvalWorkflowId", "stepOrder", "approverId", status, "updatedAt")
+       VALUES (gen_random_uuid(), $1, 0, $2, 'PENDING', now()) RETURNING id`,
+      [ids.wfB, ids.userB],
+    );
+    ids.stepA = stepA.rows[0].id;
+    ids.stepB = stepB.rows[0].id;
+
+    // Attendance records (PRD ATT-01/ATT-02) — new tenant-scoped table.
+    const attA = await admin.query(
+      `INSERT INTO attendance_records (id, "organisationId", "workerId", date, source, status, "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, $2, '2026-03-02', 'MANUAL', 'PRESENT', $3, now()) RETURNING id`,
+      [ids.orgA, ids.workerA, ids.userA],
+    );
+    const attB = await admin.query(
+      `INSERT INTO attendance_records (id, "organisationId", "workerId", date, source, status, "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, $2, '2026-03-02', 'MANUAL', 'PRESENT', $3, now()) RETURNING id`,
+      [ids.orgB, ids.workerB, ids.userB],
+    );
+    ids.attA = attA.rows[0].id;
+    ids.attB = attB.rows[0].id;
+
+    // Blackout periods (PRD LVE-05) — new tenant-scoped table.
+    const boA = await admin.query(
+      `INSERT INTO blackout_periods (id, "organisationId", name, "startDate", "endDate", "isRecurring", "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, 'Blackout A', '2026-12-24', '2026-12-31', false, $2, now()) RETURNING id`,
+      [ids.orgA, ids.userA],
+    );
+    const boB = await admin.query(
+      `INSERT INTO blackout_periods (id, "organisationId", name, "startDate", "endDate", "isRecurring", "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, 'Blackout B', '2026-12-24', '2026-12-31', false, $2, now()) RETURNING id`,
+      [ids.orgB, ids.userB],
+    );
+    ids.boA = boA.rows[0].id;
+    ids.boB = boB.rows[0].id;
+
     console.log('\nTenant isolation assertions (as ascenda_app):');
 
     // ── No context: nothing is visible ───────────────────────────────────────
@@ -261,6 +342,151 @@ async function main() {
     }
     check('Org A cannot insert a holiday tagged to Org B', holInsertBlocked);
 
+    // ── Blackout periods — new tenant table must be isolated too ─────────────
+    const aBlackouts = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM blackout_periods'),
+    );
+    check(
+      'Org A sees exactly its own blackout period',
+      aBlackouts.rows.length === 1 && aBlackouts.rows[0].id === ids.boA,
+      `rows=${JSON.stringify(aBlackouts.rows)}`,
+    );
+
+    const crossBoRead = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM blackout_periods WHERE id = $1', [ids.boB]),
+    );
+    check('Org A cannot read Org B blackout period by id', crossBoRead.rows.length === 0);
+
+    const crossBoWrite = await runCtx(ids.orgA, ids.userA, () =>
+      app.query(`UPDATE blackout_periods SET name = 'hacked' WHERE id = $1`, [
+        ids.boB,
+      ]),
+    );
+    check(
+      'Org A cannot update Org B blackout period',
+      crossBoWrite.rowCount === 0,
+      `rowCount=${crossBoWrite.rowCount}`,
+    );
+
+    let boInsertBlocked = false;
+    try {
+      await runCtx(ids.orgA, ids.userA, () =>
+        app.query(
+          `INSERT INTO blackout_periods (id, "organisationId", name, "startDate", "endDate", "isRecurring", "createdBy", "updatedAt")
+           VALUES (gen_random_uuid(), $1, 'spoofed', '2026-01-01', '2026-01-05', false, $2, now())`,
+          [ids.orgB, ids.userA],
+        ),
+      );
+    } catch {
+      boInsertBlocked = true;
+    }
+    check('Org A cannot insert a blackout period tagged to Org B', boInsertBlocked);
+
+    // ── Leave requests & approval workflow (PRD LVE-02) ──────────────────────
+    const aReq = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM leave_requests'),
+    );
+    check(
+      'Org A sees exactly its own leave request',
+      aReq.rows.length === 1 && aReq.rows[0].id === ids.lrA,
+      `rows=${JSON.stringify(aReq.rows)}`,
+    );
+    const crossReqRead = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM leave_requests WHERE id = $1', [ids.lrB]),
+    );
+    check(
+      'Org A cannot read Org B leave request by id',
+      crossReqRead.rows.length === 0,
+    );
+
+    const aWf = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM approval_workflows'),
+    );
+    check(
+      'Org A sees exactly its own approval workflow',
+      aWf.rows.length === 1 && aWf.rows[0].id === ids.wfA,
+      `rows=${JSON.stringify(aWf.rows)}`,
+    );
+
+    const aStep = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM approval_steps'),
+    );
+    check(
+      'Org A sees exactly its own approval step',
+      aStep.rows.length === 1 && aStep.rows[0].id === ids.stepA,
+      `rows=${JSON.stringify(aStep.rows)}`,
+    );
+    const crossStepRead = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM approval_steps WHERE id = $1', [ids.stepB]),
+    );
+    check(
+      'Org A cannot read Org B approval step by id',
+      crossStepRead.rows.length === 0,
+    );
+
+    let reqInsertBlocked = false;
+    try {
+      await runCtx(ids.orgA, ids.userA, () =>
+        app.query(
+          `INSERT INTO leave_requests (id, "organisationId", "workerId", "leaveTypeId", "startDate", "endDate", days, status, "createdBy", "updatedAt")
+           VALUES (gen_random_uuid(), $1, $2, $3, '2026-04-01', '2026-04-02', 2, 'PENDING', $4, now())`,
+          [ids.orgB, ids.workerB, ids.ltB, ids.userA],
+        ),
+      );
+    } catch {
+      reqInsertBlocked = true;
+    }
+    check(
+      'Org A cannot insert a leave request tagged to Org B',
+      reqInsertBlocked,
+    );
+
+    // ── Attendance records (PRD ATT-01/ATT-02) — new tenant table ────────────
+    const aAtt = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM attendance_records'),
+    );
+    check(
+      'Org A sees exactly its own attendance record',
+      aAtt.rows.length === 1 && aAtt.rows[0].id === ids.attA,
+      `rows=${JSON.stringify(aAtt.rows)}`,
+    );
+
+    const crossAttRead = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM attendance_records WHERE id = $1', [ids.attB]),
+    );
+    check(
+      'Org A cannot read Org B attendance record by id',
+      crossAttRead.rows.length === 0,
+    );
+
+    const crossAttWrite = await runCtx(ids.orgA, ids.userA, () =>
+      app.query(`UPDATE attendance_records SET status = 'ABSENT' WHERE id = $1`, [
+        ids.attB,
+      ]),
+    );
+    check(
+      'Org A cannot update Org B attendance record',
+      crossAttWrite.rowCount === 0,
+      `rowCount=${crossAttWrite.rowCount}`,
+    );
+
+    let attInsertBlocked = false;
+    try {
+      await runCtx(ids.orgA, ids.userA, () =>
+        app.query(
+          `INSERT INTO attendance_records (id, "organisationId", "workerId", date, source, status, "createdBy", "updatedAt")
+           VALUES (gen_random_uuid(), $1, $2, '2026-04-01', 'MANUAL', 'PRESENT', $3, now())`,
+          [ids.orgB, ids.workerB, ids.userA],
+        ),
+      );
+    } catch {
+      attInsertBlocked = true;
+    }
+    check(
+      'Org A cannot insert an attendance record tagged to Org B',
+      attInsertBlocked,
+    );
+
     // ── Org B symmetric check ────────────────────────────────────────────────
     const bCrossRead = await runCtx(ids.orgB, ids.userB, () =>
       app.query('SELECT id FROM departments WHERE id = $1', [ids.deptA]),
@@ -295,6 +521,29 @@ async function main() {
         [ids.orgA, ids.orgB],
       ]);
       await admin.query(`DELETE FROM holidays WHERE "organisationId" = ANY($1)`, [
+        [ids.orgA, ids.orgB],
+      ]);
+      await admin.query(
+        `DELETE FROM approval_steps WHERE "approvalWorkflowId" = ANY($1)`,
+        [[ids.wfA, ids.wfB]],
+      );
+      await admin.query(
+        `DELETE FROM approval_workflows WHERE "organisationId" = ANY($1)`,
+        [[ids.orgA, ids.orgB]],
+      );
+      await admin.query(
+        `DELETE FROM leave_requests WHERE "organisationId" = ANY($1)`,
+        [[ids.orgA, ids.orgB]],
+      );
+      await admin.query(
+        `DELETE FROM attendance_records WHERE "organisationId" = ANY($1)`,
+        [[ids.orgA, ids.orgB]],
+      );
+      await admin.query(
+        `DELETE FROM blackout_periods WHERE "organisationId" = ANY($1)`,
+        [[ids.orgA, ids.orgB]],
+      );
+      await admin.query(`DELETE FROM workers WHERE "organisationId" = ANY($1)`, [
         [ids.orgA, ids.orgB],
       ]);
       await admin.query(`DELETE FROM leave_types WHERE "organisationId" = ANY($1)`, [

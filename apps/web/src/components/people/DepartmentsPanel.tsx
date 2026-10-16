@@ -92,7 +92,7 @@ export default function DepartmentsPanel({
       <div className={`glass ${styles.inlineForm}`}>
         <div className={styles.inlineField}>
           <label className={styles.label} htmlFor="new-department">
-            New {t('Department')}
+            Add New {t('Department')}
           </label>
           <input
             id="new-department"
@@ -112,7 +112,7 @@ export default function DepartmentsPanel({
           disabled={busy || !draft.trim()}
         >
           {busy ? <Loader2 className={styles.spin} size={15} /> : <Plus size={16} />}
-          Add
+          Save
         </button>
       </div>
 

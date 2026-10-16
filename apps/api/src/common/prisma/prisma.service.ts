@@ -23,6 +23,13 @@ export interface TenantContext {
   userId?: string;
 }
 
+// The application runs against a remote (pooled) Postgres, so a request that
+// performs many sequential queries inside one RLS transaction (e.g. creating a
+// leave request with its approval workflow) can legitimately exceed Prisma's
+// 5s interactive-transaction default. Keep a generous, configurable budget.
+const TX_MAX_WAIT_MS = Number(process.env.PRISMA_TX_MAX_WAIT_MS ?? 10_000);
+const TX_TIMEOUT_MS = Number(process.env.PRISMA_TX_TIMEOUT_MS ?? 20_000);
+
 @Injectable()
 export class PrismaService
   extends PrismaClient
@@ -47,15 +54,18 @@ export class PrismaService
     ctx: TenantContext,
     fn: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
-    return this.$transaction(async (tx) => {
-      if (ctx.organisationId) {
-        await tx.$executeRaw`SELECT set_config('app.current_org', ${ctx.organisationId}, true)`;
-      }
-      if (ctx.userId) {
-        await tx.$executeRaw`SELECT set_config('app.current_user_id', ${ctx.userId}, true)`;
-      }
-      return fn(tx);
-    });
+    return this.$transaction(
+      async (tx) => {
+        if (ctx.organisationId) {
+          await tx.$executeRaw`SELECT set_config('app.current_org', ${ctx.organisationId}, true)`;
+        }
+        if (ctx.userId) {
+          await tx.$executeRaw`SELECT set_config('app.current_user_id', ${ctx.userId}, true)`;
+        }
+        return fn(tx);
+      },
+      { maxWait: TX_MAX_WAIT_MS, timeout: TX_TIMEOUT_MS },
+    );
   }
 
   /**

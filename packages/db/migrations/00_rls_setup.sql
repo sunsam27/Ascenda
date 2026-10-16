@@ -62,7 +62,8 @@ DECLARE
   tenant_tables text[] := ARRAY[
     'memberships', 'departments', 'locations', 'workers', 'worker_identities',
     'compensation_records', 'bank_accounts', 'leave_types', 'leave_requests',
-    'leave_balances', 'attendance_records', 'holidays', 'pay_calendars',
+    'leave_balances', 'attendance_records', 'holidays', 'blackout_periods',
+    'pay_calendars',
     'payroll_runs', 'payroll_items', 'statutory_rule_packs', 'payments',
     'approval_workflows', 'documents', 'audit_log', 'subscriptions'
   ];

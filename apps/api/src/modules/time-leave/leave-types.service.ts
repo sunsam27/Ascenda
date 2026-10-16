@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { AuditAction, Prisma } from '@ascenda/db';
 import type {
+  LeaveAccrualMethod as LeaveAccrualMethodType,
   LeaveType as LeaveTypeDto,
   LeaveTypeCategory as LeaveTypeCategoryType,
   PaginationMeta,
@@ -31,6 +32,11 @@ export function toLeaveType(row: LeaveTypeRow): LeaveTypeDto {
     isPaid: row.isPaid,
     requiresApproval: row.requiresApproval,
     isActive: row.isActive,
+    accrualMethod: row.accrualMethod as unknown as LeaveAccrualMethodType,
+    carryOverEnabled: row.carryOverEnabled,
+    carryOverMaxDays:
+      row.carryOverMaxDays == null ? undefined : Number(row.carryOverMaxDays),
+    carryOverExpiryMonths: row.carryOverExpiryMonths ?? undefined,
   };
 }
 
@@ -101,6 +107,13 @@ export class LeaveTypesService {
           isPaid: dto.isPaid,
           requiresApproval: dto.requiresApproval ?? true,
           isActive: dto.isActive ?? true,
+          accrualMethod: dto.accrualMethod as unknown as Prisma.LeaveTypeCreateInput['accrualMethod'],
+          carryOverEnabled: dto.carryOverEnabled ?? false,
+          carryOverMaxDays:
+            dto.carryOverMaxDays == null
+              ? null
+              : new Prisma.Decimal(dto.carryOverMaxDays),
+          carryOverExpiryMonths: dto.carryOverExpiryMonths ?? null,
         },
       });
 
@@ -135,6 +148,26 @@ export class LeaveTypesService {
             ? { requiresApproval: dto.requiresApproval }
             : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+          ...(dto.accrualMethod !== undefined
+            ? {
+                accrualMethod:
+                  dto.accrualMethod as unknown as Prisma.LeaveTypeUpdateInput['accrualMethod'],
+              }
+            : {}),
+          ...(dto.carryOverEnabled !== undefined
+            ? { carryOverEnabled: dto.carryOverEnabled }
+            : {}),
+          ...(dto.carryOverMaxDays !== undefined
+            ? {
+                carryOverMaxDays:
+                  dto.carryOverMaxDays == null
+                    ? null
+                    : new Prisma.Decimal(dto.carryOverMaxDays),
+              }
+            : {}),
+          ...(dto.carryOverExpiryMonths !== undefined
+            ? { carryOverExpiryMonths: dto.carryOverExpiryMonths ?? null }
+            : {}),
         },
       });
 

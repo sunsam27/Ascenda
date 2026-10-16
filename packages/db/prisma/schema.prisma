@@ -129,6 +129,18 @@ enum LeaveTypeCategory {
   CUSTOM
 }
 
+/// How a leave type's entitlement is earned over the leave year (PRD LVE-05).
+enum LeaveAccrualMethod {
+  /// No automatic accrual; the balance is maintained manually.
+  NONE
+  /// The full entitlement is available from the start of the leave year.
+  ANNUAL_UPFRONT
+  /// The entitlement accrues in equal monthly steps across the year.
+  MONTHLY
+  /// The entitlement accrues pro-rata day by day across the year.
+  PRO_RATA
+}
+
 enum PayrollRunStatus {
   DRAFT
   IN_REVIEW
@@ -198,11 +210,13 @@ enum AuditAction {
   COMPENSATION_CHANGED
   BANK_DETAILS_CHANGED
   LEAVE_TYPE_CHANGED
+  BLACKOUT_PERIOD_CHANGED
   LEAVE_REQUEST_CREATED
   LEAVE_REQUEST_APPROVED
   LEAVE_REQUEST_REJECTED
   LEAVE_REQUEST_CANCELLED
   LEAVE_REQUEST_ESCALATED
+  LEAVE_REQUEST_DELEGATED
   LEAVE_BALANCE_ADJUSTED
   ATTENDANCE_RECORDED
   HOLIDAY_CALENDAR_CHANGED
@@ -326,6 +340,7 @@ model Organisation {
   leaveBalances        LeaveBalance[]
   attendanceRecords    AttendanceRecord[]
   holidayCalendars     Holiday[]
+  blackoutPeriods      BlackoutPeriod[]
   approvalWorkflows    ApprovalWorkflow[]
   payments             Payment[]
   documents            Document[]
@@ -377,6 +392,7 @@ model Location {
   organisation Organisation @relation(fields: [organisationId], references: [id])
   workers      Worker[]
   holidays     Holiday[]
+  blackoutPeriods BlackoutPeriod[]
 
   @@index([organisationId])
   @@map("locations")
@@ -508,13 +524,21 @@ model LeaveType {
   isPaid           Boolean
   requiresApproval Boolean           @default(true)
   isActive         Boolean           @default(true)
+  /// Accrual policy (PRD LVE-05).
+  accrualMethod    LeaveAccrualMethod @default(ANNUAL_UPFRONT)
+  carryOverEnabled Boolean            @default(false)
+  /// Cap on days carried into the next leave year (null = uncapped).
+  carryOverMaxDays Decimal?           @db.Decimal(5, 1)
+  /// Months into the new leave year before carried days expire (null = never).
+  carryOverExpiryMonths Int?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   createdBy        String
 
-  organisation  Organisation   @relation(fields: [organisationId], references: [id])
-  leaveRequests LeaveRequest[]
-  leaveBalances LeaveBalance[]
+  organisation   Organisation   @relation(fields: [organisationId], references: [id])
+  leaveRequests  LeaveRequest[]
+  leaveBalances  LeaveBalance[]
+  blackoutPeriods BlackoutPeriod[]
 
   @@index([organisationId])
   @@map("leave_types")
@@ -622,6 +646,32 @@ model Holiday {
   @@index([organisationId])
   @@index([organisationId, locationId, date])
   @@map("holidays")
+}
+
+/// Date windows when leave may not normally be taken (PRD LVE-05). Org-wide when
+/// `locationId` and `leaveTypeId` are null; scoped when set.
+model BlackoutPeriod {
+  id             String   @id @default(uuid())
+  organisationId String
+  locationId     String?
+  leaveTypeId    String?
+  name           String
+  startDate      DateTime @db.Date
+  endDate        DateTime @db.Date
+  /// Repeats every year on the same month/day range (e.g. year-end shutdown).
+  isRecurring    Boolean  @default(false)
+  reason         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdBy      String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  location     Location?    @relation(fields: [locationId], references: [id])
+  leaveType    LeaveType?   @relation(fields: [leaveTypeId], references: [id])
+
+  @@index([organisationId])
+  @@index([organisationId, locationId, startDate])
+  @@map("blackout_periods")
 }
 
 model PayCalendar {

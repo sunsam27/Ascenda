@@ -1,11 +1,13 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
+import { PermissionScope } from '@ascenda/types';
+import { RequirePermission } from '../../common/rbac/permission.decorator';
 import { PayrollService } from './payroll.service';
+import { PayrollPreviewQueryDto } from './dto/payroll-preview-query.dto';
 
 /**
  * Payroll Controller
- * TODO: Implement PRD endpoints for this module.
  * Every route requires JWT + RBAC guard.
  */
 @ApiTags('payroll')
@@ -18,5 +20,18 @@ export class PayrollController {
   @Get()
   findAll() {
     return { message: 'Payroll module  coming soon' };
+  }
+
+  @Get('preview')
+  @ApiOperation({
+    summary: 'Read-only payroll preview (prorated base + absence deductions)',
+  })
+  @RequirePermission({
+    resource: 'payroll',
+    action: 'read',
+    scope: PermissionScope.ORGANISATION,
+  })
+  async preview(@Query() query: PayrollPreviewQueryDto) {
+    return { data: await this.service.preview(query) };
   }
 }

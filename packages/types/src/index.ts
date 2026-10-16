@@ -280,6 +280,11 @@ export interface Organisation extends BaseEntity {
   terminology: Record<string, string>;
   logoUrl?: string;
   isActive: boolean;
+  /** Work-schedule defaults (PRD ATT-02). workDays = ISO weekdays Mon=1..Sun=7. */
+  workDays?: number[];
+  workDayStart?: string; // "HH:mm"
+  workDayEnd?: string; // "HH:mm"
+  lateGraceMinutes?: number;
 }
 
 /** Fields an owner may change on their own organisation (Phase 1 setup flow). */
@@ -291,6 +296,10 @@ export interface UpdateOrganisationDto {
   timezone?: string; // IANA
   terminology?: Record<string, string>;
   logoUrl?: string | null;
+  workDays?: number[];
+  workDayStart?: string; // "HH:mm"
+  workDayEnd?: string; // "HH:mm"
+  lateGraceMinutes?: number;
 }
 
 export interface User extends BaseEntity {
@@ -443,6 +452,19 @@ export interface Location extends TenantEntity {
   city?: string;
   country?: string;
   isActive: boolean;
+  /** Per-location work-schedule overrides (ATT-02). Empty/null = inherit org. */
+  workDays?: number[];
+  workDayStart?: string;
+  workDayEnd?: string;
+  lateGraceMinutes?: number;
+}
+
+/** How a leave type's entitlement is earned over the leave year (LVE-05). */
+export enum LeaveAccrualMethod {
+  NONE = 'NONE',
+  ANNUAL_UPFRONT = 'ANNUAL_UPFRONT',
+  MONTHLY = 'MONTHLY',
+  PRO_RATA = 'PRO_RATA',
 }
 
 export interface LeaveType extends TenantEntity {
@@ -453,6 +475,13 @@ export interface LeaveType extends TenantEntity {
   isPaid: boolean;
   requiresApproval: boolean;
   isActive: boolean;
+  /** Accrual policy (LVE-05). */
+  accrualMethod: LeaveAccrualMethod;
+  carryOverEnabled: boolean;
+  /** Cap on days carried into the next year (null = uncapped). */
+  carryOverMaxDays?: number;
+  /** Months into the new year before carried days expire (null = never). */
+  carryOverExpiryMonths?: number;
 }
 
 export interface LeaveRequest extends TenantEntity {
@@ -493,9 +522,50 @@ export interface CreateLeaveTypeDto {
   isPaid: boolean;
   requiresApproval?: boolean;
   isActive?: boolean;
+  /** Accrual policy (LVE-05). */
+  accrualMethod?: LeaveAccrualMethod;
+  carryOverEnabled?: boolean;
+  carryOverMaxDays?: number | null;
+  carryOverExpiryMonths?: number | null;
 }
 
 export type UpdateLeaveTypeDto = Partial<CreateLeaveTypeDto>;
+
+/** One accrued day window when leave may not be taken (LVE-05). */
+export interface BlackoutPeriod extends TenantEntity {
+  name: string;
+  locationId?: string;
+  leaveTypeId?: string;
+  startDate: string;
+  endDate: string;
+  isRecurring: boolean;
+  reason?: string;
+}
+
+export interface CreateBlackoutPeriodDto {
+  name: string;
+  startDate: string;
+  endDate: string;
+  locationId?: string;
+  leaveTypeId?: string;
+  isRecurring?: boolean;
+  reason?: string;
+}
+
+export type UpdateBlackoutPeriodDto = Partial<CreateBlackoutPeriodDto>;
+
+/** Run the accrual batch for a leave year (LVE-05). */
+export interface RunLeaveAccrualDto {
+  year: number;
+  /** Limit the run to one worker; omit to run for all active workers. */
+  workerId?: string;
+}
+
+export interface LeaveAccrualRunResult {
+  year: number;
+  /** Number of balance rows created or updated. */
+  updated: number;
+}
 
 export interface AttendanceRecord extends TenantEntity {
   workerId: string;
@@ -506,6 +576,32 @@ export interface AttendanceRecord extends TenantEntity {
   clockOut?: string;
   hoursWorked?: number;
   notes?: string;
+}
+
+/** Attendance row enriched for list/detail views (ATT-01/ATT-02). */
+export interface AttendanceSummary extends TenantEntity {
+  workerId: string;
+  workerName: string;
+  date: string;
+  status: AttendanceStatus;
+  source: AttendanceSource;
+  clockIn?: string;
+  clockOut?: string;
+  hoursWorked?: number;
+  /** Minutes past the scheduled start (present only when the day is LATE). */
+  lateMinutes?: number;
+  notes?: string;
+}
+
+/** Effective work schedule (ATT-02): org defaults with per-location overrides. */
+export interface EffectiveWorkSchedule {
+  workDays: number[];
+  workDayStart: string;
+  workDayEnd: string;
+  lateGraceMinutes: number;
+  scope: 'ORGANISATION' | 'LOCATION';
+  locationId?: string;
+  locationName?: string;
 }
 
 /** Public-holiday calendar entry (LVE-03) */
@@ -528,6 +624,130 @@ export interface CreateHolidayDto {
 }
 
 export type UpdateHolidayDto = Partial<CreateHolidayDto>;
+
+// ── Leave requests, approvals & balances (LVE-01 / LVE-02 / LVE-04) ──────────
+
+export interface CreateLeaveRequestDto {
+  /** Defaults to the caller's own worker record. */
+  workerId?: string;
+  leaveTypeId: string;
+  /** ISO date (YYYY-MM-DD). */
+  startDate: string;
+  endDate: string;
+  startHalfDay?: boolean;
+  endHalfDay?: boolean;
+  /** Restricted field — permission-gated. */
+  reason?: string;
+  /** Submit for approval immediately (default true). */
+  submit?: boolean;
+  /** Force an HR/admin approval step in addition to the manager (LVE-02). */
+  requireHrApproval?: boolean;
+  /** Minutes before the active approval step auto-escalates (LVE-04). */
+  escalateAfterMinutes?: number;
+  /** Allow dates that fall in a blackout (requires org-wide leave:approve). */
+  overrideBlackout?: boolean;
+}
+
+export interface DecideLeaveRequestDto {
+  approve: boolean;
+  note?: string;
+}
+
+export interface LeaveRequestApprovalStep {
+  id: string;
+  stepOrder: number;
+  approverId: string;
+  approverName?: string;
+  status: ApprovalStatus;
+  actedAt?: string;
+  note?: string;
+  delegatedToId?: string;
+  escalatedToId?: string;
+  escalateAfterMinutes?: number;
+  dueAt?: string;
+  escalatedAt?: string;
+}
+
+export interface LeaveRequestSummary extends TenantEntity {
+  workerId: string;
+  workerName?: string;
+  leaveTypeId: string;
+  leaveTypeName?: string;
+  startDate: string;
+  endDate: string;
+  startHalfDay: boolean;
+  endHalfDay: boolean;
+  /** Working days only — excludes weekends and public holidays. */
+  days: number;
+  status: LeaveStatus;
+  reason?: string;
+  submittedAt?: string;
+  decidedAt?: string;
+  decidedById?: string;
+  approvalWorkflowId?: string;
+  createdBy: string;
+  /** The ordered approval steps, when a workflow exists. */
+  steps?: LeaveRequestApprovalStep[];
+  /** Step order currently awaiting a decision (undefined when closed). */
+  currentStepOrder?: number;
+}
+
+/** A single leave span as shown on the team calendar (LVE-05). */
+export interface LeaveCalendarEntry {
+  requestId: string;
+  workerId: string;
+  workerName?: string;
+  leaveTypeId: string;
+  leaveTypeName?: string;
+  startDate: string;
+  endDate: string;
+  startHalfDay: boolean;
+  endHalfDay: boolean;
+  /** Working days only — excludes weekends and public holidays. */
+  days: number;
+  status: LeaveStatus;
+}
+
+/** One day bucket on the team calendar. */
+export interface LeaveCalendarDay {
+  date: string;
+  /** Working day per the organisation schedule (weekends/holidays excluded). */
+  isWorkingDay: boolean;
+  /** Head-count of leave entries covering this day. */
+  onLeaveCount: number;
+  /** Ids of the entries covering this day. */
+  requestIds: string[];
+}
+
+export interface LeaveCalendarView {
+  from: string;
+  to: string;
+  entries: LeaveCalendarEntry[];
+  days: LeaveCalendarDay[];
+}
+
+export interface LeaveBalanceSummary extends TenantEntity {
+  workerId: string;
+  workerName?: string;
+  leaveTypeId: string;
+  leaveTypeName?: string;
+  year: number;
+  accrued: number;
+  used: number;
+  balance: number;
+}
+
+export interface AdjustLeaveBalanceDto {
+  workerId: string;
+  leaveTypeId: string;
+  /** Defaults to the current leave year. */
+  year?: number;
+  /** New entitlement (days). Omit to leave unchanged. */
+  accrued?: number;
+  /** Absolute balance override (days). Omit to leave unchanged. */
+  balance?: number;
+  note?: string;
+}
 
 export interface PayCalendar extends TenantEntity {
   name: string;

@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -9,7 +10,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { LeaveTypeCategory } from '@ascenda/types';
+import { LeaveAccrualMethod, LeaveTypeCategory } from '@ascenda/types';
 
 export class CreateLeaveTypeDto {
   @IsString()
@@ -36,4 +37,27 @@ export class CreateLeaveTypeDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /** How the entitlement is earned over the leave year (LVE-05). */
+  @IsOptional()
+  @IsEnum(LeaveAccrualMethod)
+  accrualMethod?: LeaveAccrualMethod;
+
+  @IsOptional()
+  @IsBoolean()
+  carryOverEnabled?: boolean;
+
+  /** Cap on days carried into the next year (null = uncapped). */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 1 })
+  @Min(0)
+  @Max(366)
+  carryOverMaxDays?: number | null;
+
+  /** Months into the new year before carried days expire (null = never). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(12)
+  carryOverExpiryMonths?: number | null;
 }
