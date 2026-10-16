@@ -145,6 +145,14 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
   ],
 };
 
+// Notifications are personal, not organisation-wide: every signed-in member may
+// read and manage their own, regardless of role. The service scopes by recipient.
+for (const role of Object.keys(PERMISSIONS_BY_ROLE) as SystemRole[]) {
+  PERMISSIONS_BY_ROLE[role].push(
+    ...perm('notifications', ['read', 'update'], PermissionScope.SELF),
+  );
+}
+
 const SCOPE_RANK: Record<PermissionScope, number> = {
   [PermissionScope.SELF]: 1,
   [PermissionScope.TEAM]: 2,

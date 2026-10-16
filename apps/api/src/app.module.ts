@@ -23,6 +23,7 @@ import { RegistrationsModule } from './modules/registrations/registrations.modul
 import { PrismaModule } from './common/prisma/prisma.module';
 import { StorageModule } from './common/storage/storage.module';
 import { ServiceModule } from './modules/service/service.module';
+import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { TalentModule } from './modules/talent/talent.module';
 import { TimeLeaveModule } from './modules/time-leave/time-leave.module';
 
@@ -53,6 +54,7 @@ import { TimeLeaveModule } from './modules/time-leave/time-leave.module';
     ServiceModule,
     TalentModule,
     TimeLeaveModule,
+    SchedulerModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

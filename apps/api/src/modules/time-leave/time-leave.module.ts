@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { LeaveTypesController } from './leave-types.controller';
 import { LeaveTypesService } from './leave-types.service';
 import { HolidaysController } from './holidays.controller';
@@ -14,7 +15,7 @@ import { BlackoutPeriodsController } from './blackout-periods.controller';
 import { BlackoutPeriodsService } from './blackout-periods.service';
 
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, NotificationsModule],
   controllers: [
     LeaveTypesController,
     HolidaysController,

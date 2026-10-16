@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import {
   AuditAction,
   LeaveStatus,
   LeaveTypeCategory,
+  NotificationType,
   Prisma,
   SystemRole,
 } from '@ascenda/db';
@@ -28,6 +30,10 @@ import { getRequestContext } from '../../common/context/request-context';
 import { getEffectiveScope } from '../../common/rbac/permissions';
 import { resolveReadScope, scopeWhereRestricts } from '../../common/rbac/worker-scope';
 import { AuditService } from '../audit/audit.service';
+import {
+  NotificationsService,
+  NotificationIntent,
+} from '../notifications/notifications.service';
 import {
   ApprovalPlanStep,
   buildApprovalPlan,
@@ -62,6 +68,14 @@ const MAX_CALENDAR_DAYS = 400;
 /** Auto-escalation default: 48 hours (LVE-04) when a request omits a window. */
 const DEFAULT_ESCALATION_MINUTES = 60 * 48;
 const EPSILON = 1e-9;
+
+/** Compact "2026-03-04" or "2026-03-04–2026-03-08" label for notifications. */
+function leaveRangeLabel(start: Date, end: Date): string {
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return start.getTime() === end.getTime()
+    ? iso(start)
+    : `${iso(start)}–${iso(end)}`;
+}
 
 const REQUEST_INCLUDE = {
   worker: {
@@ -149,15 +163,19 @@ export function toSummary(
  */
 @Injectable()
 export class LeaveRequestsService {
+  private readonly logger = new Logger(LeaveRequestsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async create(dto: CreateLeaveRequestDto): Promise<LeaveRequestSummary> {
     const { organisationId, userId, role } = this.requireContext();
+    const pending: NotificationIntent[] = [];
 
-    return this.prisma.withRequestContext(async (tx) => {
+    const summary = await this.prisma.withRequestContext(async (tx) => {
       const callerWorker = await tx.worker.findFirst({
         where: { userId },
         select: { id: true },
@@ -373,13 +391,33 @@ export class LeaveRequestsService {
         });
       }
 
+      if (submit && plan.length > 0) {
+        pending.push(
+          this.leaveNotification({
+            recipientUserId: plan[0]!.approverId,
+            type: NotificationType.LEAVE_REQUEST_SUBMITTED,
+            workerName: `${worker.firstName} ${worker.lastName}`.trim(),
+            leaveTypeName: leaveType.name,
+            start,
+            end,
+            days,
+            requestId: request.id,
+          }),
+        );
+      }
+
       return this.loadSummary(tx, request.id);
     });
+
+    await this.dispatchNotifications(organisationId, userId, pending);
+    return summary;
   }
 
   async submit(id: string): Promise<LeaveRequestSummary> {
-    const { userId } = this.requireContext();
-    return this.prisma.withRequestContext(async (tx) => {
+    const { userId, organisationId } = this.requireContext();
+    const pending: NotificationIntent[] = [];
+
+    const summary = await this.prisma.withRequestContext(async (tx) => {
       const existing = await this.findInScope(tx, id, 'create');
       if (existing.status !== LeaveStatus.DRAFT) {
         throw new ConflictException('Only draft requests can be submitted');
@@ -422,10 +460,25 @@ export class LeaveRequestsService {
           where: { id: first.id },
           data: { dueAt: computeDueAt(now, first.escalateAfterMinutes) },
         });
+        pending.push(
+          this.leaveNotification({
+            recipientUserId: first.approverId,
+            type: NotificationType.LEAVE_REQUEST_SUBMITTED,
+            workerName: `${existing.worker.firstName} ${existing.worker.lastName}`.trim(),
+            leaveTypeName: existing.leaveType.name,
+            start: existing.startDate,
+            end: existing.endDate,
+            days: Number(existing.days),
+            requestId: id,
+          }),
+        );
       }
 
       return this.loadSummary(tx, id);
     });
+
+    await this.dispatchNotifications(organisationId, userId, pending);
+    return summary;
   }
 
   async list(
@@ -654,22 +707,30 @@ export class LeaveRequestsService {
   }
 
   async get(id: string): Promise<LeaveRequestSummary> {
-    return this.prisma.withRequestContext(async (tx) => {
+    const { userId, organisationId } = this.requireContext();
+    const pending: NotificationIntent[] = [];
+
+    const summary = await this.prisma.withRequestContext(async (tx) => {
       const row = await this.findInScope(tx, id, 'read');
       if (row.status === LeaveStatus.PENDING) {
-        await this.escalateOverdueTx(tx);
+        const result = await this.escalateOverdueTx(tx);
+        pending.push(...result.intents);
       }
       return this.loadSummary(tx, id);
     });
+
+    await this.dispatchNotifications(organisationId, userId, pending);
+    return summary;
   }
 
   async decide(
     id: string,
     dto: DecideLeaveRequestDto,
   ): Promise<LeaveRequestSummary> {
-    const { userId, role } = this.requireContext();
+    const { userId, role, organisationId } = this.requireContext();
+    const pending: NotificationIntent[] = [];
 
-    return this.prisma.withRequestContext(async (tx) => {
+    const summary = await this.prisma.withRequestContext(async (tx) => {
       const request = await this.findInScope(tx, id, 'approve');
       if (request.status !== LeaveStatus.PENDING) {
         throw new ConflictException('This request is not awaiting approval');
@@ -677,6 +738,16 @@ export class LeaveRequestsService {
 
       const wf = request.approvalWorkflow;
       const steps = wf?.steps ?? [];
+      const workerName =
+        `${request.worker.firstName} ${request.worker.lastName}`.trim();
+      const notifyBase = {
+        workerName,
+        leaveTypeName: request.leaveType.name,
+        start: request.startDate,
+        end: request.endDate,
+        days: Number(request.days),
+        requestId: request.id,
+      } as const;
       const step =
         steps.find(
           (s) =>
@@ -723,6 +794,16 @@ export class LeaveRequestsService {
           targetId: id,
           newValue: { step: step.stepOrder, approverId: userId, note: dto.note },
         });
+        if (request.worker.userId) {
+          pending.push(
+            this.leaveNotification({
+              recipientUserId: request.worker.userId,
+              type: NotificationType.LEAVE_REQUEST_REJECTED,
+              note: dto.note ?? null,
+              ...notifyBase,
+            }),
+          );
+        }
         return this.loadSummary(tx, id);
       }
 
@@ -763,6 +844,15 @@ export class LeaveRequestsService {
           targetId: id,
           newValue: { step: step.stepOrder, approverId: userId, final: true },
         });
+        if (request.worker.userId) {
+          pending.push(
+            this.leaveNotification({
+              recipientUserId: request.worker.userId,
+              type: NotificationType.LEAVE_REQUEST_APPROVED,
+              ...notifyBase,
+            }),
+          );
+        }
       } else {
         const next = steps[step.stepOrder + 1]!;
         await tx.approvalWorkflow.update({
@@ -773,19 +863,30 @@ export class LeaveRequestsService {
           where: { id: next.id },
           data: { dueAt: computeDueAt(now, next.escalateAfterMinutes) },
         });
+        pending.push(
+          this.leaveNotification({
+            recipientUserId: next.approverId,
+            type: NotificationType.LEAVE_REQUEST_SUBMITTED,
+            ...notifyBase,
+          }),
+        );
       }
 
       return this.loadSummary(tx, id);
     });
+
+    await this.dispatchNotifications(organisationId, userId, pending);
+    return summary;
   }
 
   async delegate(
     id: string,
     dto: DelegateLeaveRequestDto,
   ): Promise<LeaveRequestSummary> {
-    const { userId } = this.requireContext();
+    const { userId, organisationId } = this.requireContext();
+    const pending: NotificationIntent[] = [];
 
-    return this.prisma.withRequestContext(async (tx) => {
+    const summary = await this.prisma.withRequestContext(async (tx) => {
       const request = await this.findInScope(tx, id, 'approve');
       if (request.status !== LeaveStatus.PENDING) {
         throw new ConflictException('This request is not awaiting approval');
@@ -827,14 +928,32 @@ export class LeaveRequestsService {
         },
       });
 
+      pending.push(
+        this.leaveNotification({
+          recipientUserId: dto.toUserId,
+          type: NotificationType.LEAVE_REQUEST_DELEGATED,
+          workerName:
+            `${request.worker.firstName} ${request.worker.lastName}`.trim(),
+          leaveTypeName: request.leaveType.name,
+          start: request.startDate,
+          end: request.endDate,
+          days: Number(request.days),
+          requestId: request.id,
+        }),
+      );
+
       return this.loadSummary(tx, id);
     });
+
+    await this.dispatchNotifications(organisationId, userId, pending);
+    return summary;
   }
 
   async cancel(id: string): Promise<LeaveRequestSummary> {
-    const { userId, role } = this.requireContext();
+    const { userId, role, organisationId } = this.requireContext();
+    const pending: NotificationIntent[] = [];
 
-    return this.prisma.withRequestContext(async (tx) => {
+    const summary = await this.prisma.withRequestContext(async (tx) => {
       const request = await this.findInScope(tx, id, 'read');
       if (
         request.status === LeaveStatus.REJECTED ||
@@ -895,20 +1014,50 @@ export class LeaveRequestsService {
         newValue: { previousStatus: request.status },
       });
 
+      const notifyBase = {
+        workerName:
+          `${request.worker.firstName} ${request.worker.lastName}`.trim(),
+        leaveTypeName: request.leaveType.name,
+        start: request.startDate,
+        end: request.endDate,
+        days: Number(request.days),
+        requestId: request.id,
+      } as const;
+      if (orgApprover && !isSelf && request.worker.userId) {
+        pending.push(
+          this.leaveNotification({
+            recipientUserId: request.worker.userId,
+            type: NotificationType.LEAVE_REQUEST_CANCELLED,
+            ...notifyBase,
+          }),
+        );
+      }
+
       return this.loadSummary(tx, id);
     });
+
+    await this.dispatchNotifications(organisationId, userId, pending);
+    return summary;
   }
 
   /** Sweep every overdue pending step and hand it to the escalation target. */
   async escalateOverdue(): Promise<{ escalated: number }> {
-    return this.prisma.withRequestContext(async (tx) => ({
-      escalated: await this.escalateOverdueTx(tx),
-    }));
+    const { userId, organisationId } = this.requireContext();
+    const pending: NotificationIntent[] = [];
+
+    const escalated = await this.prisma.withRequestContext(async (tx) => {
+      const result = await this.escalateOverdueTx(tx);
+      pending.push(...result.intents);
+      return result.escalated;
+    });
+
+    await this.dispatchNotifications(organisationId, userId, pending);
+    return { escalated };
   }
 
   private async escalateOverdueTx(
     tx: Prisma.TransactionClient,
-  ): Promise<number> {
+  ): Promise<{ escalated: number; intents: NotificationIntent[] }> {
     const now = new Date();
     const workflows = await tx.approvalWorkflow.findMany({
       where: {
@@ -917,7 +1066,7 @@ export class LeaveRequestsService {
       },
       select: { id: true },
     });
-    if (workflows.length === 0) return 0;
+    if (workflows.length === 0) return { escalated: 0, intents: [] };
 
     const steps = await tx.approvalStep.findMany({
       where: {
@@ -933,6 +1082,7 @@ export class LeaveRequestsService {
     });
 
     let escalated = 0;
+    const intents: NotificationIntent[] = [];
     for (const step of steps) {
       const target = await this.resolveEscalationTarget(tx, step.approverId);
       if (!target || target === step.approverId) continue;
@@ -951,13 +1101,40 @@ export class LeaveRequestsService {
         targetId: step.id,
         newValue: {
           approvalWorkflowId: step.approvalWorkflowId,
-          fromUserId: step.approverId,
           escalatedToId: target,
         },
       });
+
+      const request = await tx.leaveRequest.findFirst({
+        where: { approvalWorkflowId: step.approvalWorkflowId },
+        select: {
+          id: true,
+          startDate: true,
+          endDate: true,
+          days: true,
+          worker: { select: { firstName: true, lastName: true } },
+          leaveType: { select: { name: true } },
+        },
+      });
+      if (request) {
+        intents.push(
+          this.leaveNotification({
+            recipientUserId: target,
+            type: NotificationType.LEAVE_REQUEST_ESCALATED,
+            workerName:
+              `${request.worker.firstName} ${request.worker.lastName}`.trim(),
+            leaveTypeName: request.leaveType.name,
+            start: request.startDate,
+            end: request.endDate,
+            days: Number(request.days),
+            requestId: request.id,
+          }),
+        );
+      }
+
       escalated += 1;
     }
-    return escalated;
+    return { escalated, intents };
   }
 
   private async resolveEscalationTarget(
@@ -1116,8 +1293,7 @@ export class LeaveRequestsService {
     tx: Prisma.TransactionClient,
     id: string,
     action: 'read' | 'create' | 'approve',
-  ): Promise<RequestRow> {
-    const scope = await resolveReadScope(tx, 'leave', action);
+  ): Promise<RequestRow> {    const scope = await resolveReadScope(tx, 'leave', action);
     const where: Prisma.LeaveRequestWhereInput = { id };
     if (scopeWhereRestricts(scope.where)) where.worker = scope.where;
     const row = await tx.leaveRequest.findFirst({
@@ -1158,6 +1334,109 @@ export class LeaveRequestsService {
     return new Map(
       users.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim()]),
     );
+  }
+
+  /** Build a leave-workflow notification for one recipient. */
+  private leaveNotification(params: {
+    recipientUserId: string;
+    type: NotificationType;
+    workerName: string;
+    leaveTypeName: string;
+    start: Date;
+    end: Date;
+    days: number;
+    requestId: string;
+    note?: string | null;
+  }): NotificationIntent {
+    const range = leaveRangeLabel(params.start, params.end);
+    const days = `${params.days} day${params.days === 1 ? '' : 's'}`;
+    const metadata = { leaveRequestId: params.requestId };
+    switch (params.type) {
+      case NotificationType.LEAVE_REQUEST_SUBMITTED:
+        return {
+          recipientUserId: params.recipientUserId,
+          type: params.type,
+          title: 'Leave request to approve',
+          body: `${params.workerName} requested ${days} of ${params.leaveTypeName} (${range}).`,
+          link: '/time-leave',
+          metadata,
+        };
+      case NotificationType.LEAVE_REQUEST_APPROVED:
+        return {
+          recipientUserId: params.recipientUserId,
+          type: params.type,
+          title: 'Leave request approved',
+          body: `Your ${params.leaveTypeName} request (${range}, ${days}) was approved.`,
+          link: '/time-leave',
+          metadata,
+        };
+      case NotificationType.LEAVE_REQUEST_REJECTED:
+        return {
+          recipientUserId: params.recipientUserId,
+          type: params.type,
+          title: 'Leave request rejected',
+          body: `Your ${params.leaveTypeName} request (${range}, ${days}) was rejected.${
+            params.note ? ` Note: ${params.note}` : ''
+          }`,
+          link: '/time-leave',
+          metadata,
+        };
+      case NotificationType.LEAVE_REQUEST_ESCALATED:
+        return {
+          recipientUserId: params.recipientUserId,
+          type: params.type,
+          title: 'Leave request escalated to you',
+          body: `${params.workerName}'s ${params.leaveTypeName} request (${range}, ${days}) was escalated to you for approval.`,
+          link: '/time-leave',
+          metadata,
+        };
+      case NotificationType.LEAVE_REQUEST_DELEGATED:
+        return {
+          recipientUserId: params.recipientUserId,
+          type: params.type,
+          title: 'Leave request delegated to you',
+          body: `${params.workerName}'s ${params.leaveTypeName} request (${range}, ${days}) was delegated to you for approval.`,
+          link: '/time-leave',
+          metadata,
+        };
+      case NotificationType.LEAVE_REQUEST_CANCELLED:
+        return {
+          recipientUserId: params.recipientUserId,
+          type: params.type,
+          title: 'Leave request cancelled',
+          body: `${params.workerName}'s ${params.leaveTypeName} request (${range}, ${days}) was cancelled.`,
+          link: '/time-leave',
+          metadata,
+        };
+      default:
+        return {
+          recipientUserId: params.recipientUserId,
+          type: params.type,
+          title: 'Leave update',
+          body: `${params.workerName}: ${params.leaveTypeName} (${range}, ${days}).`,
+          link: '/time-leave',
+          metadata,
+        };
+    }
+  }
+
+  /**
+   * Best-effort notification dispatch. A notification failure must never fail
+   * the underlying workflow, so errors are logged and swallowed.
+   */
+  private async dispatchNotifications(
+    organisationId: string,
+    actorUserId: string,
+    intents: NotificationIntent[],
+  ): Promise<void> {
+    if (intents.length === 0) return;
+    try {
+      await this.notifications.emit({ organisationId, actorUserId, intents });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to dispatch leave notifications: ${(error as Error).message}`,
+      );
+    }
   }
 
   private requireContext(): {

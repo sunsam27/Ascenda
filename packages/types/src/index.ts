@@ -879,6 +879,46 @@ export interface AuditLog extends TenantEntity {
   timestamp: string;
 }
 
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+/** In-app notification kinds (delivered for leave-workflow events). */
+export enum NotificationType {
+  LEAVE_REQUEST_SUBMITTED = 'LEAVE_REQUEST_SUBMITTED',
+  LEAVE_REQUEST_APPROVED = 'LEAVE_REQUEST_APPROVED',
+  LEAVE_REQUEST_REJECTED = 'LEAVE_REQUEST_REJECTED',
+  LEAVE_REQUEST_ESCALATED = 'LEAVE_REQUEST_ESCALATED',
+  LEAVE_REQUEST_DELEGATED = 'LEAVE_REQUEST_DELEGATED',
+  LEAVE_REQUEST_CANCELLED = 'LEAVE_REQUEST_CANCELLED',
+  LEAVE_ACCRUAL_RUN = 'LEAVE_ACCRUAL_RUN',
+}
+
+/** A per-recipient in-app notification for the signed-in user. */
+export interface Notification {
+  id: string;
+  organisationId: string;
+  recipientUserId: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  /** Relative in-app link to open on click (e.g. /time-leave). */
+  link?: string | null;
+  metadata?: Record<string, unknown> | null;
+  /** Non-null once the recipient has read it. */
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface NotificationListQuery extends PaginatedQuery {
+  unreadOnly?: boolean;
+}
+
+export interface NotificationListResponse {
+  data: Notification[];
+  /** Total unread for the recipient (independent of the current page). */
+  unread: number;
+  meta: PaginationMeta;
+}
+
 // ── API Response Wrappers ─────────────────────────────────────────────────────
 
 export interface ApiResponse<T> {

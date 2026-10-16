@@ -32,6 +32,19 @@ export interface WorkspaceReadyEmail {
   planName: string;
 }
 
+/** Generic notification email for leave-workflow / accrual events. */
+export interface NotificationEmail {
+  to: string;
+  name: string;
+  /** Short heading, e.g. "Leave request approved". */
+  title: string;
+  /** One or two sentence summary. */
+  body: string;
+  /** Optional relative in-app link (e.g. /time-leave). */
+  link?: string;
+  appUrl?: string;
+}
+
 const PLACEHOLDER = /^(smtp\.example\.com|your-smtp-password|noreply@ascenda\.io)$/i;
 
 @Injectable()
@@ -98,6 +111,35 @@ export class MailerService implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `Failed to send invitation to ${email.to}: ${(error as Error).message}`,
+      );
+      return false;
+    }
+  }
+
+  /** Send a leave-workflow / accrual notification email. Best-effort. */
+  async sendNotification(email: NotificationEmail): Promise<boolean> {
+    const { subject, text, html } = buildNotification(email);
+
+    if (!this.transporter) {
+      this.logger.log(
+        `[dev email] Notification for ${email.to}: ${email.title} — ${email.body}`,
+      );
+      return false;
+    }
+
+    try {
+      await this.transporter.sendMail({
+        from: this.from,
+        to: email.to,
+        subject,
+        text,
+        html,
+      });
+      this.logger.log(`Notification email sent to ${email.to}`);
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to send notification to ${email.to}: ${(error as Error).message}`,
       );
       return false;
     }
@@ -252,6 +294,53 @@ function buildWorkspaceReady({
 </html>`;
 
   return { subject, text, html };
+}
+
+function buildNotification({
+  name,
+  title,
+  body,
+  link,
+  appUrl,
+}: NotificationEmail): { subject: string; text: string; html: string } {
+  const firstName = name.trim().split(/\s+/)[0] || 'there';
+  const url = link ? `${appUrl ?? ''}${link}` : undefined;
+
+  const text = [
+    `Hi ${firstName},`,
+    ``,
+    title,
+    body,
+    ...(url ? [``, `Open Ascenda: ${url}`] : []),
+    ``,
+    `— The Ascenda team`,
+  ].join('\n');
+
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#1f2933;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      <tr><td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;">
+          <tr><td style="padding:28px 32px 8px;font-size:20px;font-weight:700;">Ascenda</td></tr>
+          <tr><td style="padding:8px 32px;font-size:16px;line-height:1.5;">
+            <p style="margin:0 0 16px;">Hi ${firstName},</p>
+            <p style="margin:0 0 8px;font-weight:600;">${title}</p>
+            <p style="margin:0 0 24px;">${body}</p>
+            ${
+              url
+                ? `<p style="margin:0 0 8px;"><a href="${url}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;">Open Ascenda</a></p>`
+                : ''
+            }
+          </td></tr>
+          <tr><td style="padding:16px 32px 32px;font-size:12px;color:#9aa5b1;">Sent by Ascenda</td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+
+  return { subject: title, text, html };
 }
 
 function buildInvitation({

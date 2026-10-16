@@ -65,7 +65,8 @@ DECLARE
     'leave_balances', 'attendance_records', 'holidays', 'blackout_periods',
     'pay_calendars',
     'payroll_runs', 'payroll_items', 'statutory_rule_packs', 'payments',
-    'approval_workflows', 'documents', 'audit_log', 'subscriptions'
+    'approval_workflows', 'documents', 'audit_log', 'subscriptions',
+    'notifications'
   ];
 BEGIN
   FOREACH t IN ARRAY tenant_tables LOOP

@@ -260,6 +260,18 @@ enum AttendanceStatus {
   OFF_DAY
 }
 
+/// In-app notification kinds. Currently emitted for leave-workflow events
+/// (submit / approve / reject / escalate / delegate / cancel) and accrual runs.
+enum NotificationType {
+  LEAVE_REQUEST_SUBMITTED
+  LEAVE_REQUEST_APPROVED
+  LEAVE_REQUEST_REJECTED
+  LEAVE_REQUEST_ESCALATED
+  LEAVE_REQUEST_DELEGATED
+  LEAVE_REQUEST_CANCELLED
+  LEAVE_ACCRUAL_RUN
+}
+
 // ─── Identity & Access ───────────────────────────────────────────────────────
 
 /// Platform-level user account. Credentials managed separately.
@@ -282,6 +294,7 @@ model User {
 
   memberships       Membership[]
   auditLogsAsActor  AuditLog[]   @relation("AuditActor")
+  notifications     Notification[] @relation("NotificationRecipient")
 
   @@map("users")
 }
@@ -347,6 +360,7 @@ model Organisation {
   auditLogs            AuditLog[]
   statutoryRulePacks   StatutoryRulePack[]
   invitations          Invitation[]
+  notifications        Notification[]
   subscription         Subscription?
 
   @@map("organisations")
@@ -922,6 +936,34 @@ model Invitation {
   @@index([organisationId])
   @@index([email])
   @@map("invitations")
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+// Per-recipient, in-app notifications (the bell in the app shell). Tenant-scoped
+// (RLS on `organisationId`); the recipient is a platform user, not a worker.
+// A read receipt is a non-null `readAt`. Delivery is best-effort: email is sent
+// alongside in-app rows when SMTP is configured.
+
+model Notification {
+  id              String           @id @default(uuid())
+  organisationId  String
+  recipientUserId String
+  type            NotificationType
+  title           String
+  body            String
+  /// Relative in-app link (e.g. /time-leave) to open on click.
+  link            String?
+  /// Small structured payload for future deep-linking (never secrets).
+  metadata        Json?
+  readAt          DateTime?
+  createdAt       DateTime         @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  recipient    User         @relation("NotificationRecipient", fields: [recipientUserId], references: [id])
+
+  @@index([organisationId, recipientUserId, createdAt])
+  @@index([recipientUserId, readAt])
+  @@map("notifications")
 }
 
 // ─── Plans (platform-editable pricing) ───────────────────────────────────────
