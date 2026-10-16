@@ -54,6 +54,7 @@ export function toWorkerSummary(
 ): WorkerSummary {
   return {
     hasLogin,
+    userId: worker.userId ?? undefined,
     id: worker.id,
     organisationId: worker.organisationId,
     createdAt: worker.createdAt.toISOString(),

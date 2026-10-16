@@ -360,6 +360,8 @@ export interface WorkerSummary extends TenantEntity {
   gender?: string;
   /** True once the worker has been linked to a workspace login (PPL invite). */
   hasLogin: boolean;
+  /** The linked platform user id, when the worker has a workspace login. */
+  userId?: string;
 }
 
 /** Result of sending a workspace login invitation to a worker. */

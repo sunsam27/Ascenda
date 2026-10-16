@@ -20,6 +20,9 @@ Order is chosen so each step is testable and the riskiest parts (tenancy, permis
 - Attendance (manual and clock in/out), holiday calendars.
 - Leave types, balances, approval workflow engine, delegation and escalation, team calendar basics.
 - **Exit test:** leave balance and holiday maths pass the acceptance criteria.
+  - ✅ Verified — `apps/api/test/e2e/phase2-exit.cjs` (19/19): weekends/one-off/recurring/location
+    holidays + half days (LVE-03); entitlement, reduce-on-final-approval,
+    restore-on-cancel, insufficient-balance rejection (LVE-01/LVE-02).
 
 ## Phase 3: Payroll and payments
 - Pay structures, deductions, employer-side costs, pay calendar, proration.

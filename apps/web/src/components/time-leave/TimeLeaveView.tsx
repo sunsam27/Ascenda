@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import type { Location } from '@ascenda/types';
 import { api } from '@/lib/api';
 import { useCurrentUser } from '@/lib/useCurrentUser';
+import LeaveRequestsPanel from './LeaveRequestsPanel';
 import AttendancePanel from './AttendancePanel';
 import HolidaysPanel from './HolidaysPanel';
 import LeaveTypesPanel from './LeaveTypesPanel';
 import styles from './time-leave.module.css';
 
-type Tab = 'attendance' | 'holidays' | 'leave-types';
+type Tab = 'leave-requests' | 'attendance' | 'holidays' | 'leave-types';
 
 /** Roles that may manage the holiday calendar and the leave-type catalogue. */
 const MANAGERS = new Set(['OWNER', 'HR_ADMINISTRATOR']);
@@ -44,6 +45,7 @@ export default function TimeLeaveView() {
   }, []);
 
   const tabs: { id: Tab; label: string }[] = [
+    { id: 'leave-requests', label: 'Leave requests' },
     { id: 'attendance', label: 'Attendance' },
     { id: 'holidays', label: 'Public holidays' },
     { id: 'leave-types', label: 'Leave types' },
@@ -76,7 +78,9 @@ export default function TimeLeaveView() {
         ))}
       </div>
 
-      {tab === 'attendance' ? (
+      {tab === 'leave-requests' ? (
+        <LeaveRequestsPanel />
+      ) : tab === 'attendance' ? (
         <AttendancePanel canRecord={canRecordAttendance} canDelete={canDeleteAttendance} />
       ) : tab === 'holidays' ? (
         <HolidaysPanel locations={locations} canManage={canManage} />

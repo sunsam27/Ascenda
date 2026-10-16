@@ -15,6 +15,15 @@
 | ATT-01 | ✅ done | Attendance: manual entry (manager/HR) + employee clock in/out; single clock pair per day |
 | ATT-02 | ✅ done | Statuses (Present/Absent/Late/Remote/On Leave/Half Day/Off Day) + configurable workdays/start/end/grace with per-location overrides. `shift` deferred (no schema). |
 
+## Phase 2 exit test
+`apps/api/test/e2e/phase2-exit.cjs` (19/19 over HTTP + RLS-backed DB) proves the
+two exit criteria — **leave-balance maths** and **holiday maths**:
+- `H*` holidays (LVE-03): weekends excluded, one-off org holiday, recurring
+  holiday across a year boundary, location-scoped holiday isolation, half days.
+- `B*` balances (LVE-01/LVE-02): default entitlement materialised on read,
+  balance moves only on final approval, exact restore on cancel, and
+  insufficient-balance rejection (409).
+
 ## Interfaces
 Modules communicate through explicit interfaces/events — never by accessing another module's tables directly.
 `payroll` reads attendance and leave through this module's service interface (LVE-06/ATT-03): `leaveForPayroll` and `absenceDaysInPeriod`.
@@ -34,6 +43,13 @@ Modules communicate through explicit interfaces/events — never by accessing an
 - `leave-requests.controller.ts` / `leave-requests.service.ts` — request + approval workflow (create/submit/decide/delegate/cancel/escalate). `LVE-02`/`LVE-04`
 - `leave-balance-ops.ts` — shared balance-mutation helpers used by both services (`ensureBalance`/`applyApprovedLeave`/`reverseApprovedLeave`).
 - `attendance.controller.ts` / `attendance.service.ts` — clock in/out, manual entry, list/get/update/delete, and the effective work schedule (`GET /attendance/schedule`). `ATT-01`/`ATT-02`
+
+## Web UI
+`apps/web` → Time & Leave → **Leave requests** (`LeaveRequestsPanel.tsx`) surfaces
+create / submit / approve / reject / cancel / **delegate** over these endpoints,
+with status + worker + date filters and a "needs my approval" view. The delegate
+picker lists workspace members via `WorkerSummary.userId` (workers with a login);
+only the current step holder may delegate.
 
 ## Notes
 - All tenant queries run inside `PrismaService.withRequestContext` (RLS `app.current_org`).

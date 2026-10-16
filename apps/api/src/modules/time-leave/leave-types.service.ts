@@ -226,10 +226,14 @@ export class LeaveTypesService {
         name: { equals: name.trim(), mode: 'insensitive' },
         ...(exceptId ? { id: { not: exceptId } } : {}),
       },
-      select: { id: true },
+      select: { id: true, isActive: true },
     });
     if (existing) {
-      throw new ConflictException('A leave type with that name already exists');
+      throw new ConflictException(
+        existing.isActive
+          ? 'A leave type with that name already exists'
+          : 'A leave type with that name already exists but is deactivated — reactivate it instead of creating a new one',
+      );
     }
   }
 

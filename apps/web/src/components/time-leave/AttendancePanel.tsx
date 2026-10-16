@@ -314,8 +314,8 @@ export default function AttendancePanel({
         </div>
       )}
 
-      <div className={styles.toolbar}>
-        <div className={styles.toolbarActions}>
+      <div className={styles.grid}>
+        <div className={styles.gridItem}>
           <label className={styles.label} htmlFor="attendance-from">
             From
           </label>
@@ -326,6 +326,8 @@ export default function AttendancePanel({
             value={from}
             onChange={(e) => setFrom(e.target.value)}
           />
+        </div>
+        <div className={styles.gridItem}>
           <label className={styles.label} htmlFor="attendance-to">
             To
           </label>
@@ -336,6 +338,8 @@ export default function AttendancePanel({
             value={to}
             onChange={(e) => setTo(e.target.value)}
           />
+        </div>
+        <div className={styles.gridItem}>
           <label className={styles.label} htmlFor="attendance-status">
             Status
           </label>
@@ -352,27 +356,27 @@ export default function AttendancePanel({
               </option>
             ))}
           </select>
-          {canRecord && (
-            <>
-              <label className={styles.label} htmlFor="attendance-worker-filter">
-                Worker
-              </label>
-              <select
-                id="attendance-worker-filter"
-                className={styles.select}
-                value={workerFilter}
-                onChange={(e) => setWorkerFilter(e.target.value)}
-              >
-                <option value="">All workers</option>
-                {workers.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.firstName} {w.lastName}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
         </div>
+        {canRecord && (
+          <div className={styles.gridItem}>
+            <label className={styles.label} htmlFor="attendance-worker-filter">
+              Worker
+            </label>
+            <select
+              id="attendance-worker-filter"
+              className={styles.select}
+              value={workerFilter}
+              onChange={(e) => setWorkerFilter(e.target.value)}
+            >
+              <option value="">All workers</option>
+              {workers.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.firstName} {w.lastName}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {loading ? (

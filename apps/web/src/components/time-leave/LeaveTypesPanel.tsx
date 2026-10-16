@@ -65,7 +65,11 @@ export default function LeaveTypesPanel({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ data: LeaveType[] }>('/leave-types');
+      const res = await api.get<{ data: LeaveType[] }>('/leave-types', {
+        // Administrators see deactivated types too, so a name can be reactivated
+        // instead of being re-created (the API rejects duplicate names).
+        params: canManage ? { activeOnly: false } : {},
+      });
       setTypes(res.data.data);
       setError('');
     } catch (err) {
@@ -73,7 +77,7 @@ export default function LeaveTypesPanel({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canManage]);
 
   useEffect(() => {
     void load();
