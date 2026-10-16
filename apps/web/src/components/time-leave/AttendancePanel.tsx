@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { CalendarCheck, Loader2, Trash2 } from 'lucide-react';
+import { CalendarCheck, Loader2, LogIn, LogOut, Trash2 } from 'lucide-react';
 import {
   AttendanceStatus,
   type AttendanceSummary,
@@ -10,6 +10,8 @@ import {
   type WorkerSummary,
 } from '@ascenda/types';
 import { api } from '@/lib/api';
+import { useCurrentUser } from '@/lib/useCurrentUser';
+import { fetchAllWorkers, isSelectableWorker } from '@/lib/workers';
 import styles from './time-leave.module.css';
 
 function messageFrom(err: unknown, fallback: string): string {
@@ -113,15 +115,20 @@ const newDraft = (): Draft => ({
 export default function AttendancePanel({
   canRecord,
   canDelete,
+  canClock,
 }: {
   canRecord: boolean;
   canDelete: boolean;
+  canClock: boolean;
 }) {
+  const { user } = useCurrentUser();
   const [records, setRecords] = useState<AttendanceSummary[]>([]);
   const [workers, setWorkers] = useState<WorkerSummary[]>([]);
   const [schedule, setSchedule] = useState<EffectiveWorkSchedule | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [clockBusy, setClockBusy] = useState(false);
+  const [todayRecord, setTodayRecord] = useState<AttendanceSummary | null>(null);
   const [error, setError] = useState('');
 
   const [from, setFrom] = useState(isoMonthStart);
@@ -166,22 +173,44 @@ export default function AttendancePanel({
   }, []);
 
   useEffect(() => {
-    if (!canRecord) return;
-    api
-      .get<{ data: WorkerSummary[] }>('/workers', { params: { pageSize: 100 } })
-      .then((res) => setWorkers(res.data.data))
+    if (!canRecord && !canClock) return;
+    let active = true;
+    fetchAllWorkers()
+      .then((rows) => {
+        if (active) setWorkers(rows.filter(isSelectableWorker));
+      })
       .catch(() => {
-        // The manual-entry picker simply stays empty.
+        // The person pickers simply stay empty.
       });
-  }, [canRecord]);
+    return () => {
+      active = false;
+    };
+  }, [canRecord, canClock]);
 
-  const workerName = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const w of workers) {
-      map.set(w.id, `${w.firstName} ${w.lastName}`.trim());
+  const selfWorker = useMemo(
+    () => workers.find((w) => w.userId === user?.sub) ?? null,
+    [workers, user?.sub],
+  );
+
+  const loadToday = useCallback(async () => {
+    if (!canClock || !selfWorker) {
+      setTodayRecord(null);
+      return;
     }
-    return map;
-  }, [workers]);
+    const today = isoToday();
+    try {
+      const res = await api.get<{ data: AttendanceSummary[] }>('/attendance', {
+        params: { workerId: selfWorker.id, from: today, to: today, pageSize: 1 },
+      });
+      setTodayRecord(res.data.data[0] ?? null);
+    } catch {
+      setTodayRecord(null);
+    }
+  }, [canClock, selfWorker]);
+
+  useEffect(() => {
+    void loadToday();
+  }, [loadToday]);
 
   async function record() {
     if (!draft.workerId || !draft.date) return;
@@ -201,6 +230,52 @@ export default function AttendancePanel({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function clockIn() {
+    if (!selfWorker) return;
+    setClockBusy(true);
+    setError('');
+    try {
+      await api.post('/attendance/clock-in', { workerId: selfWorker.id });
+      await Promise.all([loadToday(), load()]);
+    } catch (err) {
+      setError(messageFrom(err, 'Could not clock in.'));
+    } finally {
+      setClockBusy(false);
+    }
+  }
+
+  async function clockOut() {
+    if (!selfWorker) return;
+    setClockBusy(true);
+    setError('');
+    try {
+      await api.post('/attendance/clock-out', { workerId: selfWorker.id });
+      await Promise.all([loadToday(), load()]);
+    } catch (err) {
+      setError(messageFrom(err, 'Could not clock out.'));
+    } finally {
+      setClockBusy(false);
+    }
+  }
+
+  function clockSummary(): string {
+    if (!todayRecord || (!todayRecord.clockIn && !todayRecord.clockOut)) {
+      return 'Not clocked in yet today.';
+    }
+    const start = todayRecord.clockIn
+      ? timeFmt.format(new Date(todayRecord.clockIn))
+      : null;
+    const end = todayRecord.clockOut
+      ? timeFmt.format(new Date(todayRecord.clockOut))
+      : null;
+    if (start && !end) return `Clocked in at ${start}.`;
+    const hours =
+      todayRecord.hoursWorked != null
+        ? ` · ${todayRecord.hoursWorked.toFixed(2).replace(/\.00$/, '')}h`
+        : '';
+    return `Clocked in ${start ?? '—'}–${end ?? '—'}${hours}.`;
   }
 
   async function remove(record: AttendanceSummary) {
@@ -233,6 +308,41 @@ export default function AttendancePanel({
         <p className={styles.error} role="alert">
           {error}
         </p>
+      )}
+
+      {canClock && selfWorker && (
+        <div className={`glass ${styles.clockCard}`}>
+          <div className={styles.clockStatus}>
+            <p className={styles.messageTitle}>Today</p>
+            <p className={styles.muted}>{clockSummary()}</p>
+          </div>
+          <div className={styles.clockActions}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={clockIn}
+              disabled={clockBusy || Boolean(todayRecord?.clockIn)}
+            >
+              {clockBusy ? (
+                <Loader2 className={styles.spin} size={15} />
+              ) : (
+                <LogIn size={16} />
+              )}
+              Clock in
+            </button>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnGhost}`}
+              onClick={clockOut}
+              disabled={
+                clockBusy || !todayRecord?.clockIn || Boolean(todayRecord?.clockOut)
+              }
+            >
+              <LogOut size={16} />
+              Clock out
+            </button>
+          </div>
+        </div>
       )}
 
       {schedule && (
@@ -411,7 +521,7 @@ export default function AttendancePanel({
                   </div>
                   <div className={styles.panelItemBody}>
                     <span className={styles.panelName}>
-                      {record.workerName || workerName.get(record.workerId) || 'Worker'}
+                      {record.workerName || 'Worker'}
                     </span>
                     <span className={styles.panelMeta}>
                       {weekdayFmt.format(date)} · {SOURCE_LABELS[record.source] ?? record.source}

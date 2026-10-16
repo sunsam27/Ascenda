@@ -27,8 +27,7 @@ export class LeaveRequestsController {
   @Post('escalations/run')
   @RequirePermission({ resource: 'leave', action: 'approve', scope: PermissionScope.ORGANISATION })
   async runEscalations() {
-    const escalated = await this.service.escalateOverdue();
-    return { data: { escalated } };
+    return { data: await this.service.escalateOverdue() };
   }
 
   @Get(':id')

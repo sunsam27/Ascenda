@@ -42,14 +42,45 @@ Modules communicate through explicit interfaces/events — never by accessing an
 - `leave-balances.controller.ts` / `leave-balances.service.ts` — balance list/adjust; auto-provisions default entitlements when a specific worker is requested. `LVE-01`
 - `leave-requests.controller.ts` / `leave-requests.service.ts` — request + approval workflow (create/submit/decide/delegate/cancel/escalate). `LVE-02`/`LVE-04`
 - `leave-balance-ops.ts` — shared balance-mutation helpers used by both services (`ensureBalance`/`applyApprovedLeave`/`reverseApprovedLeave`).
-- `attendance.controller.ts` / `attendance.service.ts` — clock in/out, manual entry, list/get/update/delete, and the effective work schedule (`GET /attendance/schedule`). `ATT-01`/`ATT-02`
+- `attendance.controller.ts` / `attendance.service.ts` — clock in/out, manual entry, list/get/update/delete, and the effective work schedule (`GET /attendance/schedule`). Schedule edits go through `PATCH /organisations` (org default) and `PATCH /locations/:id` (per-location override). `ATT-01`/`ATT-02`
 
 ## Web UI
-`apps/web` → Time & Leave → **Leave requests** (`LeaveRequestsPanel.tsx`) surfaces
-create / submit / approve / reject / cancel / **delegate** over these endpoints,
-with status + worker + date filters and a "needs my approval" view. The delegate
-picker lists workspace members via `WorkerSummary.userId` (workers with a login);
-only the current step holder may delegate.
+`apps/web` → Time & Leave tabs:
+- **Leave requests** (`LeaveRequestsPanel.tsx`) — create / submit / approve /
+  reject / cancel / **delegate**, with status + worker + date filters and a
+  "needs my approval" view. The delegate picker lists workspace members via
+  `WorkerSummary.userId` (workers with a login); only the current step holder
+  may delegate. Owner/HR see **escalation controls** — force an HR approval step
+  (`requireHrApproval`) and set the auto-escalate window
+  (`escalateAfterMinutes`, presets from 12h to 1 week, or never), override a
+  blackout on create, and a **Run escalations** action
+  (`POST /leave-requests/escalations/run`).
+- **Team calendar** (`TeamCalendarPanel.tsx`) — month grid over
+  `GET /leave-requests/calendar`; approved vs pending entries, per-day head-count,
+  non-working days dimmed, click a day to filter the entry list. Scope follows
+  the caller's `leave:read` grant.
+- **Leave balances** (`LeaveBalancesPanel.tsx`) — per worker/type/year list
+  (entitlement / used / remaining) from `GET /leave-balances`, with a year
+  stepper, "only mine" toggle and filters. Owner/HR can **adjust** a row
+  (`POST /leave-balances/adjust`) and **run accrual** (`/accrual/run`).
+- **Attendance** (`AttendancePanel.tsx`) — self-service **clock in/out**
+  (`POST /attendance/clock-in|clock-out`, shown when the account has a linked
+  worker) plus manager manual entry, filters and delete.
+- **Work schedule** (`WorkSchedulePanel.tsx`, Owner/HR) — edits the attendance
+  schedule (ATT-02): working days (ISO Mon–Sun), start/end time and late grace.
+  The organisation default is read from `GET /attendance/schedule` and written
+  via `PATCH /organisations` (Owner only); per-location overrides are written via
+  `PATCH /locations/:id` (Owner/HR) and can be cleared back to inherit the
+  organisation default.
+- **Blackout periods** (`BlackoutPeriodsPanel.tsx`) — list/create/edit/delete
+  windows (`/blackout-periods`), readable by all members and managed by
+  Owner/HR: name, date range, per-location / per-leave-type scope, yearly
+  recurrence, an "Active now" badge and a reason. Creating leave that overlaps a
+  window is rejected unless an Owner/HR creator ticks *override blackout*.
+
+All person pickers are limited to **active** workers (`ACTIVE`/`ON_LEAVE`) across
+all categories and load the full worker list via `@/lib/workers` (`fetchAllWorkers`,
+page size capped at 100).
 
 ## Notes
 - All tenant queries run inside `PrismaService.withRequestContext` (RLS `app.current_org`).

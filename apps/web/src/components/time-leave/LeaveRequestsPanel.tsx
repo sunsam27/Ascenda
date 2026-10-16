@@ -2,17 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { CalendarCheck, Check, Loader2, Plus, Trash2, UserPlus, X } from 'lucide-react';
+import { ArrowUpRight, CalendarCheck, Check, Loader2, Plus, Trash2, UserPlus, X } from 'lucide-react';
 import {
   LeaveStatus,
-  WorkerStatus,
   type LeaveRequestSummary,
   type LeaveType,
-  type PaginationMeta,
   type WorkerSummary,
 } from '@ascenda/types';
 import { api } from '@/lib/api';
 import { useCurrentUser } from '@/lib/useCurrentUser';
+import { fetchAllWorkers, isSelectableWorker } from '@/lib/workers';
 import styles from './time-leave.module.css';
 
 function messageFrom(err: unknown, fallback: string): string {
@@ -73,34 +72,6 @@ function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** The workers list caps `pageSize` at 100, so walk the pages to get them all. */
-const WORKER_PAGE_SIZE = 100;
-const WORKER_MAX_PAGES = 20;
-
-async function fetchAllWorkers(): Promise<WorkerSummary[]> {
-  const rows: WorkerSummary[] = [];
-  for (let page = 1; page <= WORKER_MAX_PAGES; page += 1) {
-    const res = await api.get<{ data: WorkerSummary[]; meta: PaginationMeta }>(
-      '/workers',
-      { params: { page, pageSize: WORKER_PAGE_SIZE } },
-    );
-    rows.push(...res.data.data);
-    const totalPages = res.data.meta?.totalPages ?? 1;
-    if (page >= totalPages) break;
-  }
-  return rows;
-}
-
-/** Employed people you can raise leave for / hand a step off to. */
-const SELECTABLE_WORKER_STATUSES: ReadonlySet<WorkerStatus> = new Set([
-  WorkerStatus.ACTIVE,
-  WorkerStatus.ON_LEAVE,
-]);
-
-function isSelectableWorker(worker: WorkerSummary): boolean {
-  return SELECTABLE_WORKER_STATUSES.has(worker.status);
-}
-
 function rangeLabel(record: LeaveRequestSummary): string {
   const start = new Date(`${record.startDate}T00:00:00Z`);
   const end = new Date(`${record.endDate}T00:00:00Z`);
@@ -116,6 +87,10 @@ type Draft = {
   startHalfDay: boolean;
   endHalfDay: boolean;
   reason: string;
+  requireHrApproval: boolean;
+  /** Hours before the active step escalates; '' keeps the server default. */
+  escalateHours: string;
+  overrideBlackout: boolean;
 };
 
 const newDraft = (): Draft => ({
@@ -126,7 +101,24 @@ const newDraft = (): Draft => ({
   startHalfDay: false,
   endHalfDay: false,
   reason: '',
+  requireHrApproval: false,
+  escalateHours: '',
+  overrideBlackout: false,
 });
+
+/**
+ * Escalation windows (LVE-04). The API default is 2 days; an explicit 0 turns
+ * auto-escalation off for the request. Sent as whole minutes.
+ */
+const ESCALATION_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Default (2 days)' },
+  { value: '12', label: 'After 12 hours' },
+  { value: '24', label: 'After 1 day' },
+  { value: '48', label: 'After 2 days' },
+  { value: '72', label: 'After 3 days' },
+  { value: '168', label: 'After 1 week' },
+  { value: '0', label: 'Never auto-escalate' },
+];
 
 export default function LeaveRequestsPanel() {
   const { user } = useCurrentUser();
@@ -144,6 +136,7 @@ export default function LeaveRequestsPanel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   const [statusFilter, setStatusFilter] = useState('');
   const [workerFilter, setWorkerFilter] = useState('');
@@ -243,6 +236,14 @@ export default function LeaveRequestsPanel() {
     [activeWorkers, user?.sub],
   );
 
+  const selectedType = useMemo(
+    () => types.find((t) => t.id === draft.leaveTypeId) ?? null,
+    [types, draft.leaveTypeId],
+  );
+  // An approval chain only exists when the leave type requires approval, so the
+  // escalation controls are irrelevant otherwise.
+  const showEscalationControls = isOrgApprover && (selectedType?.requiresApproval ?? true);
+
   function currentStep(record: LeaveRequestSummary) {
     return record.steps?.find((s) => s.stepOrder === record.currentStepOrder);
   }
@@ -291,6 +292,9 @@ export default function LeaveRequestsPanel() {
     setAction(null);
     setBusy(true);
     setError('');
+    setNotice('');
+    const escalationMinutes =
+      draft.escalateHours === '' ? undefined : Math.round(Number(draft.escalateHours) * 60);
     try {
       await api.post('/leave-requests', {
         ...(canCreateForOthers && draft.workerId ? { workerId: draft.workerId } : {}),
@@ -300,11 +304,40 @@ export default function LeaveRequestsPanel() {
         ...(draft.startHalfDay ? { startHalfDay: true } : {}),
         ...(draft.endHalfDay ? { endHalfDay: true } : {}),
         ...(draft.reason.trim() ? { reason: draft.reason.trim() } : {}),
+        ...(showEscalationControls && draft.requireHrApproval
+          ? { requireHrApproval: true }
+          : {}),
+        ...(showEscalationControls && escalationMinutes !== undefined
+          ? { escalateAfterMinutes: escalationMinutes }
+          : {}),
+        ...(isOrgApprover && draft.overrideBlackout ? { overrideBlackout: true } : {}),
       });
       setDraft((d) => ({ ...newDraft(), workerId: d.workerId, leaveTypeId: d.leaveTypeId }));
       await load();
     } catch (err) {
       setError(messageFrom(err, 'Could not create the leave request.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runEscalations() {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await api.post<{ data: { escalated: number } }>(
+        '/leave-requests/escalations/run',
+      );
+      const count = res.data.data.escalated;
+      setNotice(
+        count > 0
+          ? `Escalated ${count} overdue request${count === 1 ? '' : 's'}.`
+          : 'No overdue requests to escalate.',
+      );
+      await load();
+    } catch (err) {
+      setError(messageFrom(err, 'Could not run escalations.'));
     } finally {
       setBusy(false);
     }
@@ -389,6 +422,31 @@ export default function LeaveRequestsPanel() {
         <p className={styles.error} role="alert">
           {error}
         </p>
+      )}
+
+      {notice && (
+        <p className={styles.notice} role="status">
+          {notice}
+        </p>
+      )}
+
+      {isOrgApprover && (
+        <div className={styles.toolbar}>
+          <span className={styles.formHint}>
+            Undecided steps past their deadline can be escalated to HR on demand.
+          </span>
+          <div className={styles.toolbarActions}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnGhost}`}
+              onClick={runEscalations}
+              disabled={busy}
+            >
+              {busy ? <Loader2 className={styles.spin} size={15} /> : <ArrowUpRight size={16} />}
+              Run escalations
+            </button>
+          </div>
+        </div>
       )}
 
       {canCreate && (
@@ -500,6 +558,55 @@ export default function LeaveRequestsPanel() {
                 placeholder="e.g. Family holiday"
               />
             </div>
+            {showEscalationControls && (
+              <div className={`${styles.gridItem} ${styles.gridFull}`}>
+                <label className={styles.label} htmlFor="leave-escalate">
+                  Approval routing
+                </label>
+                <div className={styles.badges}>
+                  <label className={styles.checkboxRow}>
+                    <input
+                      type="checkbox"
+                      checked={draft.requireHrApproval}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, requireHrApproval: e.target.checked }))
+                      }
+                    />
+                    Require an HR approval step
+                  </label>
+                  <select
+                    id="leave-escalate"
+                    className={styles.select}
+                    aria-label="Auto-escalate after"
+                    value={draft.escalateHours}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, escalateHours: e.target.value }))
+                    }
+                  >
+                    {ESCALATION_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+            {isOrgApprover && (
+              <div className={`${styles.gridItem} ${styles.gridFull}`}>
+                <label className={styles.label}>Blackout periods</label>
+                <label className={styles.checkboxRow}>
+                  <input
+                    type="checkbox"
+                    checked={draft.overrideBlackout}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, overrideBlackout: e.target.checked }))
+                    }
+                  />
+                  Allow dates that fall inside a blackout period
+                </label>
+              </div>
+            )}
           </div>
           <button
             type="button"

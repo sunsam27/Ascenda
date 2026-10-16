@@ -127,6 +127,69 @@
 .muted { font-size: var(--text-body-sm); color: var(--color-text-muted); }
 .error { font-size: var(--text-body-sm); color: var(--color-error); background: var(--color-error-tint); border-radius: var(--radius-input); padding: var(--space-3) var(--space-4); }
 
+/* ── Leave balances table ──────────────────────────────────────────────────── */
+.tableWrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: var(--text-body-sm); }
+.table th {
+  text-align: left; font-size: var(--text-label); font-weight: var(--weight-medium);
+  color: var(--color-text-secondary); padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border); white-space: nowrap;
+}
+.table td { padding: var(--space-3); border-bottom: 1px solid var(--color-border); color: var(--color-text); }
+.table tbody tr:last-child td { border-bottom: none; }
+.table .num { font-variant-numeric: tabular-nums; text-align: right; }
+.numStrong { font-weight: var(--weight-semibold); }
+.tableRowActions { display: flex; justify-content: flex-end; }
+.notice {
+  font-size: var(--text-body-sm); color: var(--color-success);
+  background: var(--color-success-tint); border-radius: var(--radius-input);
+  padding: var(--space-3) var(--space-4);
+}
+
+/* ── Self-service clock in/out ─────────────────────────────────────────────── */
+.clockCard {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap; padding: var(--space-4) var(--space-5);
+}
+.clockStatus { display: flex; flex-direction: column; gap: var(--space-1); }
+.clockActions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+/* ── Team calendar ─────────────────────────────────────────────────────────── */
+.monthLabel {
+  font-size: var(--text-h3); font-weight: var(--weight-semibold);
+  color: var(--color-text); min-width: 12ch; text-align: center;
+}
+.calendarLegend { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.legendItem { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-body-sm); color: var(--color-text-muted); }
+.legendSwatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+.legendApproved { background: var(--color-success); }
+.legendPending { background: var(--color-warning); }
+
+.calendar { display: flex; flex-direction: column; gap: var(--space-1); }
+.calendarHead, .calendarGrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-1); }
+.calendarHeadCell {
+  font-size: var(--text-overline); text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--color-text-muted); padding: var(--space-2) var(--space-1); text-align: center;
+}
+.calendarCell {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1);
+  min-height: 76px; padding: var(--space-2); cursor: pointer;
+  font-family: inherit; text-align: left; color: var(--color-text);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  transition: border-color var(--duration-fast) var(--easing-base);
+}
+.calendarCell:hover:not(:disabled) { border-color: var(--color-border-strong); }
+.calendarCell:disabled { cursor: default; }
+.calendarCellMuted { opacity: 0.45; }
+.calendarCellOff { background: var(--color-muted-tint); }
+.calendarCellToday { border-color: var(--color-primary); }
+.calendarCellSelected { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.calendarDayNum { font-size: var(--text-body-sm); font-weight: var(--weight-medium); color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.calendarDots { display: flex; flex-wrap: wrap; gap: 3px; }
+.calendarDot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; }
+.calendarEntries { display: flex; flex-direction: column; gap: var(--space-3); }
+
 .leaveItem { flex-direction: column; align-items: stretch; gap: var(--space-3); }
 .leaveTop { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .decideBar { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px dashed var(--color-border); padding-top: var(--space-3); }
