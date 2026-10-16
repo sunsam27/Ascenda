@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { Check, Loader2, X } from 'lucide-react';
 import {
@@ -204,7 +205,7 @@ export default function WorkerEditor({
     }
   }
 
-  return (
+  return createPortal(
     <div
       className={styles.overlay}
       role="presentation"
@@ -460,6 +461,7 @@ export default function WorkerEditor({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

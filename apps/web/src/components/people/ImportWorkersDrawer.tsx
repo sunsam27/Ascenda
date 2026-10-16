@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { CheckCircle2, Download, FileUp, Loader2, Upload, X } from 'lucide-react';
 import type {
@@ -165,7 +166,7 @@ export default function ImportWorkersDrawer({
 
   const validCount = preview?.summary.valid ?? 0;
 
-  return (
+  return createPortal(
     <div
       className={styles.overlay}
       role="presentation"
@@ -411,6 +412,7 @@ export default function ImportWorkersDrawer({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
