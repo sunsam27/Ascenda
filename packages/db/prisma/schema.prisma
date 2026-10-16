@@ -124,6 +124,7 @@ enum LeaveTypeCategory {
   MATERNITY
   PATERNITY
   COMPASSIONATE
+  STUDY
   UNPAID
   CUSTOM
 }
@@ -196,6 +197,15 @@ enum AuditAction {
   WORKER_DELETED
   COMPENSATION_CHANGED
   BANK_DETAILS_CHANGED
+  LEAVE_TYPE_CHANGED
+  LEAVE_REQUEST_CREATED
+  LEAVE_REQUEST_APPROVED
+  LEAVE_REQUEST_REJECTED
+  LEAVE_REQUEST_CANCELLED
+  LEAVE_REQUEST_ESCALATED
+  LEAVE_BALANCE_ADJUSTED
+  ATTENDANCE_RECORDED
+  HOLIDAY_CALENDAR_CHANGED
   PAYROLL_RUN_CREATED
   PAYROLL_RUN_APPROVED
   PAYROLL_RUN_LOCKED
@@ -223,6 +233,17 @@ enum AttendanceSource {
   MANUAL
   CLOCK_IN_OUT
   IMPORT
+}
+
+/// PRD ATT-02 attendance statuses.
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  REMOTE
+  ON_LEAVE
+  HALF_DAY
+  OFF_DAY
 }
 
 // ─── Identity & Access ───────────────────────────────────────────────────────
@@ -284,6 +305,11 @@ model Organisation {
   currency    String           /// ISO 4217
   timezone    String           /// IANA timezone
   terminology Json             @default("{}") /// {"Department":"Ministry","Employee":"Pastor"}
+  /// Work-schedule defaults (PRD ATT-02). workDays = ISO weekdays Mon=1..Sun=7.
+  workDays         Int[]  @default([1, 2, 3, 4, 5])
+  workDayStart     String @default("09:00") /// HH:mm in the organisation timezone
+  workDayEnd       String @default("17:00") /// HH:mm in the organisation timezone
+  lateGraceMinutes Int    @default(0)
   logoUrl     String?
   isActive    Boolean          @default(true)
   createdAt   DateTime         @default(now())
@@ -299,6 +325,7 @@ model Organisation {
   leaveRequests        LeaveRequest[]
   leaveBalances        LeaveBalance[]
   attendanceRecords    AttendanceRecord[]
+  holidayCalendars     Holiday[]
   approvalWorkflows    ApprovalWorkflow[]
   payments             Payment[]
   documents            Document[]
@@ -337,12 +364,19 @@ model Location {
   city           String?
   country        String?
   isActive       Boolean  @default(true)
+  /// Optional per-location overrides of the organisation's work schedule (ATT-02).
+  /// An empty list means "inherit the organisation default".
+  workDays         Int[]  @default([])
+  workDayStart     String?
+  workDayEnd       String?
+  lateGraceMinutes Int?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   createdBy      String
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
   workers      Worker[]
+  holidays     Holiday[]
 
   @@index([organisationId])
   @@map("locations")
@@ -493,9 +527,17 @@ model LeaveRequest {
   leaveTypeId        String
   startDate          DateTime
   endDate            DateTime
+  /// Half-day markers (LVE-03): first and/or last day may be a half day.
+  startHalfDay       Boolean     @default(false)
+  endHalfDay         Boolean     @default(false)
+  /// Working days counted at submit — excludes weekends and public holidays.
+  days               Decimal     @db.Decimal(5, 2) @default(0)
   status             LeaveStatus @default(DRAFT)
   /// Restricted field — permission-gated (medical_or_leave_reason)
   reasonEncrypted    String?
+  submittedAt        DateTime?
+  decidedAt          DateTime?
+  decidedById        String?
   approvalWorkflowId String?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
@@ -541,6 +583,7 @@ model AttendanceRecord {
   clockOut       DateTime?
   hoursWorked    Decimal?         @db.Decimal(4, 2)
   source         AttendanceSource @default(MANUAL)
+  status         AttendanceStatus @default(PRESENT)
   notes          String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -556,6 +599,30 @@ model AttendanceRecord {
 }
 
 // ─── Payroll ─────────────────────────────────────────────────────────────────
+
+// ─── Holidays ────────────────────────────────────────────────────────────────
+
+/// Public-holiday calendar (PRD LVE-03). `locationId = null` applies to the
+/// whole organisation; a non-null value scopes the holiday to one location.
+model Holiday {
+  id             String   @id @default(uuid())
+  organisationId String
+  locationId     String?
+  name           String
+  date           DateTime @db.Date
+  /// Repeats every year on the same month/day (e.g. New Year's Day).
+  isRecurring    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdBy      String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  location     Location?    @relation(fields: [locationId], references: [id])
+
+  @@index([organisationId])
+  @@index([organisationId, locationId, date])
+  @@map("holidays")
+}
 
 model PayCalendar {
   id             String      @id @default(uuid())
@@ -711,12 +778,19 @@ model ApprovalStep {
   actedAt            DateTime?
   note               String?
   delegatedToId      String?
+  /// Escalation (LVE-04): minutes after the step becomes active before it
+  /// auto-escalates, and the computed deadline / escalation record.
+  escalateAfterMinutes Int?
+  dueAt                DateTime?
+  escalatedAt          DateTime?
+  escalatedToId        String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
   workflow ApprovalWorkflow @relation(fields: [approvalWorkflowId], references: [id])
 
   @@index([approvalWorkflowId])
+  @@index([status, dueAt])
   @@map("approval_steps")
 }
 

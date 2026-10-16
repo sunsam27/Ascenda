@@ -42,6 +42,7 @@ const BUSINESS_RESOURCES = [
   'locations',
   'leave',
   'attendance',
+  'holidays',
   'compensation',
   'bank_accounts',
   'payroll',
@@ -66,7 +67,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('locations', CRUD, PermissionScope.ORGANISATION),
     ...perm('leave', ['read', 'create', 'update', 'approve'], PermissionScope.ORGANISATION),
     ...perm('attendance', CRUD, PermissionScope.ORGANISATION),
-    ...perm('documents', CRUD, PermissionScope.ORGANISATION),
+    ...perm('holidays', CRUD, PermissionScope.ORGANISATION),
     ...perm('compensation', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.ORGANISATION),
   ],
@@ -90,6 +91,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('workers', READ, PermissionScope.TEAM),
     ...perm('leave', ['read', 'approve'], PermissionScope.TEAM),
     ...perm('attendance', READ, PermissionScope.TEAM),
+    ...perm('holidays', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.TEAM),
   ],
 
@@ -97,6 +99,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('workers', READ, PermissionScope.SELF),
     ...perm('leave', ['read', 'create'], PermissionScope.SELF),
     ...perm('attendance', ['read', 'create'], PermissionScope.SELF),
+    ...perm('holidays', READ, PermissionScope.ORGANISATION),
     ...perm('documents', READ, PermissionScope.SELF),
   ],
 
@@ -104,6 +107,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('workers', READ, PermissionScope.SELF),
     ...perm('leave', ['read', 'create'], PermissionScope.SELF),
     ...perm('attendance', ['read', 'create'], PermissionScope.SELF),
+    ...perm('holidays', READ, PermissionScope.ORGANISATION),
     ...perm('documents', READ, PermissionScope.SELF),
   ],
 
@@ -118,6 +122,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('departments', READ, PermissionScope.ORGANISATION),
     ...perm('locations', READ, PermissionScope.ORGANISATION),
     ...perm('leave', READ, PermissionScope.ORGANISATION),
+    ...perm('holidays', READ, PermissionScope.ORGANISATION),
     ...perm('payroll', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.ORGANISATION),
   ],

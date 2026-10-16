@@ -123,8 +123,28 @@ export enum LeaveTypeCategory {
   MATERNITY = 'MATERNITY',
   PATERNITY = 'PATERNITY',
   COMPASSIONATE = 'COMPASSIONATE',
+  STUDY = 'STUDY',
   UNPAID = 'UNPAID',
   CUSTOM = 'CUSTOM',
+}
+
+// ── Attendance ────────────────────────────────────────────────────────────────
+
+export enum AttendanceSource {
+  MANUAL = 'MANUAL',
+  CLOCK_IN_OUT = 'CLOCK_IN_OUT',
+  IMPORT = 'IMPORT',
+}
+
+/** PRD ATT-02 attendance statuses. */
+export enum AttendanceStatus {
+  PRESENT = 'PRESENT',
+  ABSENT = 'ABSENT',
+  LATE = 'LATE',
+  REMOTE = 'REMOTE',
+  ON_LEAVE = 'ON_LEAVE',
+  HALF_DAY = 'HALF_DAY',
+  OFF_DAY = 'OFF_DAY',
 }
 
 // ── Payroll ───────────────────────────────────────────────────────────────────
@@ -205,6 +225,15 @@ export enum AuditAction {
   WORKER_DELETED = 'WORKER_DELETED',
   COMPENSATION_CHANGED = 'COMPENSATION_CHANGED',
   BANK_DETAILS_CHANGED = 'BANK_DETAILS_CHANGED',
+  LEAVE_TYPE_CHANGED = 'LEAVE_TYPE_CHANGED',
+  LEAVE_REQUEST_CREATED = 'LEAVE_REQUEST_CREATED',
+  LEAVE_REQUEST_APPROVED = 'LEAVE_REQUEST_APPROVED',
+  LEAVE_REQUEST_REJECTED = 'LEAVE_REQUEST_REJECTED',
+  LEAVE_REQUEST_CANCELLED = 'LEAVE_REQUEST_CANCELLED',
+  LEAVE_REQUEST_ESCALATED = 'LEAVE_REQUEST_ESCALATED',
+  LEAVE_BALANCE_ADJUSTED = 'LEAVE_BALANCE_ADJUSTED',
+  ATTENDANCE_RECORDED = 'ATTENDANCE_RECORDED',
+  HOLIDAY_CALENDAR_CHANGED = 'HOLIDAY_CALENDAR_CHANGED',
   PAYROLL_RUN_CREATED = 'PAYROLL_RUN_CREATED',
   PAYROLL_RUN_APPROVED = 'PAYROLL_RUN_APPROVED',
   PAYROLL_RUN_LOCKED = 'PAYROLL_RUN_LOCKED',
@@ -431,9 +460,17 @@ export interface LeaveRequest extends TenantEntity {
   leaveTypeId: string;
   startDate: string;
   endDate: string;
+  /** First / last day may be a half day (LVE-03) */
+  startHalfDay: boolean;
+  endHalfDay: boolean;
+  /** Working days only — excludes weekends and public holidays */
+  days: number;
   status: LeaveStatus;
   /** Free-text reason — restricted field, permission-gated */
   reason?: string;
+  submittedAt?: string;
+  decidedAt?: string;
+  decidedById?: string;
   approvalWorkflowId?: string;
   createdBy: string;
 }
@@ -448,14 +485,49 @@ export interface LeaveBalance extends TenantEntity {
   year: number;
 }
 
+export interface CreateLeaveTypeDto {
+  name: string;
+  category: LeaveTypeCategory;
+  /** Days per year */
+  defaultBalance: number;
+  isPaid: boolean;
+  requiresApproval?: boolean;
+  isActive?: boolean;
+}
+
+export type UpdateLeaveTypeDto = Partial<CreateLeaveTypeDto>;
+
 export interface AttendanceRecord extends TenantEntity {
   workerId: string;
   date: string;
+  status: AttendanceStatus;
+  source: AttendanceSource;
   clockIn?: string;
   clockOut?: string;
   hoursWorked?: number;
   notes?: string;
 }
+
+/** Public-holiday calendar entry (LVE-03) */
+export interface Holiday extends TenantEntity {
+  /** null = applies to the whole organisation */
+  locationId?: string;
+  locationName?: string;
+  name: string;
+  date: string;
+  /** Repeats annually on the same month/day */
+  isRecurring: boolean;
+}
+
+export interface CreateHolidayDto {
+  name: string;
+  /** ISO date (YYYY-MM-DD) */
+  date: string;
+  locationId?: string | null;
+  isRecurring?: boolean;
+}
+
+export type UpdateHolidayDto = Partial<CreateHolidayDto>;
 
 export interface PayCalendar extends TenantEntity {
   name: string;

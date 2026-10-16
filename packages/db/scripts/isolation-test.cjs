@@ -125,6 +125,33 @@ async function main() {
     ids.deptA = deptA.rows[0].id;
     ids.deptB = deptB.rows[0].id;
 
+    // Time & leave tables (PRD LVE-01/LVE-03) — new tenant-scoped tables.
+    const ltA = await admin.query(
+      `INSERT INTO leave_types (id, "organisationId", name, category, "defaultBalance", "isPaid", "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, 'Annual A', 'ANNUAL', 21, true, $2, now()) RETURNING id`,
+      [ids.orgA, ids.userA],
+    );
+    const ltB = await admin.query(
+      `INSERT INTO leave_types (id, "organisationId", name, category, "defaultBalance", "isPaid", "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, 'Annual B', 'ANNUAL', 21, true, $2, now()) RETURNING id`,
+      [ids.orgB, ids.userB],
+    );
+    ids.ltA = ltA.rows[0].id;
+    ids.ltB = ltB.rows[0].id;
+
+    const holA = await admin.query(
+      `INSERT INTO holidays (id, "organisationId", name, date, "isRecurring", "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, 'Holiday A', '2026-01-01', false, $2, now()) RETURNING id`,
+      [ids.orgA, ids.userA],
+    );
+    const holB = await admin.query(
+      `INSERT INTO holidays (id, "organisationId", name, date, "isRecurring", "createdBy", "updatedAt")
+       VALUES (gen_random_uuid(), $1, 'Holiday B', '2026-01-01', false, $2, now()) RETURNING id`,
+      [ids.orgB, ids.userB],
+    );
+    ids.holA = holA.rows[0].id;
+    ids.holB = holB.rows[0].id;
+
     console.log('\nTenant isolation assertions (as ascenda_app):');
 
     // ── No context: nothing is visible ───────────────────────────────────────
@@ -182,6 +209,58 @@ async function main() {
     }
     check('Org A cannot insert a row tagged to Org B', insertBlocked);
 
+    // ── Leave types: same isolation guarantees ───────────────────────────────
+    const aLeaveTypes = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM leave_types'),
+    );
+    check(
+      'Org A sees exactly its own leave type',
+      aLeaveTypes.rows.length === 1 && aLeaveTypes.rows[0].id === ids.ltA,
+      `rows=${JSON.stringify(aLeaveTypes.rows)}`,
+    );
+    const crossLtRead = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM leave_types WHERE id = $1', [ids.ltB]),
+    );
+    check('Org A cannot read Org B leave type by id', crossRead.rows.length === 0);
+
+    // ── Holidays — new tenant table must be isolated too ─────────────────────
+    const aHols = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM holidays'),
+    );
+    check(
+      'Org A sees exactly its own holiday',
+      aHols.rows.length === 1 && aHols.rows[0].id === ids.holA,
+      `rows=${JSON.stringify(aHols.rows)}`,
+    );
+
+    const crossHolRead = await runCtx(ids.orgA, ids.userA, () =>
+      app.query('SELECT id FROM holidays WHERE id = $1', [ids.holB]),
+    );
+    check('Org A cannot read Org B holiday by id', crossHolRead.rows.length === 0);
+
+    const crossHolWrite = await runCtx(ids.orgA, ids.userA, () =>
+      app.query(`UPDATE holidays SET name = 'hacked' WHERE id = $1`, [ids.holB]),
+    );
+    check(
+      'Org A cannot update Org B holiday',
+      crossHolWrite.rowCount === 0,
+      `rowCount=${crossHolWrite.rowCount}`,
+    );
+
+    let holInsertBlocked = false;
+    try {
+      await runCtx(ids.orgA, ids.userA, () =>
+        app.query(
+          `INSERT INTO holidays (id, "organisationId", name, date, "isRecurring", "createdBy", "updatedAt")
+           VALUES (gen_random_uuid(), $1, 'spoofed', '2026-02-01', false, $2, now())`,
+          [ids.orgB, ids.userA],
+        ),
+      );
+    } catch {
+      holInsertBlocked = true;
+    }
+    check('Org A cannot insert a holiday tagged to Org B', holInsertBlocked);
+
     // ── Org B symmetric check ────────────────────────────────────────────────
     const bCrossRead = await runCtx(ids.orgB, ids.userB, () =>
       app.query('SELECT id FROM departments WHERE id = $1', [ids.deptA]),
@@ -213,6 +292,12 @@ async function main() {
     // ── Teardown ─────────────────────────────────────────────────────────────
     if (ids.orgA) {
       await admin.query(`DELETE FROM departments WHERE "organisationId" = ANY($1)`, [
+        [ids.orgA, ids.orgB],
+      ]);
+      await admin.query(`DELETE FROM holidays WHERE "organisationId" = ANY($1)`, [
+        [ids.orgA, ids.orgB],
+      ]);
+      await admin.query(`DELETE FROM leave_types WHERE "organisationId" = ANY($1)`, [
         [ids.orgA, ids.orgB],
       ]);
       await admin.query(`DELETE FROM memberships WHERE "organisationId" = ANY($1)`, [
