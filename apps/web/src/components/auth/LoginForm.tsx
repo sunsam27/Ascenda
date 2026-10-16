@@ -2,7 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import { api } from '@/lib/api';
 import styles from './LoginForm.module.css';
@@ -13,6 +13,12 @@ type FieldErrors = Partial<Record<'email' | 'password', string>>;
 
 export default function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // The middleware bounces unauthenticated users here with the path they asked
+  // for. Only trust relative, single-slash paths to prevent open redirects.
+  const nextParam = searchParams.get('next');
+  const nextPath =
+    nextParam && /^\/(?!\/|\\)/.test(nextParam) ? nextParam : null;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -61,7 +67,7 @@ export default function LoginForm() {
         password,
       });
       // Keep the button disabled while navigation completes (avoids a flash).
-      router.push(data.redirectTo ?? '/dashboard');
+      router.push(nextPath ?? data.redirectTo ?? '/dashboard');
       router.refresh();
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 401) {

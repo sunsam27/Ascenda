@@ -119,9 +119,10 @@ export default function LocationsPanel({
             className={styles.input}
             value={draft.name}
             placeholder="e.g. Lagos HQ"
-            onChange={(e) =>
-              setDraft((d) => ({ ...d, name: e.currentTarget.value }))
-            }
+            onChange={(e) => {
+              const value = e.currentTarget.value;
+              setDraft((d) => ({ ...d, name: value }));
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void create();
             }}
@@ -135,9 +136,10 @@ export default function LocationsPanel({
             id="new-location-city"
             className={styles.input}
             value={draft.city}
-            onChange={(e) =>
-              setDraft((d) => ({ ...d, city: e.currentTarget.value }))
-            }
+            onChange={(e) => {
+              const value = e.currentTarget.value;
+              setDraft((d) => ({ ...d, city: value }));
+            }}
           />
         </div>
         <div className={styles.inlineField}>
@@ -148,9 +150,10 @@ export default function LocationsPanel({
             id="new-location-country"
             className={styles.input}
             value={draft.country}
-            onChange={(e) =>
-              setDraft((d) => ({ ...d, country: e.currentTarget.value }))
-            }
+            onChange={(e) => {
+              const value = e.currentTarget.value;
+              setDraft((d) => ({ ...d, country: value }));
+            }}
           />
         </div>
         <button
@@ -178,12 +181,13 @@ export default function LocationsPanel({
                     <input
                       className={styles.input}
                       value={editValue.name}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const value = e.currentTarget.value;
                         setEditValue((d) => ({
                           ...d,
-                          name: e.currentTarget.value,
-                        }))
-                      }
+                          name: value,
+                        }));
+                      }}
                       aria-label={`Rename ${location.name}`}
                     />
                   </div>
@@ -192,12 +196,13 @@ export default function LocationsPanel({
                       className={styles.input}
                       value={editValue.city}
                       placeholder="City"
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const value = e.currentTarget.value;
                         setEditValue((d) => ({
                           ...d,
-                          city: e.currentTarget.value,
-                        }))
-                      }
+                          city: value,
+                        }));
+                      }}
                     />
                   </div>
                   <div className={styles.inlineField}>
@@ -205,12 +210,13 @@ export default function LocationsPanel({
                       className={styles.input}
                       value={editValue.country}
                       placeholder="Country"
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const value = e.currentTarget.value;
                         setEditValue((d) => ({
                           ...d,
-                          country: e.currentTarget.value,
-                        }))
-                      }
+                          country: value,
+                        }));
+                      }}
                     />
                   </div>
                   <div className={styles.panelActions}>

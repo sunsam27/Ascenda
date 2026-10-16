@@ -102,12 +102,14 @@
 
 /* Upload drawer */
 .overlay {
-  position: fixed; inset: 0; z-index: 60;
+  /* Viewport-level: start below the fixed top bar (z-index 90) and run to the
+     bottom of the viewport, independent of any scrolling/overflow on the page. */
+  position: fixed; top: var(--topbar-height); right: 0; bottom: 0; left: 0; z-index: 60;
   background: rgba(15, 23, 42, 0.32);
   display: flex; justify-content: flex-end;
 }
 .drawer {
-  width: min(520px, 100%); height: 100%; overflow-y: auto;
+  width: min(520px, 100%); height: 100%; overflow: hidden;
   display: flex; flex-direction: column;
   background: var(--glass-bg-overlay);
   -webkit-backdrop-filter: blur(var(--glass-blur-overlay)) saturate(var(--glass-saturate));
@@ -118,14 +120,14 @@
 .drawerHeader {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
   padding: var(--space-5) var(--space-6); border-bottom: 1px solid var(--color-border);
-  position: sticky; top: 0; background: inherit; z-index: 1;
+  flex: 0 0 auto; background: inherit;
 }
 .drawerTitle { font-size: var(--text-h3); font-weight: var(--weight-semibold); color: var(--color-text); }
-.drawerBody { padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-5); }
+.drawerBody { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-5); }
 .drawerActions {
   display: flex; justify-content: flex-end; gap: var(--space-3);
   padding: var(--space-5) var(--space-6); border-top: 1px solid var(--color-border);
-  position: sticky; bottom: 0; background: inherit;
+  flex: 0 0 auto; background: inherit;
 }
 
 /* Form fields */
