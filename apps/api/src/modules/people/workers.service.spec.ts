@@ -1,6 +1,7 @@
 import { requestContext } from '../../common/context/request-context';
 import type { PrismaService } from '../../common/prisma/prisma.service';
 import type { AuditService } from '../audit/audit.service';
+import type { IdentityAccessService } from '../identity-access/identity-access.service';
 import { toWorkerSummary, WorkersService } from './workers.service';
 
 const base = {
@@ -106,6 +107,7 @@ describe('commitImport', () => {
     const service = new WorkersService(
       prisma,
       { record } as unknown as AuditService,
+      {} as unknown as IdentityAccessService,
     );
 
     const result = await requestContext.run(

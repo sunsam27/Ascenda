@@ -12,16 +12,18 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { AuditAction } from '@ascenda/db';
+import { AuditAction, SystemRole } from '@ascenda/db';
 import type { InvitationDetails } from '@ascenda/types';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { hashToken } from '../../common/security/tokens';
+import { generateOpaqueToken, hashToken } from '../../common/security/tokens';
+import { MailerService } from '../../common/mailer/mailer.service';
 import { AuditService } from '../audit/audit.service';
 import { LoginDto } from './dto/login.dto';
 
 const MIN_PASSWORD_LENGTH = 12;
 const ACCESS_TTL_SECONDS = 15 * 60; // 15 minutes
+const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // TODO: Integrate with Have I Been Pwned API or local breached-password list
 async function isBreachedPassword(_password: string): Promise<boolean> {
@@ -54,10 +56,11 @@ export class IdentityAccessService {
   private readonly logger = new Logger(IdentityAccessService.name);
 
   constructor(
-    private readonly jwt: JwtService,
-    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly jwt: JwtService,
     private readonly audit: AuditService,
+    private readonly mailer: MailerService,
   ) {}
 
   /**
@@ -338,6 +341,121 @@ export class IdentityAccessService {
     }
 
     return invitation;
+  }
+
+  /**
+   * Invite a person to the workspace (PRD PPL onboarding / AUTH-02). Creates or
+   * reuses their platform user, ensures an organisation membership, issues a
+   * single-use invitation and emails the set-password link. Any outstanding
+   * invitation for the same address is superseded. The caller is responsible
+   * for linking the invitation to a domain record (e.g. a worker).
+   */
+  async inviteToWorkspace(params: {
+    organisationId: string;
+    actorId: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+  }): Promise<{ userId: string; email: string; emailSent: boolean }> {
+    const email = params.email.trim().toLowerCase();
+    const rawToken = generateOpaqueToken();
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+    // Unguessable placeholder so the account is unusable until the invitee
+    // chooses their own password through the set-password link.
+    const placeholderHash = await argon2.hash(generateOpaqueToken());
+
+    const { userId, organisationName } = await this.prisma.withContext(
+      { organisationId: params.organisationId, userId: params.actorId },
+      async (tx) => {
+        const organisation = await tx.organisation.findFirst({
+          select: { name: true },
+        });
+
+        let user = await tx.user.findUnique({ where: { email } });
+        if (!user) {
+          user = await tx.user.create({
+            data: {
+              email,
+              firstName: params.firstName || email,
+              lastName: params.lastName,
+              passwordHash: placeholderHash,
+              isActive: true,
+            },
+          });
+        } else if (!user.isActive) {
+          throw new BadRequestException(
+            'An account with this email already exists but is deactivated.',
+          );
+        }
+
+        const membership = await tx.membership.findFirst({
+          where: { organisationId: params.organisationId, userId: user.id },
+        });
+        if (!membership) {
+          await tx.membership.create({
+            data: {
+              organisationId: params.organisationId,
+              userId: user.id,
+              role: params.role as SystemRole,
+              createdBy: params.actorId,
+            },
+          });
+        }
+
+        await tx.invitation.deleteMany({
+          where: {
+            organisationId: params.organisationId,
+            email,
+            acceptedAt: null,
+          },
+        });
+
+        await tx.invitation.create({
+          data: {
+            organisationId: params.organisationId,
+            email,
+            role: params.role as SystemRole,
+            tokenHash,
+            expiresAt,
+            createdBy: params.actorId,
+          },
+        });
+
+        return {
+          userId: user.id,
+          organisationName: organisation?.name ?? 'your organisation',
+        };
+      },
+    );
+
+    const inviteUrl = `${this.webAppUrl()}/set-password?token=${rawToken}`;
+    const emailSent = await this.mailer.sendInvitation({
+      to: email,
+      organisationName,
+      inviteUrl,
+      expiresAt,
+    });
+
+    await this.audit.record({
+      action: AuditAction.INVITATION_SENT,
+      organisationId: params.organisationId,
+      actorId: params.actorId,
+      targetType: 'user',
+      targetId: userId,
+      newValue: { email, role: params.role, emailSent },
+    });
+
+    return { userId, email, emailSent };
+  }
+
+  private webAppUrl(): string {
+    return (
+      this.config.get<string>('WEB_APP_URL') ??
+      this.config.get<string>('NEXT_PUBLIC_APP_URL') ??
+      'http://localhost:3000'
+    ).replace(/\/$/, '');
   }
 
   /**

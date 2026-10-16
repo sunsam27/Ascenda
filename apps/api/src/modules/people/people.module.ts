@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
+import { IdentityAccessModule } from '../identity-access/identity-access.module';
 import { WorkersController } from './workers.controller';
 import { WorkersService } from './workers.service';
 import { DepartmentsController } from './departments.controller';
@@ -10,7 +11,7 @@ import { CompensationController } from './compensation.controller';
 import { CompensationService } from './compensation.service';
 
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, IdentityAccessModule],
   controllers: [
     WorkersController,
     DepartmentsController,

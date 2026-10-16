@@ -2,13 +2,22 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { Loader2, Pencil, Plus, Search, Upload, UserPlus } from 'lucide-react';
+import {
+  Loader2,
+  Mail,
+  Pencil,
+  Plus,
+  Search,
+  Upload,
+  UserPlus,
+} from 'lucide-react';
 import {
   WorkerCategory,
   WorkerStatus,
   type Department,
   type Location,
   type PaginationMeta,
+  type WorkerInviteResult,
   type WorkerSummary,
 } from '@ascenda/types';
 import { api } from '@/lib/api';
@@ -74,7 +83,9 @@ export default function WorkersPanel({
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  const [notice, setNotice] = useState('');
   const { user } = useCurrentUser();
 
   // Only organisation-level roles may create/update/terminate workers. Managers
@@ -158,6 +169,38 @@ export default function WorkersPanel({
     }
   }
 
+  async function invite(worker: WorkerSummary) {
+    const ok = window.confirm(
+      `Email ${displayName(worker)} a link to set up their workspace login?`,
+    );
+    if (!ok) return;
+    setInvitingId(worker.id);
+    setActionError('');
+    setNotice('');
+    try {
+      const { data } = await api.post<{ data: WorkerInviteResult }>(
+        `/workers/${worker.id}/invite`,
+      );
+      setWorkers((prev) =>
+        prev.map((w) => (w.id === worker.id ? { ...w, hasLogin: true } : w)),
+      );
+      setNotice(
+        data.data.emailSent
+          ? `Invitation sent to ${data.data.email}.`
+          : `Invitation created for ${data.data.email}. Email delivery is not configured here, so the link was written to the API log.`,
+      );
+    } catch (err) {
+      setActionError(
+        axios.isAxiosError(err)
+          ? ((err.response?.data as { message?: string })?.message ??
+            'Could not send the invitation.')
+          : 'Could not send the invitation.',
+      );
+    } finally {
+      setInvitingId(null);
+    }
+  }
+
   if (state === 'loading') {
     return (
       <div className={styles.spinnerRow}>
@@ -237,6 +280,12 @@ export default function WorkersPanel({
         </p>
       )}
 
+      {notice && (
+        <p className={styles.notice} role="status">
+          {notice}
+        </p>
+      )}
+
       {workers.length === 0 ? (
         <div className={`glass ${styles.message}`}>
           <UserPlus size={28} strokeWidth={1.6} aria-hidden="true" />
@@ -285,6 +334,9 @@ export default function WorkersPanel({
                         </span>
                         <span className={styles.nameMeta}>
                           {worker.employeeNumber} · {worker.email}
+                          {worker.hasLogin && (
+                            <span className={styles.badgeLogin}>Login</span>
+                          )}
                         </span>
                       </span>
                     </div>
@@ -318,6 +370,23 @@ export default function WorkersPanel({
                       >
                         <Pencil size={15} strokeWidth={2} />
                       </button>
+                      {!worker.hasLogin &&
+                        worker.status !== WorkerStatus.TERMINATED && (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            onClick={() => invite(worker)}
+                            disabled={invitingId === worker.id}
+                            aria-label={`Invite ${displayName(worker)} to the workspace`}
+                            title="Invite to workspace login"
+                          >
+                            {invitingId === worker.id ? (
+                              <Loader2 className={styles.spin} size={15} />
+                            ) : (
+                              <Mail size={15} strokeWidth={2} />
+                            )}
+                          </button>
+                        )}
                       {worker.status !== WorkerStatus.TERMINATED && (
                         <button
                           type="button"

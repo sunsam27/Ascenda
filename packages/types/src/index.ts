@@ -358,6 +358,17 @@ export interface WorkerSummary extends TenantEntity {
   endDate?: string;
   dateOfBirth?: string;
   gender?: string;
+  /** True once the worker has been linked to a workspace login (PPL invite). */
+  hasLogin: boolean;
+}
+
+/** Result of sending a workspace login invitation to a worker. */
+export interface WorkerInviteResult {
+  workerId: string;
+  userId: string;
+  email: string;
+  /** False when SMTP is unconfigured and the invite was logged instead. */
+  emailSent: boolean;
 }
 
 export interface WorkerListQuery extends PaginatedQuery {

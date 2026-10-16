@@ -62,6 +62,13 @@ export class WorkersController {
     return { data: await this.service.commitImport(dto.csv) };
   }
 
+  @Post(':id/invite')
+  @ApiOperation({ summary: 'Email a workspace login invitation to a worker' })
+  @RequirePermission({ resource: 'workers', action: 'update', scope: ORG })
+  async invite(@Param('id') id: string) {
+    return { data: await this.service.invite(id) };
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Update a worker' })
   @RequirePermission({ resource: 'workers', action: 'update', scope: ORG })

@@ -265,7 +265,7 @@ function buildInvitation({
   const text = [
     `Welcome to Ascenda`,
     ``,
-    `${organisationName} has been created and you have been added as the owner.`,
+    `${organisationName} has invited you to their workspace.`,
     `Set your password to activate your account (link expires ${expires}):`,
     inviteUrl,
     ``,
@@ -280,7 +280,7 @@ function buildInvitation({
         <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;">
           <tr><td style="padding:28px 32px 8px;font-size:20px;font-weight:700;">Ascenda</td></tr>
           <tr><td style="padding:8px 32px;font-size:16px;line-height:1.5;">
-            <p style="margin:0 0 16px;">Welcome to Ascenda. <strong>${organisationName}</strong> has been created and you have been added as the owner.</p>
+            <p style="margin:0 0 16px;">Welcome to Ascenda. <strong>${organisationName}</strong> has invited you to their workspace.</p>
             <p style="margin:0 0 24px;">Set your password to activate your account.</p>
             <p style="margin:0 0 24px;">
               <a href="${inviteUrl}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;">Set your password</a>

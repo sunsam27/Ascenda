@@ -7,12 +7,14 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { AuditAction, Prisma } from '@ascenda/db';
+import { SystemRole, WorkerCategory } from '@ascenda/types';
 import type {
   PaginationMeta,
   WorkerCategory as WorkerCategoryType,
   WorkerImportPreview,
   WorkerImportPreviewRow,
   WorkerImportResult,
+  WorkerInviteResult,
   EmploymentType as EmploymentTypeType,
   WorkerStatus as WorkerStatusType,
   WorkerSummary,
@@ -20,6 +22,7 @@ import type {
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { getRequestContext } from '../../common/context/request-context';
 import { AuditService } from '../audit/audit.service';
+import { IdentityAccessService } from '../identity-access/identity-access.service';
 import {
   resolveReadScope,
   scopeWhereRestricts,
@@ -45,8 +48,12 @@ export const WORKER_INCLUDE = {
 
 type WorkerRow = Prisma.WorkerGetPayload<{ include: typeof WORKER_INCLUDE }>;
 
-export function toWorkerSummary(worker: WorkerRow): WorkerSummary {
+export function toWorkerSummary(
+  worker: WorkerRow,
+  hasLogin = false,
+): WorkerSummary {
   return {
+    hasLogin,
     id: worker.id,
     organisationId: worker.organisationId,
     createdAt: worker.createdAt.toISOString(),
@@ -85,6 +92,7 @@ export class WorkersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly identity: IdentityAccessService,
   ) {}
 
   async list(
@@ -125,8 +133,10 @@ export class WorkersService {
         }),
       ]);
 
+      const accounts = await this.accountsFor(tx, rows);
+
       return {
-        data: rows.map(toWorkerSummary),
+        data: rows.map((row) => toWorkerSummary(row, accounts.has(row.userId ?? ''))),
         meta: {
           total,
           page,
@@ -145,7 +155,8 @@ export class WorkersService {
         include: WORKER_INCLUDE,
       });
       if (!worker) throw new NotFoundException('Worker not found');
-      return toWorkerSummary(worker);
+      const accounts = await this.accountsFor(tx, [worker]);
+      return toWorkerSummary(worker, accounts.has(worker.userId ?? ''));
     });
   }
 
@@ -286,7 +297,8 @@ export class WorkersService {
           },
           include: WORKER_INCLUDE,
         });
-        return toWorkerSummary(worker);
+        const accounts = await this.accountsFor(tx, [worker]);
+        return toWorkerSummary(worker, accounts.has(worker.userId ?? ''));
       } catch (error) {
         if (isUniqueViolation(error)) {
           throw new ConflictException(
@@ -315,8 +327,62 @@ export class WorkersService {
         data: { status: 'TERMINATED' },
         include: WORKER_INCLUDE,
       });
-      return toWorkerSummary(worker);
+      const accounts = await this.accountsFor(tx, [worker]);
+      return toWorkerSummary(worker, accounts.has(worker.userId ?? ''));
     });
+  }
+
+  /**
+   * Send the worker a workspace login invitation (PRD PPL onboarding). Creates
+   * (or reuses) a platform user + membership, issues a single-use invitation and
+   * emails the set-password link. The worker is linked to the new account so
+   * self-service (leave, attendance, documents) resolves to their profile.
+   */
+  async invite(id: string): Promise<WorkerInviteResult> {
+    const { organisationId, userId } = this.requireContext();
+
+    const worker = await this.prisma.withRequestContext((tx) =>
+      tx.worker.findFirst({
+        where: { id },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          preferredName: true,
+          category: true,
+        },
+      }),
+    );
+    if (!worker) throw new NotFoundException('Worker not found');
+
+    const role =
+      worker.category === WorkerCategory.VOLUNTEER
+        ? SystemRole.VOLUNTEER_SELF
+        : SystemRole.EMPLOYEE_SELF;
+
+    const result = await this.identity.inviteToWorkspace({
+      organisationId,
+      actorId: userId,
+      email: worker.email,
+      firstName: worker.preferredName?.trim() || worker.firstName,
+      lastName: worker.lastName,
+      role,
+    });
+
+    await this.prisma.withRequestContext((tx) =>
+      tx.worker.update({
+        where: { id: worker.id },
+        data: { userId: result.userId },
+      }),
+    );
+
+    return {
+      workerId: worker.id,
+      userId: result.userId,
+      email: result.email,
+      emailSent: result.emailSent,
+    };
   }
 
   /** Validate a CSV without writing — powers the import preview. */
@@ -496,6 +562,25 @@ export class WorkersService {
   ): Promise<Prisma.WorkerWhereInput> {
     const { where } = await resolveReadScope(tx, 'workers', 'read');
     return where;
+  }
+
+  /**
+   * Which of these workers already have a platform user account. Users are
+   * global (not tenant-scoped), so this is a plain id lookup.
+   */
+  private async accountsFor(
+    tx: Prisma.TransactionClient,
+    workers: { userId: string | null }[],
+  ): Promise<Set<string>> {
+    const ids = workers
+      .map((w) => w.userId)
+      .filter((id): id is string => !!id);
+    if (ids.length === 0) return new Set();
+    const users = await tx.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true },
+    });
+    return new Set(users.map((u) => u.id));
   }
 
   private requireContext(): { organisationId: string; userId: string } {
