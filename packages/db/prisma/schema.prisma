@@ -169,6 +169,14 @@ enum PayrollItemType {
   STIPEND
 }
 
+/// How a recurring pay item's amount is derived (PRD PAY-02 / PAY-03).
+enum PayItemCalculation {
+  /// A fixed amount in integer minor units.
+  FIXED
+  /// A percentage of period gross, stored as basis points (500 = 5%).
+  PERCENTAGE
+}
+
 enum PaymentStatus {
   PENDING
   PROCESSING
@@ -223,6 +231,8 @@ enum AuditAction {
   PAYROLL_RUN_CREATED
   PAYROLL_RUN_APPROVED
   PAYROLL_RUN_LOCKED
+  PAY_CALENDAR_CHANGED
+  RECURRING_PAY_ITEM_CHANGED
   PAYMENT_APPROVED
   EXPORT_CREATED
   RESTRICTED_FIELD_ACCESSED
@@ -348,6 +358,7 @@ model Organisation {
   workers              Worker[]
   payCalendars         PayCalendar[]
   payrollRuns          PayrollRun[]
+  recurringPayItems    RecurringPayItem[]
   leaveTypes           LeaveType[]
   leaveRequests        LeaveRequest[]
   leaveBalances        LeaveBalance[]
@@ -448,6 +459,7 @@ model Worker {
   leaveBalances       LeaveBalance[]
   attendanceRecords   AttendanceRecord[]
   payrollItems        PayrollItem[]
+  recurringPayItems   RecurringPayItem[]
   payments            Payment[]
   documents           Document[]
   workerIdentity      WorkerIdentity?
@@ -488,6 +500,10 @@ model CompensationRecord {
   workerId              String
   /// Amount in integer minor currency units — NO FLOATS
   grossAmountMinorUnits Int
+  /// Pay-structure components (PRD PAY-01): [{code, label, amountMinorUnits}]
+  /// e.g. BASE + HOUSING + TRANSPORT. Server-authoritative: gross is their sum.
+  /// Legacy rows may be null; a read synthesises a single BASE component.
+  components            Json?
   currency              String
   payFrequency          PayFrequency
   validFrom             DateTime
@@ -695,6 +711,9 @@ model PayCalendar {
   frequency      PayFrequency
   dayOfMonth     Int?
   dayOfWeek      Int?
+  /// Cut-off day-of-month (PAY-04): changes after this day in the pay month
+  /// wait for the next run. Null means no cut-off.
+  cutOffDayOfMonth Int?
   isActive       Boolean     @default(true)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
@@ -761,6 +780,42 @@ model PayrollItem {
   @@index([payrollRunId])
   @@index([workerId])
   @@map("payroll_items")
+}
+
+/// Per-worker recurring deductions and employer-side costs (PRD PAY-02 / PAY-03).
+/// Effective-dated and tenant-scoped. Amounts are stored as positive magnitudes
+/// in integer minor units; the payroll run engine applies the sign and the
+/// employee/employer partition derived from `type` (EMPLOYER_PENSION is an
+/// employer cost, never net-deducted). Statutory rates are org-configured data
+/// here — never hard-coded per country.
+model RecurringPayItem {
+  id                 String              @id @default(uuid())
+  organisationId     String
+  workerId           String
+  /// DEDUCTION | TAX | EMPLOYEE_PENSION | EMPLOYER_PENSION (allow-listed in the DTO)
+  type               PayrollItemType
+  /// Human label, e.g. "Cooperative", "Salary advance", "Employer pension".
+  name               String
+  calculation        PayItemCalculation
+  /// FIXED: positive integer minor units. Null when calculation = PERCENTAGE.
+  amountMinorUnits   Int?
+  /// PERCENTAGE: basis points of period gross (500 = 5%). Null when FIXED.
+  rateBps            Int?
+  validFrom          DateTime
+  validTo            DateTime?
+  isActive           Boolean             @default(true)
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  createdBy          String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  worker       Worker       @relation(fields: [workerId], references: [id])
+
+  @@index([organisationId])
+  @@index([organisationId, workerId, isActive])
+  @@index([workerId, validFrom])
+  @@map("recurring_pay_items")
 }
 
 /// Effective-dated country/statutory rule packs — NEVER hard-code tax rules

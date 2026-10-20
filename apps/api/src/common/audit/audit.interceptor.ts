@@ -65,9 +65,16 @@ function resolveAction(method: string, path: string): AuditAction | undefined {
       if (method === 'PATCH' || method === 'PUT') return AuditAction.WORKER_UPDATED;
       if (method === 'DELETE') return AuditAction.WORKER_DELETED;
       return undefined;
-    case 'payroll':
-      if (method === 'POST') return AuditAction.PAYROLL_RUN_CREATED;
+    case 'payroll': {
+      // Only run creation is captured here. Pay-calendars and recurring pay
+      // items are audited explicitly by their services (PAY_CALENDAR_CHANGED /
+      // RECURRING_PAY_ITEM_CHANGED); the same applies to run approval/lock.
+      const sub = routeSegments(path)[1] ?? '';
+      if (method === 'POST' && sub === 'runs') {
+        return AuditAction.PAYROLL_RUN_CREATED;
+      }
       return undefined;
+    }
     default:
       return undefined;
   }

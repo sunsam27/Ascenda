@@ -20,6 +20,7 @@ function makeRow(
     organisationId: 'org1',
     workerId,
     grossAmountMinorUnits,
+    components: null,
     currency: 'NGN',
     payFrequency: 'MONTHLY' as const,
     validFrom: new Date(validFrom),
@@ -208,6 +209,125 @@ describe('toCompensationRecord', () => {
     expect(record.notes).toBeUndefined();
     expect(record.payFrequency).toBe('MONTHLY');
     expect(record.grossAmountMinorUnits).toBe(500_000);
+  });
+
+  it('synthesises a BASE component for legacy rows without components (PAY-01)', () => {
+    const record = toCompensationRecord(makeRow('w1', '2026-01-01', null, 6750));
+    expect(record.components).toEqual([
+      { code: 'BASE', label: 'Base salary', amountMinorUnits: 6750 },
+    ]);
+  });
+});
+
+describe('CompensationService pay-structure components (PAY-01)', () => {
+  const components = [
+    { code: 'BASE', label: 'Base salary', amountMinorUnits: 50_000_000 },
+    { code: 'HOUSING', label: 'Housing allowance', amountMinorUnits: 10_000_000 },
+    { code: 'TRANSPORT', label: 'Transport allowance', amountMinorUnits: 5_000_000 },
+    { code: 'OTHER', label: 'Other allowance', amountMinorUnits: 2_500_000 },
+  ];
+
+  it('stores components and computes the gross as their sum', async () => {
+    const { service, asOwner } = buildFixture([]);
+
+    const created = await asOwner(() =>
+      service.create('w1', {
+        components,
+        payFrequency: PayFrequency.MONTHLY,
+        validFrom: '2026-01-01',
+      }),
+    );
+
+    expect(created.grossAmountMinorUnits).toBe(67_500_000);
+    expect(created.components).toEqual(components);
+  });
+
+  it('accepts a matching gross alongside components', async () => {
+    const { service, asOwner } = buildFixture([]);
+    const created = await asOwner(() =>
+      service.create('w1', {
+        components,
+        grossAmountMinorUnits: 67_500_000,
+        payFrequency: PayFrequency.MONTHLY,
+        validFrom: '2026-01-01',
+      }),
+    );
+    expect(created.grossAmountMinorUnits).toBe(67_500_000);
+  });
+
+  it('rejects a gross that disagrees with the component sum', async () => {
+    const { service, asOwner } = buildFixture([]);
+    await expect(
+      asOwner(() =>
+        service.create('w1', {
+          components,
+          grossAmountMinorUnits: 1,
+          payFrequency: PayFrequency.MONTHLY,
+          validFrom: '2026-01-01',
+        }),
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects a write with neither components nor a gross', async () => {
+    const { service, asOwner } = buildFixture([]);
+    await expect(
+      asOwner(() =>
+        service.create('w1', {
+          payFrequency: PayFrequency.MONTHLY,
+          validFrom: '2026-01-01',
+        }),
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects invalid components with a 400 listing the problems', async () => {
+    const { service, asOwner } = buildFixture([]);
+    await expect(
+      asOwner(() =>
+        service.create('w1', {
+          components: [
+            { code: 'base', label: 'Base', amountMinorUnits: -1 },
+          ],
+          payFrequency: PayFrequency.MONTHLY,
+          validFrom: '2026-01-01',
+        }),
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('recomputes the gross when components are updated', async () => {
+    const { service, asOwner } = buildFixture([
+      makeRow('w1', '2026-01-01', null, 500_000),
+    ]);
+
+    const updated = await asOwner(() =>
+      service.update('w1', 'c-2026-01-01', {
+        components: [
+          { code: 'BASE', label: 'Base salary', amountMinorUnits: 600_000 },
+          { code: 'HOUSING', label: 'Housing', amountMinorUnits: 50_000 },
+        ],
+      }),
+    );
+
+    expect(updated.grossAmountMinorUnits).toBe(650_000);
+  });
+
+  it('resets the structure to a single BASE line on a gross-only update', async () => {
+    const row = {
+      ...makeRow('w1', '2026-01-01', null, 500_000),
+      components: JSON.parse(JSON.stringify(components)),
+    };
+    const { service, asOwner } = buildFixture([row]);
+
+    const updated = await asOwner(() =>
+      service.update('w1', 'c-2026-01-01', { grossAmountMinorUnits: 700_000 }),
+    );
+
+    expect(updated.grossAmountMinorUnits).toBe(700_000);
+    expect(updated.components).toEqual([
+      { code: 'BASE', label: 'Base salary', amountMinorUnits: 700_000 },
+    ]);
   });
 });
 

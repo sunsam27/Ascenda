@@ -177,6 +177,12 @@ export enum PayrollItemType {
   STIPEND = 'STIPEND',
 }
 
+/** How a recurring pay item's amount is derived (PRD PAY-02 / PAY-03). */
+export enum PayItemCalculation {
+  FIXED = 'FIXED',
+  PERCENTAGE = 'PERCENTAGE',
+}
+
 // ── Payments ──────────────────────────────────────────────────────────────────
 
 export enum PaymentStatus {
@@ -237,6 +243,8 @@ export enum AuditAction {
   PAYROLL_RUN_CREATED = 'PAYROLL_RUN_CREATED',
   PAYROLL_RUN_APPROVED = 'PAYROLL_RUN_APPROVED',
   PAYROLL_RUN_LOCKED = 'PAYROLL_RUN_LOCKED',
+  PAY_CALENDAR_CHANGED = 'PAY_CALENDAR_CHANGED',
+  RECURRING_PAY_ITEM_CHANGED = 'RECURRING_PAY_ITEM_CHANGED',
   PAYMENT_APPROVED = 'PAYMENT_APPROVED',
   EXPORT_CREATED = 'EXPORT_CREATED',
   RESTRICTED_FIELD_ACCESSED = 'RESTRICTED_FIELD_ACCESSED',
@@ -380,9 +388,28 @@ export interface WorkerListQuery extends PaginatedQuery {
   locationId?: string;
 }
 
+/**
+ * One line of a worker's pay structure (PRD PAY-01). Amounts are integer
+ * minor units. The server is authoritative: the record's gross is the sum of
+ * its components.
+ */
+export interface PayComponent {
+  /** Stable machine code, e.g. `BASE`, `HOUSING`, `TRANSPORT`, `OTHER`. */
+  code: string;
+  label: string;
+  amountMinorUnits: number;
+}
+
 /** Create an effective-dated compensation record. Amount is integer minor units. */
 export interface CreateCompensationDto {
-  grossAmountMinorUnits: number;
+  /**
+   * Pay-structure components (PRD PAY-01). When provided the server computes
+   * `grossAmountMinorUnits` as their sum and rejects a disagreeing gross.
+   * When omitted, a single `BASE` component is synthesised.
+   */
+  components?: PayComponent[];
+  /** Integer minor currency units (e.g. kobo for NGN) */
+  grossAmountMinorUnits?: number;
   /** ISO 4217 code; defaults to the organisation currency server-side. */
   currency?: string;
   payFrequency: PayFrequency;
@@ -433,6 +460,11 @@ export interface CompensationRecord extends TenantEntity {
   workerId: string;
   /** Amount in minor currency units (e.g., kobo for NGN) */
   grossAmountMinorUnits: number;
+  /**
+   * Pay-structure components (PRD PAY-01); their sum is the gross. Legacy rows
+   * may have none — a read synthesises a single BASE component.
+   */
+  components?: PayComponent[];
   currency: string;
   payFrequency: PayFrequency;
   validFrom: string;
@@ -767,8 +799,37 @@ export interface PayCalendar extends TenantEntity {
   frequency: PayFrequency;
   dayOfMonth?: number;
   dayOfWeek?: number;
+  /** Cut-off day-of-month in the pay month (PRD PAY-04). */
+  cutOffDayOfMonth?: number;
   isActive: boolean;
+  createdBy: string;
 }
+
+/** One generated pay period for a calendar (PRD PAY-04). */
+export interface PayCalendarPeriod {
+  /** Inclusive ISO date. */
+  periodStart: string;
+  /** Inclusive ISO date. */
+  periodEnd: string;
+  /** ISO date the period is paid on. */
+  payDate: string;
+  /** True when the cut-off for this period has not yet passed. */
+  beforeCutOff: boolean;
+}
+
+export interface CreatePayCalendarDto {
+  name: string;
+  frequency: PayFrequency;
+  /** 1–31; required for MONTHLY/QUARTERLY. */
+  dayOfMonth?: number;
+  /** 1–7 (Mon=1); required for WEEKLY/BIWEEKLY. */
+  dayOfWeek?: number;
+  /** 1–31; changes after this day wait for the next period. */
+  cutOffDayOfMonth?: number;
+  isActive?: boolean;
+}
+
+export type UpdatePayCalendarDto = Partial<CreatePayCalendarDto>;
 
 export interface PayrollRun extends TenantEntity {
   payCalendarId: string;
@@ -796,6 +857,50 @@ export interface PayrollItem extends TenantEntity {
   amountMinorUnits: number;
   currency: string;
 }
+
+/** Types accepted on a recurring pay item (PRD PAY-02 / PAY-03). */
+export const RECURRING_PAY_ITEM_TYPES = [
+  PayrollItemType.DEDUCTION,
+  PayrollItemType.TAX,
+  PayrollItemType.EMPLOYEE_PENSION,
+  PayrollItemType.EMPLOYER_PENSION,
+] as const;
+
+export type RecurringPayItemType = (typeof RECURRING_PAY_ITEM_TYPES)[number];
+
+/** Per-worker recurring deduction or employer cost (PRD PAY-02 / PAY-03). */
+export interface RecurringPayItem extends TenantEntity {
+  workerId: string;
+  type: RecurringPayItemType;
+  name: string;
+  calculation: PayItemCalculation;
+  /** FIXED: positive integer minor units. */
+  amountMinorUnits?: number;
+  /** PERCENTAGE: basis points of period gross (500 = 5%). */
+  rateBps?: number;
+  validFrom: string;
+  validTo?: string;
+  isActive: boolean;
+  notes?: string;
+  createdBy: string;
+}
+
+export interface CreateRecurringPayItemDto {
+  workerId: string;
+  type: RecurringPayItemType;
+  name: string;
+  calculation: PayItemCalculation;
+  /** Required when calculation = FIXED; positive integer minor units. */
+  amountMinorUnits?: number;
+  /** Required when calculation = PERCENTAGE; 1–10000 basis points. */
+  rateBps?: number;
+  validFrom: string;
+  validTo?: string | null;
+  isActive?: boolean;
+  notes?: string | null;
+}
+
+export type UpdateRecurringPayItemDto = Partial<Omit<CreateRecurringPayItemDto, 'workerId'>>;
 
 export interface Payment extends TenantEntity {
   payrollRunId?: string;

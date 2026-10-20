@@ -14,6 +14,14 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { getRequestContext } from '../../common/context/request-context';
 import { resolveReadScope } from '../../common/rbac/worker-scope';
 import { CreateCompensationDto, UpdateCompensationDto } from './dto/compensation.dto';
+import {
+  PayComponent,
+  baseComponent,
+  grossFromInput,
+  isPayStructureError,
+  normaliseComponents,
+  validateComponents,
+} from './domain/pay-structure';
 
 /**
  * True when the half-open periods [aStart, aEnd) and [bStart, bEnd) overlap.
@@ -40,6 +48,8 @@ export function toCompensationRecord(row: CompensationRow): CompensationRecord {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     grossAmountMinorUnits: row.grossAmountMinorUnits,
+    // PRD PAY-01: legacy rows carry no components — read them as a BASE line.
+    components: normaliseComponents(row.components, row.grossAmountMinorUnits),
     currency: row.currency,
     payFrequency: row.payFrequency as unknown as PayFrequency,
     validFrom: row.validFrom.toISOString(),
@@ -153,13 +163,19 @@ export class CompensationService {
 
       await this.assertNoOverlap(tx, workerId, validFrom, resolvedValidTo);
 
+      // PRD PAY-01: the gross is the sum of the pay-structure components.
+      const { gross, components } = this.resolveGrossAndComponents(dto);
       const currency = await this.resolveCurrency(tx, dto.currency);
       const row = await tx.compensationRecord.create({
         data: {
           organisationId,
           workerId,
           createdBy: this.actorId(),
-          grossAmountMinorUnits: dto.grossAmountMinorUnits,
+          grossAmountMinorUnits: gross,
+          // Legacy (gross-only) writes store null; reads synthesise a BASE line.
+          components: components
+            ? (JSON.parse(JSON.stringify(components)) as Prisma.InputJsonValue)
+            : undefined,
           currency,
           payFrequency: dto.payFrequency,
           validFrom,
@@ -197,12 +213,34 @@ export class CompensationService {
 
       await this.assertNoOverlap(tx, workerId, validFrom, validTo, recordId);
 
+      // PRD PAY-01: keep the invariant gross = sum(components). A components
+      // write recomputes the gross; a gross-only write resets the structure to
+      // a single BASE line so a stale breakdown can never disagree.
+      let payStructure: {
+        grossAmountMinorUnits?: number;
+        components?: Prisma.InputJsonValue;
+      } = {};
+      if (dto.components !== undefined) {
+        const { gross, components } = this.resolveGrossAndComponents(dto);
+        payStructure = {
+          grossAmountMinorUnits: gross,
+          components: JSON.parse(
+            JSON.stringify(components ?? []),
+          ) as Prisma.InputJsonValue,
+        };
+      } else if (dto.grossAmountMinorUnits !== undefined) {
+        payStructure = {
+          grossAmountMinorUnits: dto.grossAmountMinorUnits,
+          components: JSON.parse(
+            JSON.stringify([baseComponent(dto.grossAmountMinorUnits)]),
+          ) as Prisma.InputJsonValue,
+        };
+      }
+
       const row = await tx.compensationRecord.update({
         where: { id: recordId },
         data: {
-          ...(dto.grossAmountMinorUnits !== undefined
-            ? { grossAmountMinorUnits: dto.grossAmountMinorUnits }
-            : {}),
+          ...payStructure,
           ...(dto.currency !== undefined
             ? { currency: await this.resolveCurrency(tx, dto.currency) }
             : {}),
@@ -263,6 +301,41 @@ export class CompensationService {
       select: { currency: true },
     });
     return (org?.currency ?? 'NGN').toUpperCase();
+  }
+
+  /**
+   * Validate a pay-structure write and resolve the stored gross (PRD PAY-01).
+   * Components are the source of truth; a disagreeing or missing gross is a
+   * client error.
+   */
+  private resolveGrossAndComponents(dto: {
+    components?: unknown;
+    grossAmountMinorUnits?: number;
+  }): { gross: number; components: PayComponent[] | undefined } {
+    if (dto.components !== undefined) {
+      const errors = validateComponents(dto.components);
+      if (errors.length > 0) {
+        throw new BadRequestException(errors.join('; '));
+      }
+    }
+    try {
+      const gross = grossFromInput({
+        components: dto.components as PayComponent[] | undefined,
+        grossAmountMinorUnits: dto.grossAmountMinorUnits,
+      });
+      return {
+        gross,
+        components:
+          dto.components !== undefined
+            ? (dto.components as PayComponent[])
+            : undefined,
+      };
+    } catch (error) {
+      if (isPayStructureError(error)) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
   }
 
   private actorId(): string {

@@ -74,6 +74,23 @@ describe('AuditInterceptor', () => {
     expect(record).not.toHaveBeenCalled();
   });
 
+  it('audits a payroll run creation (PAY-06)', () => {
+    run('POST', '/api/v1/payroll/runs', { periodStart: '2026-01-01' });
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record.mock.calls[0]![0]).toMatchObject({
+      action: 'PAYROLL_RUN_CREATED',
+      targetType: 'payroll',
+    });
+  });
+
+  it('does NOT audit payroll setup routes (services audit them explicitly)', () => {
+    run('POST', '/api/v1/payroll/pay-calendars', { name: 'Monthly' });
+    run('POST', '/api/v1/payroll/recurring-items', { name: 'Cooperative' });
+    run('PATCH', '/api/v1/payroll/pay-calendars/pc1', { name: 'Renamed' });
+    run('DELETE', '/api/v1/payroll/recurring-items/r1');
+    expect(record).not.toHaveBeenCalled();
+  });
+
   it('skips non-state-changing methods', () => {
     run('GET', '/api/v1/workers', undefined, { id: 'w1' });
     run('GET', '/api/v1/organisations');

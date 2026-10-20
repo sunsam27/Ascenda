@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import {
   BillingPeriod,
+  PayFrequency,
   PrismaClient,
   OrganisationType,
   SystemRole,
@@ -165,6 +166,25 @@ async function main() {
       createdBy: owner.id,
     },
   });
+
+  // Phase 3 (PAY-04): a default monthly pay calendar so the demo org and the
+  // e2e harness always have one to attach payroll runs to.
+  const existingCalendar = await prisma.payCalendar.findFirst({
+    where: { organisationId: organisation.id, name: 'Monthly' },
+  });
+  if (!existingCalendar) {
+    await prisma.payCalendar.create({
+      data: {
+        organisationId: organisation.id,
+        createdBy: owner.id,
+        name: 'Monthly',
+        frequency: PayFrequency.MONTHLY,
+        dayOfMonth: 28,
+        cutOffDayOfMonth: 25,
+        isActive: true,
+      },
+    });
+  }
 
   for (const plan of PLANS) {
     await prisma.plan.upsert({
