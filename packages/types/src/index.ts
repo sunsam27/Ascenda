@@ -158,6 +158,13 @@ export enum PayrollRunStatus {
   LOCKED = 'LOCKED',
 }
 
+/** PAY-11: status of one step in a run's approval chain. */
+export enum PayrollRunApprovalStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
 export enum PayFrequency {
   WEEKLY = 'WEEKLY',
   BIWEEKLY = 'BIWEEKLY',
@@ -241,11 +248,18 @@ export enum AuditAction {
   ATTENDANCE_RECORDED = 'ATTENDANCE_RECORDED',
   HOLIDAY_CALENDAR_CHANGED = 'HOLIDAY_CALENDAR_CHANGED',
   PAYROLL_RUN_CREATED = 'PAYROLL_RUN_CREATED',
+  PAYROLL_RUN_SUBMITTED = 'PAYROLL_RUN_SUBMITTED',
   PAYROLL_RUN_APPROVED = 'PAYROLL_RUN_APPROVED',
+  PAYROLL_RUN_REJECTED = 'PAYROLL_RUN_REJECTED',
+  PAYROLL_RUN_PROCESSED = 'PAYROLL_RUN_PROCESSED',
   PAYROLL_RUN_LOCKED = 'PAYROLL_RUN_LOCKED',
+  PAYROLL_RUN_REVERSED = 'PAYROLL_RUN_REVERSED',
+  PAYROLL_ITEM_OVERRIDDEN = 'PAYROLL_ITEM_OVERRIDDEN',
   PAY_CALENDAR_CHANGED = 'PAY_CALENDAR_CHANGED',
   RECURRING_PAY_ITEM_CHANGED = 'RECURRING_PAY_ITEM_CHANGED',
+  PAYROLL_CONFIG_CHANGED = 'PAYROLL_CONFIG_CHANGED',
   PAYMENT_APPROVED = 'PAYMENT_APPROVED',
+  PAYMENT_STATUS_CHANGED = 'PAYMENT_STATUS_CHANGED',
   EXPORT_CREATED = 'EXPORT_CREATED',
   RESTRICTED_FIELD_ACCESSED = 'RESTRICTED_FIELD_ACCESSED',
   SUPPORT_ACCESS = 'SUPPORT_ACCESS',
@@ -840,10 +854,21 @@ export interface PayrollRun extends TenantEntity {
   approvedById?: string;
   approvedAt?: string;
   lockedAt?: string;
+  /** PAY-07: set when the run was submitted for approval. */
+  submittedById?: string;
+  submittedAt?: string;
+  /** PAY-10: set when blocking warnings were acknowledged before approval. */
+  validationAcknowledgedAt?: string;
+  validationAcknowledgedById?: string;
+  /** PAY-06: set on the ORIGINAL when a reversal run replaces it. */
+  reversalOfRunId?: string;
+  reversedAt?: string;
   /** Total gross in minor units */
   totalGrossMinorUnits: number;
   /** Total net in minor units */
   totalNetMinorUnits: number;
+  /** Total deductions (absolute) in minor units */
+  totalDeductionsMinorUnits: number;
   currency: string;
   notes?: string;
 }
@@ -856,6 +881,108 @@ export interface PayrollItem extends TenantEntity {
   /** Amount in minor units — positive for earnings, negative for deductions */
   amountMinorUnits: number;
   currency: string;
+  /** PAY-09: mandatory reason when the line was manually overridden. */
+  overrideReason?: string;
+}
+
+/** PAY-11: one snapshotted approval step on a run. */
+export interface PayrollRunApproval {
+  id: string;
+  payrollRunId: string;
+  stepNumber: number;
+  role: SystemRole;
+  status: PayrollRunApprovalStatus;
+  actorId?: string;
+  comment?: string;
+}
+
+/** PAY-10/11: configurable per-org payroll settings. Absent = defaults. */
+export interface PayrollConfig {
+  organisationId: string;
+  /** Ordered approver roles. Default ["OWNER"]. */
+  approvalChain: SystemRole[];
+  /** Warn when gross rises more than this % vs the previous run (default 30). */
+  salaryChangeWarnPct: number;
+  /** Warn when deductions exceed this share of gross in bps (default 5000 = 50%). */
+  deductionRatioWarnBps: number;
+  /** Blocking error when a run worker has no bank account on file (default true). */
+  requireBankDetails: boolean;
+}
+
+export interface UpdatePayrollConfigDto {
+  approvalChain?: SystemRole[];
+  salaryChangeWarnPct?: number;
+  deductionRatioWarnBps?: number;
+  requireBankDetails?: boolean;
+}
+
+export interface CreatePayrollRunDto {
+  payCalendarId: string;
+  /** ISO date; must fall on a period boundary of the calendar. */
+  periodStart: string;
+  /** ISO date; must fall on a period boundary of the calendar. */
+  periodEnd: string;
+  notes?: string;
+}
+
+export interface UpdatePayrollItemDto {
+  /** Signed integer minor units. */
+  amountMinorUnits: number;
+  /** Mandatory explanation — stored on the item and audit-logged. */
+  overrideReason: string;
+}
+
+export interface ApprovePayrollRunDto {
+  comment?: string;
+}
+
+export interface RejectPayrollRunDto {
+  comment: string;
+}
+
+export interface ReversePayrollRunDto {
+  /** Why the run is being reversed — required, audit-logged. */
+  reason: string;
+}
+
+export type UpdatePaymentStatusDto =
+  | { status: PaymentStatus.PROCESSING }
+  | { status: PaymentStatus.COMPLETED }
+  | { status: PaymentStatus.FAILED; reason: string }
+  | { status: PaymentStatus.REVERSED; reason: string };
+
+/** PAY-10: validation issue codes. Errors block submit; warnings need ack. */
+export type RunValidationCode =
+  | 'MISSING_SALARY'
+  | 'MISSING_BANK_DETAILS'
+  | 'DUPLICATE_RUN'
+  | 'DUPLICATE_WORKER'
+  | 'NO_ITEMS'
+  | 'SALARY_INCREASE'
+  | 'HIGH_DEDUCTIONS'
+  | 'NEGATIVE_NET';
+
+export interface RunValidationIssue {
+  code: RunValidationCode;
+  /** Present for worker-scoped issues; absent for run-scoped ones. */
+  workerId?: string;
+  message: string;
+  /** Extra context (thresholds, actual values) in minor units or pct. */
+  detail?: Record<string, number | string>;
+}
+
+/** PAY-08/10: result of running validations against a prepared run. */
+export interface RunValidationResult {
+  errors: RunValidationIssue[];
+  warnings: RunValidationIssue[];
+  /** Workers left out of the run (status not payroll-eligible) — flagged. */
+  excluded: Array<{ workerId: string; status: string }>;
+  thresholds: Pick<
+    PayrollConfig,
+    'salaryChangeWarnPct' | 'deductionRatioWarnBps' | 'requireBankDetails'
+  >;
+  acknowledgedAt?: string;
+  acknowledgedById?: string;
 }
 
 /** Types accepted on a recurring pay item (PRD PAY-02 / PAY-03). */

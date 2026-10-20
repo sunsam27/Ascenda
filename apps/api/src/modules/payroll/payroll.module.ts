@@ -8,6 +8,10 @@ import { PayCalendarsController } from './pay-calendars.controller';
 import { PayCalendarsService } from './pay-calendars.service';
 import { RecurringPayItemsController } from './recurring-pay-items.controller';
 import { RecurringPayItemsService } from './recurring-pay-items.service';
+import { PayrollRunsController } from './payroll-runs.controller';
+import { PayrollRunsService } from './payroll-runs.service';
+import { PayrollConfigController } from './payroll-config.controller';
+import { PayrollConfigService } from './payroll-config.service';
 
 @Module({
   imports: [AuditModule, PeopleModule, TimeLeaveModule],
@@ -15,8 +19,22 @@ import { RecurringPayItemsService } from './recurring-pay-items.service';
     PayrollController,
     PayCalendarsController,
     RecurringPayItemsController,
+    PayrollRunsController,
+    PayrollConfigController,
   ],
-  providers: [PayrollService, PayCalendarsService, RecurringPayItemsService],
-  exports: [PayrollService, PayCalendarsService, RecurringPayItemsService],
+  providers: [
+    PayrollService,
+    PayCalendarsService,
+    RecurringPayItemsService,
+    PayrollRunsService,
+    PayrollConfigService,
+  ],
+  exports: [
+    PayrollService,
+    PayCalendarsService,
+    RecurringPayItemsService,
+    PayrollRunsService,
+    PayrollConfigService,
+  ],
 })
 export class PayrollModule {}

@@ -150,6 +150,12 @@ enum PayrollRunStatus {
   LOCKED
 }
 
+enum PayrollRunApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum PayFrequency {
   WEEKLY
   BIWEEKLY
@@ -229,11 +235,18 @@ enum AuditAction {
   ATTENDANCE_RECORDED
   HOLIDAY_CALENDAR_CHANGED
   PAYROLL_RUN_CREATED
+  PAYROLL_RUN_SUBMITTED
   PAYROLL_RUN_APPROVED
+  PAYROLL_RUN_REJECTED
+  PAYROLL_RUN_PROCESSED
   PAYROLL_RUN_LOCKED
+  PAYROLL_RUN_REVERSED
+  PAYROLL_ITEM_OVERRIDDEN
   PAY_CALENDAR_CHANGED
   RECURRING_PAY_ITEM_CHANGED
+  PAYROLL_CONFIG_CHANGED
   PAYMENT_APPROVED
+  PAYMENT_STATUS_CHANGED
   EXPORT_CREATED
   RESTRICTED_FIELD_ACCESSED
   SUPPORT_ACCESS
@@ -740,6 +753,16 @@ model PayrollRun {
   approvedById            String?
   approvedAt              DateTime?
   lockedAt                DateTime?
+  /// PAY-07/06: who submitted for approval, and when warnings were acknowledged.
+  submittedById            String?
+  submittedAt              DateTime?
+  validationAcknowledgedAt DateTime?
+  validationAcknowledgedById String?
+  /// PAY-06: a reversal run points at the run it reverses; the original is
+  /// stamped with reversedAt and can never be edited (corrections flow through
+  /// the reversal run or the next period).
+  reversalOfRunId         String?
+  reversedAt              DateTime?
   /// All money in minor units
   totalGrossMinorUnits    Int              @default(0)
   totalNetMinorUnits      Int              @default(0)
@@ -754,9 +777,11 @@ model PayrollRun {
   payCalendar  PayCalendar   @relation(fields: [payCalendarId], references: [id])
   items        PayrollItem[]
   payments     Payment[]
+  approvals    PayrollRunApproval[]
 
   @@index([organisationId])
   @@index([organisationId, status])
+  @@index([reversalOfRunId])
   @@map("payroll_runs")
 }
 
@@ -770,6 +795,9 @@ model PayrollItem {
   /// Positive for earnings, negative for deductions — integer minor units
   amountMinorUnits   Int
   currency           String
+  /// PAY-09: set when the line was manually overridden after prepare; the
+  /// reason is mandatory and the change itself is audit-logged.
+  overrideReason     String?
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
@@ -780,6 +808,51 @@ model PayrollItem {
   @@index([payrollRunId])
   @@index([workerId])
   @@map("payroll_items")
+}
+
+/// PAY-11: one row per configured approval step, snapshotted onto the run when
+/// it is submitted. The run is approved only when every step is APPROVED.
+model PayrollRunApproval {
+  id            String                   @id @default(uuid())
+  organisationId String
+  payrollRunId  String
+  /// 1-based position in the configured chain.
+  stepNumber    Int
+  /// The system role that must satisfy this step (e.g. OWNER, FINANCE_APPROVER).
+  role          SystemRole
+  status        PayrollRunApprovalStatus @default(PENDING)
+  actorId       String?
+  comment       String?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id])
+
+  @@unique([payrollRunId, stepNumber])
+  @@index([organisationId])
+  @@index([payrollRunId])
+  @@map("payroll_run_approvals")
+}
+
+/// PAY-10/11: per-organisation payroll settings — approval chain and the
+/// configurable validation thresholds. Absent row = documented defaults.
+model PayrollConfig {
+  id                      String   @id @default(uuid())
+  organisationId          String   @unique
+  /// Ordered approver roles, e.g. ["FINANCE_APPROVER","OWNER"]. Default ["OWNER"]
+  /// (for small orgs the Payroll Administrator signs off by submitting).
+  approvalChain           String[] @default(["OWNER"])
+  /// Warn when a worker's gross rises more than this % vs the previous run.
+  salaryChangeWarnPct     Int      @default(30)
+  /// Warn when a worker's deductions exceed this share of gross (bps, 5000 = 50%).
+  deductionRatioWarnBps   Int      @default(5000)
+  /// Blocking error when a run worker has no bank account on file.
+  requireBankDetails      Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  updatedBy               String?
+
+  @@map("payroll_config")
 }
 
 /// Per-worker recurring deductions and employer-side costs (PRD PAY-02 / PAY-03).

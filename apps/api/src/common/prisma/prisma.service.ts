@@ -28,7 +28,14 @@ export interface TenantContext {
 // leave request with its approval workflow) can legitimately exceed Prisma's
 // 5s interactive-transaction default. Keep a generous, configurable budget.
 const TX_MAX_WAIT_MS = Number(process.env.PRISMA_TX_MAX_WAIT_MS ?? 10_000);
-const TX_TIMEOUT_MS = Number(process.env.PRISMA_TX_TIMEOUT_MS ?? 20_000);
+const TX_TIMEOUT_MS = Number(process.env.PRISMA_TX_TIMEOUT_MS ?? 60_000);
+
+export interface TxOptions {
+  /** Override the interactive-transaction timeout for this call (ms). */
+  timeoutMs?: number;
+  /** Override the pool wait budget for this call (ms). */
+  maxWaitMs?: number;
+}
 
 @Injectable()
 export class PrismaService
@@ -53,6 +60,7 @@ export class PrismaService
   async withContext<T>(
     ctx: TenantContext,
     fn: (tx: Prisma.TransactionClient) => Promise<T>,
+    opts?: TxOptions,
   ): Promise<T> {
     return this.$transaction(
       async (tx) => {
@@ -64,7 +72,10 @@ export class PrismaService
         }
         return fn(tx);
       },
-      { maxWait: TX_MAX_WAIT_MS, timeout: TX_TIMEOUT_MS },
+      {
+        maxWait: opts?.maxWaitMs ?? TX_MAX_WAIT_MS,
+        timeout: opts?.timeoutMs ?? TX_TIMEOUT_MS,
+      },
     );
   }
 
@@ -74,11 +85,13 @@ export class PrismaService
    */
   async withRequestContext<T>(
     fn: (tx: Prisma.TransactionClient) => Promise<T>,
+    opts?: TxOptions,
   ): Promise<T> {
     const ctx = getRequestContext();
     return this.withContext(
       { organisationId: ctx?.organisationId, userId: ctx?.userId },
       fn,
+      opts,
     );
   }
 

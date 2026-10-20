@@ -12,9 +12,18 @@
 | PAY-04 | ✅ done | Pay calendars: frequency config, period maths for a year, cut-off day, CRUD + audit |
 | LVE-06 | ✅ done | Approved unpaid leave prorates base pay (`GET /payroll/preview`) |
 | ATT-03 | ✅ done | Attendance absences feed the preview as a separate deduction line |
-| PAY-05 | 🚧 partial | Proration for unpaid leave implemented; mid-period joiner/leaver not yet |
-| PAY-09 | 🚧 partial | Leave + attendance are pulled into the calculation automatically |
-| PAY-06/07/08/10/11/12 | ⏳ next | Payroll runs, calculation, approvals, payslips, payments (Phase 3 M2+) |
+| PAY-05 | ✅ done | Proration for unpaid leave + mid-period joiner/leaver clipping; absence deductions; per-component integer maths |
+| PAY-06 | ✅ done | One-way lifecycle; approved runs immutable; reversal via a mirrored DRAFT with negated lines + `reversedAt` stamp |
+| PAY-07 | ✅ done | prepare → review → override → submit → approve → process (`Payment` rows) → lock |
+| PAY-08 | ✅ done | Eligibility (ACTIVE/ON_LEAVE, in-period); ineligible workers excluded + flagged; missing bank/salary block submission |
+| PAY-09 | ✅ done | Item overrides require a reason and are audit-logged (`PAYROLL_ITEM_OVERRIDDEN`) |
+| PAY-10 | ✅ done | Configurable thresholds (salary-change %, deduction ratio bps, bank requirement); warnings ack-gated before approval |
+| PAY-11 | ✅ done | Configurable approval chain snapshotted on submit; preparer can never approve; OWNER overrides any step |
+| PAY-12 | ⏳ next | Payslips + statutory rule-pack engine (M3) |
+
+Statutory rules, payslip generation/delivery, reimbursements and bank-file
+export are explicitly deferred to M3 — the run engine stops at creating
+per-worker `Payment` rows.
 
 ## Interfaces
 Modules communicate through explicit interfaces — never by accessing another
@@ -27,6 +36,19 @@ module's tables directly. The payroll preview reads:
 ## Layout
 - `domain/payroll.ts` — pure proration + absence-deduction maths (integer minor
   units). `LVE-06`/`ATT-03`
+- `domain/run-state.ts` — run lifecycle guard table (`runActionError`,
+  `canPerformRunAction`, `isRunImmutable`, `isInApprovalChain`). `PAY-06`/`PAY-11`
+- `domain/run-calc.ts` — per-worker prepare maths (`prepareWorker`, `runTotals`,
+  `foldWorkerLines`, `reverseLines`, `componentItemType`). `PAY-05`
+- `domain/run-validation.ts` — pre-approval validation report
+  (`validateRun`, defaults). `PAY-08`/`PAY-10`
+- `payroll-runs.controller.ts` / `payroll-runs.service.ts` — run lifecycle:
+  prepare/review/override/submit/approve/reject/process/lock/reverse.
+  `PAY-05`…`PAY-11`
+- `payroll-config.controller.ts` / `payroll-config.service.ts` — per-org approval
+  chain + validation thresholds. `PAY-10`/`PAY-11`
+- `../payments/payments.controller.ts` / `payments.service.ts` — payment listing
+  + status transitions (`PAYMENT_TRANSITIONS`). `PAY-07`
 - `domain/pay-calendar.ts` — pure calendar config validation + period maths
   (`payPeriodsForYear`, cut-off state). `PAY-04`
 - `domain/recurring-pay-item.ts` — pure validation + amount resolution for
@@ -58,3 +80,6 @@ Pay-structure component maths live with People:
 - All service methods run tenant-scoped via `PrismaService.withRequestContext`.
 - E2E: `node --env-file=packages\db\.env apps\api\test\e2e\phase3-m1-pay-setup.cjs`
   (46 checks over PAY-01..PAY-04 + audit + auth guard).
+- E2E: `node --env-file=packages\db\.env apps\api\test\e2e\phase3-m2-payroll-runs.cjs`
+  (54 checks over PAY-05..PAY-11: prepare/validate/override/submit/approve/
+  process/lock/reverse, warnings ack flow, multi-step chain, guards + audits).
