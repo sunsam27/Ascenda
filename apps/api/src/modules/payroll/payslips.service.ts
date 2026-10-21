@@ -190,7 +190,15 @@ export class PayslipsService {
       let gross = 0;
       let deductions = 0;
       let net = 0;
-      for (const line of lines) {
+      // Persist as the frozen PayslipLine contract (the run engine's lines use
+      // the `itemType` field; a payslip line exposes it as `type`). Year-end
+      // statements and remittance schedules read `.type` off these lines.
+      const payslipLines: PayslipLine[] = lines.map((line) => ({
+        type: line.itemType as unknown as PayslipLine['type'],
+        description: line.description,
+        amountMinorUnits: line.amountMinorUnits,
+      }));
+      for (const line of payslipLines) {
         net += line.amountMinorUnits;
         if (line.amountMinorUnits >= 0) gross += line.amountMinorUnits;
         else deductions += -line.amountMinorUnits;
@@ -210,7 +218,7 @@ export class PayslipsService {
           deductionsMinorUnits: deductions,
           employerCostsMinorUnits: employerCosts,
           netMinorUnits: net,
-          lines: lines as unknown as Prisma.InputJsonValue,
+          lines: payslipLines as unknown as Prisma.InputJsonValue,
         },
       });
       created += 1;

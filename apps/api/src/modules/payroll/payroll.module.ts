@@ -16,6 +16,8 @@ import { StatutoryRulePacksController } from './statutory-rule-packs.controller'
 import { StatutoryRulePacksService } from './statutory-rule-packs.service';
 import { PayslipsController } from './payslips.controller';
 import { PayslipsService } from './payslips.service';
+import { YearEndController } from './year-end.controller';
+import { YearEndService } from './year-end.service';
 import { ExpenseClaimsController } from './expense-claims.controller';
 import { ExpenseClaimsService } from './expense-claims.service';
 
@@ -29,6 +31,7 @@ import { ExpenseClaimsService } from './expense-claims.service';
     PayrollConfigController,
     StatutoryRulePacksController,
     PayslipsController,
+    YearEndController,
     ExpenseClaimsController,
   ],
   providers: [
@@ -39,6 +42,7 @@ import { ExpenseClaimsService } from './expense-claims.service';
     PayrollConfigService,
     StatutoryRulePacksService,
     PayslipsService,
+    YearEndService,
     ExpenseClaimsService,
   ],
   exports: [
@@ -49,6 +53,7 @@ import { ExpenseClaimsService } from './expense-claims.service';
     PayrollConfigService,
     StatutoryRulePacksService,
     PayslipsService,
+    YearEndService,
     ExpenseClaimsService,
   ],
 })

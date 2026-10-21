@@ -49,4 +49,11 @@ export class UpdatePayrollConfigDto {
   @IsOptional()
   @IsBoolean()
   requireBankDetails?: boolean;
+
+  /** PAY-16: month the tax/leave year starts (1 = January). */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  taxYearStartMonth?: number;
 }

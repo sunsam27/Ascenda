@@ -7,9 +7,18 @@ import RulePacksPanel from './RulePacksPanel';
 import PayslipsPanel from './PayslipsPanel';
 import PaymentsPanel from './PaymentsPanel';
 import ClaimsPanel from './ClaimsPanel';
+import YearEndPanel from './YearEndPanel';
+import PayCalendarsPanel from './PayCalendarsPanel';
 import styles from './payroll.module.css';
 
-type Tab = 'runs' | 'payslips' | 'payments' | 'claims' | 'rule-packs';
+type Tab =
+  | 'runs'
+  | 'calendars'
+  | 'payslips'
+  | 'payments'
+  | 'claims'
+  | 'rule-packs'
+  | 'year-end';
 
 /** Roles that may prepare/edit runs and manage statutory packs (payroll:update). */
 const PAYROLL_ADMINS = new Set(['OWNER', 'PAYROLL_ADMINISTRATOR']);
@@ -34,6 +43,14 @@ const ORG_READERS = new Set([
   'SUPPORT_READ_ONLY',
   'VIEWER',
 ]);
+/** Roles that may view the whole-tenant remittance schedule (PAY-16). */
+const REMITTANCE_READERS = new Set([
+  'OWNER',
+  'PAYROLL_ADMINISTRATOR',
+  'FINANCE_APPROVER',
+  'AUDITOR',
+  'SUPPORT_READ_ONLY',
+]);
 
 export default function PayrollView() {
   const { user, loading } = useCurrentUser();
@@ -47,10 +64,13 @@ export default function PayrollView() {
   const canSubmitClaims = CLAIM_SUBMITTERS.has(role);
   const canReadOrg = ORG_READERS.has(role);
   const canReviewClaims = canApprove || role === 'MANAGER';
+  const canGenerateYearEnd = PAYROLL_ADMINS.has(role);
+  const canSeeRemittance = REMITTANCE_READERS.has(role);
 
   // Tabs a self-service worker still needs (their own payslips + claims).
   const isSelfService = role === 'EMPLOYEE_SELF' || role === 'VOLUNTEER_SELF';
   const showRuns = canReadOrg;
+  const showCalendars = canReadOrg;
   const showPayments = canReadOrg && role !== 'VIEWER';
   const showPacks = canReadOrg;
   const showClaims =
@@ -58,10 +78,12 @@ export default function PayrollView() {
 
   const tabs: { id: Tab; label: string }[] = [
     ...(showRuns ? [{ id: 'runs' as Tab, label: 'Pay runs' }] : []),
+    ...(showCalendars ? [{ id: 'calendars' as Tab, label: 'Calendars' }] : []),
     { id: 'payslips' as Tab, label: isSelfService ? 'My payslips' : 'Payslips' },
     ...(showPayments ? [{ id: 'payments' as Tab, label: 'Payments' }] : []),
     ...(showClaims ? [{ id: 'claims' as Tab, label: 'Reimbursements' }] : []),
     ...(showPacks ? [{ id: 'rule-packs' as Tab, label: 'Statutory rules' }] : []),
+    { id: 'year-end' as Tab, label: isSelfService ? 'My year-end' : 'Year-end' },
   ];
 
   // Until the user picks a tab, always show the first available one. The role
@@ -103,6 +125,8 @@ export default function PayrollView() {
 
       {activeTab === 'runs' ? (
         <RunsPanel canManage={canManageRuns} canApprove={canApprove} />
+      ) : activeTab === 'calendars' ? (
+        <PayCalendarsPanel canManage={canManageRuns} />
       ) : activeTab === 'payslips' ? (
         <PayslipsPanel selfService={isSelfService} />
       ) : activeTab === 'payments' ? (
@@ -115,6 +139,11 @@ export default function PayrollView() {
           canSubmit={canSubmitClaims}
           canReview={canReviewClaims}
           selfService={isSelfService}
+        />
+      ) : activeTab === 'year-end' ? (
+        <YearEndPanel
+          canGenerate={canGenerateYearEnd}
+          canSeeRemittance={canSeeRemittance}
         />
       ) : (
         <RulePacksPanel canManage={canManagePacks} />

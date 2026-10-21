@@ -116,6 +116,11 @@
   background: var(--color-success-tint); border-radius: var(--radius-input);
   padding: var(--space-3) var(--space-4);
 }
+.warning {
+  font-size: var(--text-body-sm); color: var(--color-warning);
+  background: var(--color-warning-tint); border-radius: var(--radius-input);
+  padding: var(--space-3) var(--space-4);
+}
 
 /* ── Tables ────────────────────────────────────────────────────────────────── */
 .tableWrap { overflow-x: auto; }

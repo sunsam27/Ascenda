@@ -19,6 +19,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   AuditAction,
+  PayFrequency,
   SystemRole,
   type Plan,
   type Registration,
@@ -482,6 +483,21 @@ export class RegistrationsService {
             role: SystemRole.OWNER,
             acceptedAt: now,
             createdBy: userId,
+          },
+        });
+
+        // Phase 3 (PAY-04): provision a default monthly pay calendar so a new
+        // workspace can create its first pay run without extra setup. Admins can
+        // edit or add more calendars later. Mirrors the demo seed.
+        await tx.payCalendar.create({
+          data: {
+            organisationId,
+            createdBy: userId,
+            name: 'Monthly',
+            frequency: PayFrequency.MONTHLY,
+            dayOfMonth: 28,
+            cutOffDayOfMonth: 25,
+            isActive: true,
           },
         });
 

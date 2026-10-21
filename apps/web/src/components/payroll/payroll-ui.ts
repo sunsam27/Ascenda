@@ -5,6 +5,7 @@
 import axios from 'axios';
 import {
   ExpenseClaimStatus,
+  PayFrequency,
   PaymentStatus,
   PayrollItemType,
   PayrollRunApprovalStatus,
@@ -119,6 +120,34 @@ export const STATUTORY_ITEM_TYPE_OPTIONS: StatutoryItemType[] = [
   'EMPLOYEE_PENSION',
   'EMPLOYER_PENSION',
 ];
+
+/** Human label for a statutory rule side (remittance schedules). */
+export const REMITTANCE_SIDE_LABEL: Record<StatutoryRuleSide, string> = {
+  EMPLOYEE: 'Employee',
+  EMPLOYER: 'Employer',
+};
+
+/** Human label for a pay-calendar frequency (PAY-04). */
+export const PAY_FREQUENCY_LABEL: Record<PayFrequency, string> = {
+  [PayFrequency.WEEKLY]: 'Weekly',
+  [PayFrequency.BIWEEKLY]: 'Bi-weekly',
+  [PayFrequency.MONTHLY]: 'Monthly',
+  [PayFrequency.QUARTERLY]: 'Quarterly',
+};
+
+export const PAY_FREQUENCY_OPTIONS: PayFrequency[] = [
+  PayFrequency.MONTHLY,
+  PayFrequency.QUARTERLY,
+  PayFrequency.BIWEEKLY,
+  PayFrequency.WEEKLY,
+];
+
+/** A calendar uses a day-of-month (MONTHLY/QUARTERLY) or day-of-week, not both. */
+export function usesDayOfMonth(frequency: PayFrequency): boolean {
+  return (
+    frequency === PayFrequency.MONTHLY || frequency === PayFrequency.QUARTERLY
+  );
+}
 
 /** Extract the first human message from a NestJS / axios error response. */
 export function messageFrom(err: unknown, fallback: string): string {

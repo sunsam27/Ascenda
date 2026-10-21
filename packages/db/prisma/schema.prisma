@@ -268,6 +268,9 @@ enum AuditAction {
   PAYSLIP_GENERATED
   PAYSLIP_ACCESSED
   PAYMENTS_EXPORTED
+  YEAR_END_STATEMENT_GENERATED
+  YEAR_END_STATEMENT_ACCESSED
+  REMITTANCE_SCHEDULE_EXPORTED
   STATUTORY_RULE_PACK_CHANGED
   EXPENSE_CLAIM_CREATED
   EXPENSE_CLAIM_STATUS_CHANGED
@@ -409,6 +412,7 @@ model Organisation {
   documents            Document[]
   auditLogs            AuditLog[]
   statutoryRulePacks   StatutoryRulePack[]
+  yearEndStatements    YearEndStatement[]
   invitations          Invitation[]
   notifications        Notification[]
   subscription         Subscription?
@@ -504,6 +508,7 @@ model Worker {
   expenseClaims       ExpenseClaim[]
   documents           Document[]
   workerIdentity      WorkerIdentity?
+  yearEndStatements   YearEndStatement[]
 
   @@unique([organisationId, employeeNumber])
   @@index([organisationId])
@@ -877,6 +882,9 @@ model PayrollConfig {
   deductionRatioWarnBps   Int      @default(5000)
   /// Blocking error when a run worker has no bank account on file.
   requireBankDetails      Boolean  @default(true)
+  /// PAY-16: month the organisation's tax/leave year starts (1 = January). The
+  /// year boundary is configuration data, not an assumption (LOC-02).
+  taxYearStartMonth       Int      @default(1)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   updatedBy               String?
@@ -1005,6 +1013,43 @@ model Payslip {
   @@index([organisationId])
   @@index([workerId])
   @@map("payslips")
+}
+
+// ─── Year-end statements (PAY-16) ─────────────────────────────────────────────
+
+/// One frozen annual statement per worker per tax year. Totals equal the sum of
+/// the worker's payslips inside the tax-year window. Immutable once generated;
+/// regenerating for the same worker + year is a no-op (idempotent). Reporting
+/// artefact only — Ascenda never moves funds.
+model YearEndStatement {
+  id                 String   @id @default(uuid())
+  organisationId     String
+  workerId           String
+  /// Tax-year label, e.g. "2026" or "2026/2027".
+  taxYearLabel       String
+  periodStart        DateTime
+  periodEnd          DateTime
+  currency           String
+  grossMinorUnits    Int
+  deductionsMinorUnits Int    @default(0)
+  employerCostsMinorUnits Int  @default(0)
+  netMinorUnits      Int
+  /// Rolled-up annual lines (per pay type) as printed on the statement.
+  lines              Json     @default("[]")
+  /// Number of payslips aggregated into this statement.
+  payslipCount       Int      @default(0)
+  /// LOC-03: false if any contributing statutory pack was not validated.
+  validatedByProfessional Boolean @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  worker       Worker       @relation(fields: [workerId], references: [id])
+
+  @@unique([organisationId, workerId, taxYearLabel])
+  @@index([organisationId])
+  @@index([workerId])
+  @@map("year_end_statements")
 }
 
 // ─── Reimbursements (PAY-14) ─────────────────────────────────────────────────

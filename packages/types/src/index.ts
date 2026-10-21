@@ -230,6 +230,86 @@ export interface PayslipListQuery extends PaginatedQuery {
   workerId?: string;
 }
 
+// ── Year-end statements & remittance schedules (PAY-16) ───────────────────────
+
+/** One rolled-up pay line on a year-end statement (annual totals per type). */
+export interface YearEndLine {
+  type: PayrollItemType;
+  description: string;
+  /** Positive for earnings, negative for deductions (integer minor units). */
+  amountMinorUnits: number;
+}
+
+/**
+ * A frozen annual statement for one worker. Totals equal the sum of the
+ * worker's payslips inside the tax-year window. Immutable once generated.
+ */
+export interface YearEndStatement extends TenantEntity {
+  workerId: string;
+  /** Tax-year label, e.g. "2026" or "2026/2027". */
+  taxYearLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  currency: string;
+  grossMinorUnits: number;
+  deductionsMinorUnits: number;
+  employerCostsMinorUnits: number;
+  netMinorUnits: number;
+  lines: YearEndLine[];
+  /** Number of payslips the statement aggregates. */
+  payslipCount: number;
+  /** LOC-03: false if any contributing pack was not professionally validated. */
+  validatedByProfessional: boolean;
+}
+
+/** One statutory rule's annual totals for the remittance schedule. */
+export interface RemittanceLine {
+  code: string;
+  label: string;
+  itemType: StatutoryItemType;
+  side: StatutoryRuleSide;
+  /** Summed across workers, as a positive magnitude (integer minor units). */
+  amountMinorUnits: number;
+}
+
+/**
+ * An annual statutory remittance schedule: what the org owes each statutory
+ * scheme for the tax year, split by employee vs employer share. A reporting
+ * artefact only — Ascenda never moves funds (PRD boundary).
+ */
+export interface RemittanceSchedule {
+  taxYearLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  currency: string;
+  employeeTotalMinorUnits: number;
+  employerTotalMinorUnits: number;
+  lines: RemittanceLine[];
+  /** LOC-03: false if any contributing pack was not professionally validated. */
+  validatedByProfessional: boolean;
+}
+
+export interface YearEndListQuery extends PaginatedQuery {
+  workerId?: string;
+  taxYearLabel?: string;
+}
+
+export interface GenerateYearEndDto {
+  /** The tax year to generate statements for (the year the window starts in). */
+  year: number;
+}
+
+export interface RemittanceQuery {
+  year: number;
+}
+
+export interface YearEndListMeta {
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 // ── Reimbursements (PAY-14) ───────────────────────────────────────────────────
 
 export enum ExpenseClaimStatus {
@@ -999,6 +1079,8 @@ export interface PayrollConfig {
   deductionRatioWarnBps: number;
   /** Blocking error when a run worker has no bank account on file (default true). */
   requireBankDetails: boolean;
+  /** PAY-16: month the tax/leave year starts (1 = January; default 1). */
+  taxYearStartMonth: number;
 }
 
 export interface UpdatePayrollConfigDto {
@@ -1006,6 +1088,7 @@ export interface UpdatePayrollConfigDto {
   salaryChangeWarnPct?: number;
   deductionRatioWarnBps?: number;
   requireBankDetails?: boolean;
+  taxYearStartMonth?: number;
 }
 
 export interface CreatePayrollRunDto {

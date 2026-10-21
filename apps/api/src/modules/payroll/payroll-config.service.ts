@@ -23,6 +23,7 @@ export function toPayrollConfig(row: PayrollConfigRow): PayrollConfig {
     salaryChangeWarnPct: row.salaryChangeWarnPct,
     deductionRatioWarnBps: row.deductionRatioWarnBps,
     requireBankDetails: row.requireBankDetails,
+    taxYearStartMonth: row.taxYearStartMonth,
   };
 }
 
@@ -56,6 +57,7 @@ export class PayrollConfigService {
               DEFAULT_VALIDATION_THRESHOLDS.deductionRatioWarnBps,
             requireBankDetails:
               DEFAULT_VALIDATION_THRESHOLDS.requireBankDetails,
+            taxYearStartMonth: 1,
           };
     });
   }
@@ -96,6 +98,9 @@ export class PayrollConfigService {
         ...(dto.requireBankDetails !== undefined
           ? { requireBankDetails: dto.requireBankDetails }
           : {}),
+        ...(dto.taxYearStartMonth !== undefined
+          ? { taxYearStartMonth: dto.taxYearStartMonth }
+          : {}),
       };
       const row = await tx.payrollConfig.upsert({
         where: { organisationId },
@@ -111,6 +116,7 @@ export class PayrollConfigService {
           salaryChangeWarnPct: row.salaryChangeWarnPct,
           deductionRatioWarnBps: row.deductionRatioWarnBps,
           requireBankDetails: row.requireBankDetails,
+          taxYearStartMonth: row.taxYearStartMonth,
         },
       });
       return toPayrollConfig(row);

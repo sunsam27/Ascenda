@@ -260,6 +260,7 @@ function CreateRunDrawer({
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [loadingCalendars, setLoadingCalendars] = useState(true);
 
   useEffect(() => {
     api
@@ -271,7 +272,8 @@ function CreateRunDrawer({
         setCalendars(active);
         if (active[0]) setCalendarId(active[0].id);
       })
-      .catch(() => setError('Could not load pay calendars.'));
+      .catch(() => setError('Could not load pay calendars.'))
+      .finally(() => setLoadingCalendars(false));
   }, []);
 
   useEffect(() => {
@@ -345,6 +347,12 @@ function CreateRunDrawer({
           {error && (
             <p className={styles.error} role="alert">
               {error}
+            </p>
+          )}
+          {!loadingCalendars && calendars.length === 0 && (
+            <p className={styles.notice} role="status">
+              No active pay calendars yet. Add one from the <strong>Calendars</strong>{' '}
+              tab, then create the run.
             </p>
           )}
           <div className={styles.grid}>

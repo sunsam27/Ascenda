@@ -24,10 +24,10 @@
 | PAY-12 | 🟡 partial | Statutory rule-pack engine (M3a) + bank-upload payment file export (M3c) done; multi-currency/FX (PAY-15) deferred |
 | PAY-13 | ✅ done | Immutable per-worker payslip generated at `process`, private PDF download, self-service scoped + audited (M3b) |
 | PAY-14 | ✅ done | Reimbursements: submit → manager → finance → folded into the next run as a `REIMBURSEMENT` earning (M3d) |
+| PAY-16 | ✅ done | Year-end statements (immutable, per worker/tax-year) + statutory remittance schedules + CSV export, scoped + audited (M4) |
 
-Deferred beyond M3 (P1/P2): PAY-15 multi-currency + FX, PAY-16 year-end
-statements / remittance schedules, PAY-17 automated bank payments / loans /
-benefits.
+Deferred beyond M4 (P1/P2): PAY-15 multi-currency + FX, PAY-17 automated bank
+payments / loans / benefits.
 
 ## Interfaces
 Modules communicate through explicit interfaces — never by accessing another
@@ -51,6 +51,15 @@ module's tables directly. The payroll preview reads:
   lines vs employer costs, structural rule/pack validation. `LOC-02`/`LOC-03`/
   `PAY-12`
 - `domain/payslip-pdf.ts` — payslip PDF renderer (pdfkit → `Buffer`). `PAY-13`
+- `domain/year-end.ts` — pure PAY-16 maths: tax-year window resolution from
+  config, statement roll-up (per `type` + `description`), remittance grouping
+  (employee lines vs the payslip's `employerCostsMinorUnits`), RFC-4180 CSV
+  builder. `PAY-16`
+- `domain/year-end-pdf.ts` — year-end statement PDF renderer (pdfkit). `PAY-16`
+- `year-end.controller.ts` / `year-end.service.ts` — `GET/POST
+  /payroll/year-end/statements` (+ `GET :id/pdf`), `GET
+  /payroll/year-end/remittance` (+ `GET remittance/export`); idempotent
+  per (worker, tax year), SELF vs ORG scoping, access + export audited. `PAY-16`
 - `statutory-rule-packs.controller.ts` / `statutory-rule-packs.service.ts` —
   rule-pack CRUD + `PATCH :id/validation`; `activePackFor` resolves the
   effective pack applied at `process`/`prepare`. `LOC-02`/`LOC-03`/`PAY-12`
@@ -82,6 +91,8 @@ module's tables directly. The payroll preview reads:
 - `dto/pay-calendar.dto.ts` / `dto/recurring-pay-item.dto.ts` — write/query DTOs.
 - `dto/statutory-rule-pack.dto.ts` / `dto/payslip.dto.ts` /
   `dto/expense-claim.dto.ts` — M3 write/query DTOs.
+- `dto/year-end.dto.ts` — M4 statement list/generate + remittance query DTOs.
+  `PAY-16`
 
 Pay-structure component maths live with People:
 - `../people/domain/pay-structure.ts` — component validation, sum invariant,
@@ -109,6 +120,10 @@ Pay-structure component maths live with People:
   (37 checks over M3a..M3d: rule-pack CRUD/validation/effectivity, statutory
   lines applied at `prepare`, payslip generation + PDF at `process`, payment
   CSV export, reimbursement approval flow, self-service scoping, audits + auth).
+- E2E: `node --env-file=packages\db\.env apps\api\test\e2e\phase3-m4-year-end.cjs`
+  (28 checks over M4: statements generated from processed payslips + idempotency
+  + PDF, remittance reconciliation (employee vs employer) + CSV export, configurable
+  tax-year window, self-service scoping, audits + auth).
 
 ## M3 boundaries (documented product decisions)
 - Statutory rule packs start **empty** — admins author them; the code never
@@ -123,3 +138,28 @@ Pay-structure component maths live with People:
 - Payslips are immutable once generated (idempotent `generateForRun`); a
   regenerated run's payslips are re-created from the run's frozen lines.
 - PDF rendering uses `pdfkit` (added in M3).
+
+## M4 boundaries (documented product decisions)
+- Year-end statements and remittance schedules are **reporting/export artefacts
+  only** — Ascenda never moves funds and never invents a statutory rate, band or
+  scheme (CLAUDE.md). They aggregate the statutory lines a processed run already
+  froze on its payslips.
+- The tax-year window is **configuration data** (`PayrollConfig.taxYearStartMonth`,
+  default `1` = calendar year). A January start labels the year `"2026"`; any
+  other month spans two years (`"2026/2027"`). The window is half-open
+  `[start, endExclusive)`.
+- A statement is **frozen** per `(organisation, worker, taxYearLabel)` in the
+  immutable `year_end_statements` table; regeneration is idempotent (creates only
+  the missing rows). Each statement carries the LOC-03 `validatedByProfessional`
+  flag from the active packs.
+- The remittance schedule's **employee** side groups the year's `TAX` /
+  `EMPLOYEE_PENSION` payslip lines (returned as positive magnitudes); its
+  **employer** side is the sum of the payslips' `employerCostsMinorUnits` (M3
+  boundary: employer costs are never payslip lines) surfaced as a single line
+  labelled from the pack's employer-side rules. The CSV contains a scheme, side,
+  item type, amount and currency — no account numbers.
+- The CSV export (BOM + RFC-4180 CRLF) and PDF download are audited
+  (`REMITTANCE_SCHEDULE_EXPORTED`, `YEAR_END_STATEMENT_ACCESSED`).
+- RBAC: statement read reuses `payslips:read` (SELF scope for self-service),
+  generation requires `payroll:update` @ ORG; remittance read/export use the new
+  `remittance` resource @ ORG (OWNER, PAYROLL_ADMINISTRATOR, FINANCE_APPROVER).
