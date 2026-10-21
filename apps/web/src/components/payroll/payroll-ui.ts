@@ -70,6 +70,23 @@ export const ITEM_TYPE_LABEL: Record<PayrollItemType, string> = {
   [PayrollItemType.STIPEND]: 'Stipend',
 };
 
+/**
+ * PAY-09: line types a reviewer may add by hand mid-run. Statutory and base
+ * types are excluded — those come from prepare, not manual entry.
+ */
+export const MANUAL_ITEM_TYPE_OPTIONS: PayrollItemType[] = [
+  PayrollItemType.DEDUCTION,
+  PayrollItemType.BONUS,
+  PayrollItemType.ALLOWANCE,
+  PayrollItemType.REIMBURSEMENT,
+  PayrollItemType.STIPEND,
+];
+
+/** Manual item types that are deductions (amount entered as a positive number). */
+export const MANUAL_DEDUCTION_TYPES: ReadonlySet<PayrollItemType> = new Set([
+  PayrollItemType.DEDUCTION,
+]);
+
 export const CLAIM_STATUS_LABEL: Record<ExpenseClaimStatus, string> = {
   [ExpenseClaimStatus.SUBMITTED]: 'Submitted',
   [ExpenseClaimStatus.MANAGER_APPROVED]: 'Manager approved',

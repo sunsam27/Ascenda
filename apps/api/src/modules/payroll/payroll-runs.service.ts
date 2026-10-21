@@ -9,6 +9,7 @@ import {
 import { AuditAction, Prisma } from '@ascenda/db';
 import type {
   ApprovePayrollRunDto,
+  CreatePayrollItemDto,
   CreatePayrollRunDto,
   PayComponent,
   PayrollItem,
@@ -58,6 +59,7 @@ import { PayslipsService } from './payslips.service';
 import { ExpenseClaimsService } from './expense-claims.service';
 import {
   ApprovePayrollRunDto as ApproveDto,
+  CreatePayrollItemDto as CreateItemDto,
   CreatePayrollRunDto as CreateDto,
   ListPayrollRunsQueryDto as ListQueryDto,
   RejectPayrollRunDto as RejectDto,
@@ -106,12 +108,16 @@ export function toPayrollRun(row: RunRow): PayrollRun {
   };
 }
 
-export function toPayrollItem(row: ItemRow): PayrollItem {
+export function toPayrollItem(
+  row: ItemRow,
+  workerName?: string,
+): PayrollItem {
   return {
     id: row.id,
     organisationId: row.organisationId,
     payrollRunId: row.payrollRunId,
     workerId: row.workerId,
+    workerName,
     type: row.type as PayrollItem['type'],
     description: row.description,
     amountMinorUnits: row.amountMinorUnits,
@@ -208,7 +214,68 @@ export class PayrollRunsService {
         where: { payrollRunId: id },
         orderBy: [{ workerId: 'asc' }, { createdAt: 'asc' }],
       });
-      return rows.map(toPayrollItem);
+      const names = await this.workerNameMap(
+        tx,
+        rows.map((r) => r.workerId),
+      );
+      return rows.map((row) => toPayrollItem(row, names.get(row.workerId)));
+    });
+  }
+
+  /** Resolve worker display names for a set of ids (denormalised for the UI). */
+  private async workerNameMap(
+    tx: Prisma.TransactionClient,
+    workerIds: string[],
+  ): Promise<Map<string, string>> {
+    const unique = [...new Set(workerIds)];
+    if (unique.length === 0) return new Map();
+    const workers = await tx.worker.findMany({
+      where: { id: { in: unique } },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    return new Map(
+      workers.map((w) => [
+        w.id,
+        `${w.firstName} ${w.lastName}`.trim() || w.id.slice(0, 8),
+      ]),
+    );
+  }
+
+  /**
+   * Recompute the run totals from every persisted line. Shared by the item
+   * override and one-off add paths so totals always reconcile to the lines.
+   */
+  private async recomputeRunTotals(
+    tx: Prisma.TransactionClient,
+    runId: string,
+  ): Promise<void> {
+    const rows = await tx.payrollItem.findMany({
+      where: { payrollRunId: runId },
+    });
+    const byWorker = new Map<string, PreparedLine[]>();
+    for (const row of rows) {
+      const lines = byWorker.get(row.workerId) ?? [];
+      lines.push({
+        itemType: row.type as RunItemType,
+        description: row.description,
+        amountMinorUnits: row.amountMinorUnits,
+      });
+      byWorker.set(row.workerId, lines);
+    }
+    const totals = { gross: 0, deductions: 0, net: 0 };
+    for (const [workerId, lines] of byWorker) {
+      const folded = foldWorkerLines(workerId, lines);
+      totals.gross += folded.grossMinorUnits;
+      totals.deductions += folded.deductionsMinorUnits;
+      totals.net += folded.netMinorUnits;
+    }
+    await tx.payrollRun.update({
+      where: { id: runId },
+      data: {
+        totalGrossMinorUnits: totals.gross,
+        totalDeductionsMinorUnits: totals.deductions,
+        totalNetMinorUnits: totals.net,
+      },
     });
   }
 
@@ -591,34 +658,7 @@ export class PayrollRunsService {
       });
 
       // Recompute totals from every line so they keep reconciling exactly.
-      const rows = await tx.payrollItem.findMany({
-        where: { payrollRunId: runId },
-      });
-      const byWorker = new Map<string, PreparedLine[]>();
-      for (const row of rows) {
-        const lines = byWorker.get(row.workerId) ?? [];
-        lines.push({
-          itemType: row.type as RunItemType,
-          description: row.description,
-          amountMinorUnits: row.amountMinorUnits,
-        });
-        byWorker.set(row.workerId, lines);
-      }
-      const totals = { gross: 0, deductions: 0, net: 0 };
-      for (const [workerId, lines] of byWorker) {
-        const folded = foldWorkerLines(workerId, lines);
-        totals.gross += folded.grossMinorUnits;
-        totals.deductions += folded.deductionsMinorUnits;
-        totals.net += folded.netMinorUnits;
-      }
-      await tx.payrollRun.update({
-        where: { id: runId },
-        data: {
-          totalGrossMinorUnits: totals.gross,
-          totalDeductionsMinorUnits: totals.deductions,
-          totalNetMinorUnits: totals.net,
-        },
-      });
+      await this.recomputeRunTotals(tx, runId);
 
       await this.audit.record({
         action: AuditAction.PAYROLL_ITEM_OVERRIDDEN,
@@ -632,10 +672,67 @@ export class PayrollRunsService {
           payrollRunId: runId,
         },
       });
+      const names = await this.workerNameMap(tx, [item.workerId]);
       const updated = await tx.payrollItem.findFirst({
         where: { id: item.id },
       });
-      return toPayrollItem(updated!);
+      return toPayrollItem(updated!, names.get(item.workerId));
+    });
+  }
+
+  /**
+   * PAY-09: add a one-off earning or deduction line to a worker mid-run (e.g.
+   * a manual deduction or a spot bonus). Allowed only while the run is DRAFT or
+   * IN_REVIEW; the reason is mandatory and the change is audit-logged. The
+   * worker must already be part of the run.
+   */
+  async createItem(runId: string, dto: CreateItemDto): Promise<PayrollItem> {
+    this.requireContext();
+    return this.prisma.withRequestContext(async (tx) => {
+      const run = await this.loadRun(tx, runId);
+      this.assertAction('override', run);
+
+      const exists = await tx.payrollItem.findFirst({
+        where: { payrollRunId: runId, workerId: dto.workerId },
+        select: { id: true },
+      });
+      if (!exists) {
+        throw new BadRequestException(
+          'Worker is not part of this run — prepare the run first',
+        );
+      }
+
+      const created = await tx.payrollItem.create({
+        data: {
+          organisationId: run.organisationId,
+          payrollRunId: runId,
+          workerId: dto.workerId,
+          type: dto.type as ItemRow['type'],
+          description: dto.description,
+          amountMinorUnits: dto.amountMinorUnits,
+          currency: run.currency,
+          overrideReason: dto.overrideReason,
+        },
+      });
+
+      await this.recomputeRunTotals(tx, runId);
+
+      await this.audit.record({
+        action: AuditAction.PAYROLL_ITEM_CREATED,
+        targetType: 'payroll_item',
+        targetId: created.id,
+        newValue: {
+          workerId: dto.workerId,
+          type: dto.type,
+          description: dto.description,
+          amountMinorUnits: dto.amountMinorUnits,
+          overrideReason: dto.overrideReason,
+          payrollRunId: runId,
+        },
+      });
+
+      const names = await this.workerNameMap(tx, [dto.workerId]);
+      return toPayrollItem(created, names.get(dto.workerId));
     });
   }
 

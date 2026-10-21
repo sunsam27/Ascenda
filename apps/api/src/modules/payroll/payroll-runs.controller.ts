@@ -17,6 +17,7 @@ import { RequirePermission } from '../../common/rbac/permission.decorator';
 import { PayrollRunsService } from './payroll-runs.service';
 import {
   ApprovePayrollRunDto,
+  CreatePayrollItemDto,
   CreatePayrollRunDto,
   ListPayrollRunsQueryDto,
   RejectPayrollRunDto,
@@ -135,6 +136,22 @@ export class PayrollRunsController {
     @Body() dto: UpdatePayrollItemDto,
   ) {
     return { data: await this.service.updateItem(id, itemId, dto) };
+  }
+
+  @Post(':id/items')
+  @ApiOperation({
+    summary: 'Add a one-off earning or deduction line with a reason (PAY-09)',
+  })
+  @RequirePermission({
+    resource: 'payroll',
+    action: 'update',
+    scope: PermissionScope.ORGANISATION,
+  })
+  async createItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreatePayrollItemDto,
+  ) {
+    return { data: await this.service.createItem(id, dto) };
   }
 
   @Post(':id/submit')

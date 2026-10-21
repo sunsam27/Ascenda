@@ -16,7 +16,7 @@
 | PAY-06 | ✅ done | One-way lifecycle; approved runs immutable; reversal via a mirrored DRAFT with negated lines + `reversedAt` stamp |
 | PAY-07 | ✅ done | prepare → review → override → submit → approve → process (`Payment` rows) → lock |
 | PAY-08 | ✅ done | Eligibility (ACTIVE/ON_LEAVE, in-period); ineligible workers excluded + flagged; missing bank/salary block submission |
-| PAY-09 | ✅ done | Item overrides require a reason and are audit-logged (`PAYROLL_ITEM_OVERRIDDEN`) |
+| PAY-09 | ✅ done | Reviewers can override a line or add a one-off earning/deduction while DRAFT/IN_REVIEW; both require a reason and are audit-logged (`PAYROLL_ITEM_OVERRIDDEN` / `PAYROLL_ITEM_CREATED`) |
 | PAY-10 | ✅ done | Configurable thresholds (salary-change %, deduction ratio bps, bank requirement); warnings ack-gated before approval |
 | PAY-11 | ✅ done | Configurable approval chain snapshotted on submit; preparer can never approve; OWNER overrides any step |
 | LOC-02 | ✅ done | Statutory rule packs are organisation-configured DATA (rules-as-data), effective-dated, never invented here |
@@ -71,8 +71,11 @@ module's tables directly. The payroll preview reads:
   `consumeApprovedForRun`, which folds finance-approved claims into the next run.
   `PAY-14`
 - `payroll-runs.controller.ts` / `payroll-runs.service.ts` — run lifecycle:
-  prepare/review/override/submit/approve/reject/process/lock/reverse.
-  `PAY-05`…`PAY-11`
+  prepare/review/override/submit/approve/reject/process/lock/reverse, plus
+  item editing while DRAFT/IN_REVIEW: `PATCH :id/items/:itemId` (override an
+  existing line) and `POST :id/items` (add a one-off earning/deduction) — both
+  require a reason and are audit-logged. Item payloads carry a denormalised
+  `workerName` for display. `PAY-05`…`PAY-11`/`PAY-09`
 - `payroll-config.controller.ts` / `payroll-config.service.ts` — per-org approval
   chain + validation thresholds. `PAY-10`/`PAY-11`
 - `../payments/payments.controller.ts` / `payments.service.ts` — payment listing
@@ -114,8 +117,9 @@ Pay-structure component maths live with People:
 - E2E: `node --env-file=packages\db\.env apps\api\test\e2e\phase3-m1-pay-setup.cjs`
   (46 checks over PAY-01..PAY-04 + audit + auth guard).
 - E2E: `node --env-file=packages\db\.env apps\api\test\e2e\phase3-m2-payroll-runs.cjs`
-  (54 checks over PAY-05..PAY-11: prepare/validate/override/submit/approve/
-  process/lock/reverse, warnings ack flow, multi-step chain, guards + audits).
+  (61 checks over PAY-05..PAY-11: prepare/validate/override/one-off line/
+  submit/approve/process/lock/reverse, warnings ack flow, multi-step chain,
+  guards + audits).
 - E2E: `node --env-file=packages\db\.env apps\api\test\e2e\phase3-m3-statutory-payslips.cjs`
   (37 checks over M3a..M3d: rule-pack CRUD/validation/effectivity, statutory
   lines applied at `prepare`, payslip generation + PDF at `process`, payment

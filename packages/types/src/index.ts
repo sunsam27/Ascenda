@@ -1048,6 +1048,8 @@ export interface PayrollRun extends TenantEntity {
 export interface PayrollItem extends TenantEntity {
   payrollRunId: string;
   workerId: string;
+  /** Denormalised for display only; absent on persisted rows. */
+  workerName?: string;
   type: PayrollItemType;
   description: string;
   /** Amount in minor units — positive for earnings, negative for deductions */
@@ -1102,6 +1104,21 @@ export interface CreatePayrollRunDto {
 
 export interface UpdatePayrollItemDto {
   /** Signed integer minor units. */
+  amountMinorUnits: number;
+  /** Mandatory explanation — stored on the item and audit-logged. */
+  overrideReason: string;
+}
+
+/**
+ * PAY-09: a one-off line a reviewer adds to a worker mid-run (e.g. a manual
+ * deduction or a spot bonus). Only allowed while the run is DRAFT/IN_REVIEW;
+ * the reason is mandatory and audit-logged.
+ */
+export interface CreatePayrollItemDto {
+  workerId: string;
+  type: PayrollItemType;
+  description: string;
+  /** Signed integer minor units — negative for a deduction. */
   amountMinorUnits: number;
   /** Mandatory explanation — stored on the item and audit-logged. */
   overrideReason: string;

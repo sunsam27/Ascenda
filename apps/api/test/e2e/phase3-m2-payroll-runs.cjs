@@ -463,6 +463,75 @@ async function main() {
       `before=${prep2.totalNetMinorUnits} after=${prep3.totalNetMinorUnits}`,
     );
 
+    // R7b: worker names surface on item lines (denormalised for the UI).
+    check(
+      items2.length > 0 && items2.every((i) => typeof i.workerName === 'string' && i.workerName.length > 0),
+      'R7b every item line carries a workerName for display',
+      JSON.stringify(items2.slice(0, 2).map((i) => i.workerName)),
+    );
+
+    // ── PAY-09: ONE-OFF LINE (add a manual deduction mid-run) ──────────────
+    const addLine = await req('POST', `/payroll/runs/${runSep.id}/items`, {
+      workerId: workerD,
+      type: 'DEDUCTION',
+      description: 'Salary advance repayment',
+      amountMinorUnits: -20000,
+      overrideReason: 'Recovering salary advance per HR request',
+    });
+    const addLineD = dataOf(addLine);
+    check(
+      addLine.status === 201 &&
+        addLineD.workerId === workerD &&
+        addLineD.type === 'DEDUCTION' &&
+        addLineD.amountMinorUnits === -20000 &&
+        addLineD.overrideReason === 'Recovering salary advance per HR request' &&
+        typeof addLineD.workerName === 'string',
+      'R7c one-off deduction added to a worker mid-run (PAY-09)',
+      `status=${addLine.status} ${JSON.stringify(addLineD).slice(0, 200)}`,
+    );
+    const prep3b = dataOf(await req('GET', `/payroll/runs/${runSep.id}`));
+    check(
+      prep3b.totalNetMinorUnits === prep3.totalNetMinorUnits - 20000 &&
+        prep3b.totalDeductionsMinorUnits === prep3.totalDeductionsMinorUnits + 20000,
+      `R7c totals recomputed after the one-off deduction (net −20000, deductions +20000)`,
+      JSON.stringify({ net: prep3b.totalNetMinorUnits, ded: prep3b.totalDeductionsMinorUnits }),
+    );
+    const badLine = await req('POST', `/payroll/runs/${runSep.id}/items`, {
+      workerId: workerD,
+      type: 'DEDUCTION',
+      description: 'No reason given',
+      amountMinorUnits: -5000,
+    });
+    check(
+      badLine.status === 400,
+      'R7d one-off line without a reason is rejected (400, PAY-09)',
+      `status=${badLine.status}`,
+    );
+    const badType = await req('POST', `/payroll/runs/${runSep.id}/items`, {
+      workerId: workerD,
+      type: 'BASIC_SALARY',
+      description: 'Not allowed by hand',
+      amountMinorUnits: 100000,
+      overrideReason: 'Attempted manual base pay',
+    });
+    check(
+      badType.status === 400,
+      'R7e statutory/base types cannot be added by hand (400)',
+      `status=${badType.status}`,
+    );
+    const foreignLine = await req('POST', `/payroll/runs/${runSep.id}/items`, {
+      workerId: workerB,
+      type: 'DEDUCTION',
+      description: 'Worker not in run',
+      amountMinorUnits: -1000,
+      overrideReason: 'Should be refused — B is excluded',
+    });
+    check(
+      foreignLine.status === 400,
+      'R7f one-off line for a worker not in the run is refused (400)',
+      `status=${foreignLine.status}`,
+    );
+
     const val2 = dataOf(await req('GET', `/payroll/runs/${runSep.id}/validations`));
     const excludedIds = new Set(val2.excluded.map((e) => e.workerId));
     check(
@@ -525,8 +594,8 @@ async function main() {
       JSON.stringify(payA),
     );
     check(
-      payD && payD.amountMinorUnits === 500000,
-      `R12 worker D payment = prorated gross (500000) got ${payD && payD.amountMinorUnits}`,
+      payD && payD.amountMinorUnits === 500000 - 20000,
+      `R12 worker D payment = prorated gross − one-off deduction (480000) got ${payD && payD.amountMinorUnits}`,
       JSON.stringify(payD),
     );
 
@@ -598,7 +667,7 @@ async function main() {
     );
     cleanup.runIds.push(rev.id);
     check(
-      rev.status === 'DRAFT' && rev.reversalOfRunId === runSep.id && rev.totalNetMinorUnits === -prep3.totalNetMinorUnits,
+      rev.status === 'DRAFT' && rev.reversalOfRunId === runSep.id && rev.totalNetMinorUnits === -prep3b.totalNetMinorUnits,
       `V1 reversal run created as DRAFT with negated totals (${rev.totalNetMinorUnits})`,
       JSON.stringify(rev).slice(0, 220),
     );
@@ -619,7 +688,7 @@ async function main() {
     const apprRev = dataOf(await req('POST', `/payroll/runs/${rev.id}/approve`, {}));
     const procRev = dataOf(await req('POST', `/payroll/runs/${rev.id}/process`));
     check(
-      apprRev.status === 'APPROVED' && procRev.paymentsCreated === 2 && procRev.totalPaidMinorUnits === -prep3.totalNetMinorUnits,
+      apprRev.status === 'APPROVED' && procRev.paymentsCreated === 2 && procRev.totalPaidMinorUnits === -prep3b.totalNetMinorUnits,
       `V4 reversal processed into equal-and-opposite payments (${procRev.totalPaidMinorUnits})`,
       JSON.stringify(procRev).slice(0, 200),
     );
@@ -695,7 +764,7 @@ async function main() {
     const auditCounts = await db.query(
       `SELECT action, count(*)::int AS n FROM audit_log
        WHERE "targetId" = ANY($1)
-          OR action IN ('PAYROLL_CONFIG_CHANGED', 'PAYROLL_ITEM_OVERRIDDEN')
+          OR action IN ('PAYROLL_CONFIG_CHANGED', 'PAYROLL_ITEM_OVERRIDDEN', 'PAYROLL_ITEM_CREATED')
        GROUP BY action`,
       [cleanup.runIds.concat(cleanup.paymentIds)],
     );
@@ -707,6 +776,7 @@ async function main() {
       'PAYROLL_RUN_LOCKED',
       'PAYROLL_RUN_REVERSED',
       'PAYROLL_ITEM_OVERRIDDEN',
+      'PAYROLL_ITEM_CREATED',
       'PAYROLL_CONFIG_CHANGED',
     ]) {
       check((byAction[action] || 0) >= 1, `A1 audit row present: ${action}`, JSON.stringify(byAction));

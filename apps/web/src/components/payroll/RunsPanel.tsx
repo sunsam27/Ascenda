@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import {
+  PayrollItemType,
   PayrollRunStatus,
   type PayCalendar,
   type PayCalendarPeriod,
@@ -24,12 +25,16 @@ import {
   type PayrollRun,
   type PayrollRunApproval,
   type RunValidationResult,
+  type WorkerSummary,
 } from '@ascenda/types';
 import { api } from '@/lib/api';
 import { formatMinorUnits } from '@/lib/money';
+import { fetchAllWorkers, workerDisplayName } from '@/lib/workers';
 import {
   APPROVAL_STATUS_LABEL,
   ITEM_TYPE_LABEL,
+  MANUAL_DEDUCTION_TYPES,
+  MANUAL_ITEM_TYPE_OPTIONS,
   RUN_STATUS_LABEL,
   RUN_STATUS_TONE,
   formatRange,
@@ -457,21 +462,27 @@ function RunDetailView({
   const [state, setState] = useState<LoadState>('loading');
   const [run, setRun] = useState<RunDetail | null>(null);
   const [items, setItems] = useState<PayrollItem[]>([]);
+  const [workers, setWorkers] = useState<WorkerSummary[]>([]);
   const [validations, setValidations] = useState<RunValidationResult | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState('');
   const [editing, setEditing] = useState<PayrollItem | null>(null);
+  const [addingFor, setAddingFor] = useState<{ id: string; name: string } | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     setState('loading');
     try {
-      const [runRes, itemsRes] = await Promise.all([
+      const [runRes, itemsRes, workersRes] = await Promise.all([
         api.get<{ data: RunDetail }>(`/payroll/runs/${runId}`),
         api.get<{ data: PayrollItem[] }>(`/payroll/runs/${runId}/items`),
+        fetchAllWorkers().catch(() => [] as WorkerSummary[]),
       ]);
       setRun(runRes.data.data);
       setItems(itemsRes.data.data);
+      setWorkers(workersRes);
       // Validations may be empty before prepare — tolerate a failure.
       try {
         const val = await api.get<{ data: RunValidationResult }>(
@@ -774,56 +785,80 @@ function RunDetailView({
         {items.length === 0 ? (
           <p className={styles.muted}>Not prepared yet.</p>
         ) : (
-          [...byWorker.entries()].map(([workerId, lines]) => (
-            <div key={workerId} className={`glass ${styles.tableWrap}`} style={{ marginBottom: 'var(--space-3)' }}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Worker</th>
-                    <th>Type</th>
-                    <th>Description</th>
-                    <th className={styles.num}>Amount</th>
-                    {canManage && status === PayrollRunStatus.DRAFT && (
-                      <th>
-                        <span className="sr-only">Actions</span>
-                      </th>
+          [...byWorker.entries()].map(([workerId, lines]) => {
+            const name =
+              lines[0]?.workerName ??
+              workerNameOf(workerId) ??
+              workerId.slice(0, 8);
+            const editable =
+              canManage && status === PayrollRunStatus.DRAFT;
+            return (
+              <div
+                key={workerId}
+                className={`glass ${styles.tableWrap}`}
+                style={{ marginBottom: 'var(--space-3)' }}
+              >
+                <div className={styles.groupHead}>
+                  <span className={styles.groupName}>{name}</span>
+                  {canManage &&
+                    (status === PayrollRunStatus.DRAFT ||
+                      status === PayrollRunStatus.IN_REVIEW) && (
+                      <button
+                        type="button"
+                        className={styles.btn}
+                        onClick={() => setAddingFor({ id: workerId, name })}
+                      >
+                        <Plus size={14} strokeWidth={2.2} /> Add line
+                      </button>
                     )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {lines.map((line) => (
-                    <tr key={line.id}>
-                      <td>{workerId.slice(0, 8)}</td>
-                      <td>{ITEM_TYPE_LABEL[line.type]}</td>
-                      <td>
-                        {line.description}
-                        {line.overrideReason ? (
-                          <span className={styles.panelMeta}>
-                            {' '}
-                            · overridden: {line.overrideReason}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className={styles.num}>
-                        {formatMinorUnits(line.amountMinorUnits, line.currency)}
-                      </td>
-                      {canManage && status === PayrollRunStatus.DRAFT && (
-                        <td className={styles.tableRowActions}>
-                          <button
-                            type="button"
-                            className={styles.btn}
-                            onClick={() => setEditing(line)}
-                          >
-                            Override
-                          </button>
-                        </td>
+                </div>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Description</th>
+                      <th className={styles.num}>Amount</th>
+                      {editable && (
+                        <th>
+                          <span className="sr-only">Actions</span>
+                        </th>
                       )}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))
+                  </thead>
+                  <tbody>
+                    {lines.map((line) => (
+                      <tr key={line.id}>
+                        <td>{ITEM_TYPE_LABEL[line.type]}</td>
+                        <td>
+                          {line.description}
+                          {line.overrideReason ? (
+                            <span className={styles.panelMeta}>
+                              {' '}
+                              · reason: {line.overrideReason}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className={styles.num}>
+                          {formatMinorUnits(line.amountMinorUnits, line.currency)}
+                        </td>
+                        {editable && (
+                          <td className={styles.tableRowActions}>
+                            <button
+                              type="button"
+                              className={styles.btn}
+                              onClick={() => setEditing(line)}
+                            >
+                              Override
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -839,8 +874,27 @@ function RunDetailView({
           runId={runId}
         />
       )}
+
+      {addingFor && (
+        <AddLineDrawer
+          runId={runId}
+          workerId={addingFor.id}
+          workerName={addingFor.name}
+          currency={currency}
+          onClose={() => setAddingFor(null)}
+          onSaved={() => {
+            setAddingFor(null);
+            void load();
+          }}
+        />
+      )}
     </div>
   );
+
+  function workerNameOf(workerId: string): string | undefined {
+    const worker = workers.find((w) => w.id === workerId);
+    return worker ? workerDisplayName(worker) : undefined;
+  }
 }
 
 // ── Override drawer (PAY-09) ─────────────────────────────────────────────────
@@ -959,6 +1013,179 @@ function OverrideDrawer({
           <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={save} disabled={busy}>
             {busy && <Loader2 className={styles.spin} size={15} />}
             Save override
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ── Add one-off line drawer (PAY-09) ─────────────────────────────────────────
+
+function AddLineDrawer({
+  runId,
+  workerId,
+  workerName,
+  currency,
+  onClose,
+  onSaved,
+}: {
+  runId: string;
+  workerId: string;
+  workerName: string;
+  currency: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [type, setType] = useState<PayrollItemType>(PayrollItemType.DEDUCTION);
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const isDeduction = MANUAL_DEDUCTION_TYPES.has(type);
+
+  async function save() {
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value <= 0) {
+      setError('Enter an amount greater than zero.');
+      return;
+    }
+    if (!description.trim()) {
+      setError('A description is required.');
+      return;
+    }
+    if (!reason.trim()) {
+      setError('A reason is required (PAY-09).');
+      return;
+    }
+    // Deductions are stored as negative minor units.
+    const minor = Math.round(value * 100) * (isDeduction ? -1 : 1);
+    setBusy(true);
+    setError('');
+    try {
+      await api.post(`/payroll/runs/${runId}/items`, {
+        workerId,
+        type,
+        description: description.trim(),
+        amountMinorUnits: minor,
+        overrideReason: reason.trim(),
+      });
+      onSaved();
+    } catch (err) {
+      setError(messageFrom(err, 'Could not add the line.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return createPortal(
+    <div
+      className={styles.overlay}
+      role="presentation"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className={styles.drawer} role="dialog" aria-modal="true" aria-label="Add line">
+        <div className={styles.drawerHeader}>
+          <p className={styles.drawerTitle}>Add line · {workerName}</p>
+          <button type="button" className={styles.iconButton} onClick={onClose} aria-label="Close">
+            <X size={16} strokeWidth={2} />
+          </button>
+        </div>
+        <div className={styles.drawerBody}>
+          {error && (
+            <p className={styles.error} role="alert">
+              {error}
+            </p>
+          )}
+          <p className={styles.muted}>
+            Add a one-off earning or deduction to this worker&apos;s pay for this
+            period. Changes are limited to drafts and in-review runs, and every
+            line is audit-logged with its reason.
+          </p>
+          <div className={styles.grid}>
+            <div className={`${styles.gridItem} ${styles.gridFull}`}>
+              <label className={styles.label} htmlFor="add-type">
+                Type
+              </label>
+              <select
+                id="add-type"
+                className={styles.select}
+                value={type}
+                onChange={(e) => setType(e.currentTarget.value as PayrollItemType)}
+              >
+                {MANUAL_ITEM_TYPE_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {ITEM_TYPE_LABEL[value]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={`${styles.gridItem} ${styles.gridFull}`}>
+              <label className={styles.label} htmlFor="add-desc">
+                Description
+              </label>
+              <input
+                id="add-desc"
+                className={styles.input}
+                value={description}
+                placeholder={
+                  isDeduction ? 'e.g. Salary advance repayment' : 'e.g. Q4 spot bonus'
+                }
+                onChange={(e) => setDescription(e.currentTarget.value)}
+              />
+            </div>
+            <div className={`${styles.gridItem} ${styles.gridFull}`}>
+              <label className={styles.label} htmlFor="add-amount">
+                Amount ({currency})
+              </label>
+              <input
+                id="add-amount"
+                className={styles.input}
+                inputMode="decimal"
+                value={amount}
+                placeholder="0.00"
+                onChange={(e) => setAmount(e.currentTarget.value)}
+              />
+              <span className={styles.formHint}>
+                {isDeduction
+                  ? 'Enter a positive number — it will be deducted from net pay.'
+                  : 'Enter a positive number — it will be added to gross pay.'}
+              </span>
+            </div>
+            <div className={`${styles.gridItem} ${styles.gridFull}`}>
+              <label className={styles.label} htmlFor="add-reason">
+                Reason (required)
+              </label>
+              <textarea
+                id="add-reason"
+                className={styles.textarea}
+                rows={2}
+                value={reason}
+                onChange={(e) => setReason(e.currentTarget.value)}
+              />
+            </div>
+          </div>
+        </div>
+        <div className={styles.drawerActions}>
+          <button type="button" className={`${styles.btn} ${styles.btnGhost}`} onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={save} disabled={busy}>
+            {busy ? <Loader2 className={styles.spin} size={15} /> : <Plus size={15} strokeWidth={2.2} />}
+            Add line
           </button>
         </div>
       </div>

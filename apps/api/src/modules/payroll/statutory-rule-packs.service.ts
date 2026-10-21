@@ -248,7 +248,9 @@ export class StatutoryRulePacksService {
         validFrom: { lte: at },
         OR: [{ validTo: null }, { validTo: { gte: at } }],
       },
-      orderBy: { validFrom: 'desc' },
+      // Most-recently-effective pack wins; createdAt breaks ties when two packs
+      // share a validFrom (otherwise the winner is nondeterministic).
+      orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }],
     });
     return row ? coerceRules(row.rules) : null;
   }
