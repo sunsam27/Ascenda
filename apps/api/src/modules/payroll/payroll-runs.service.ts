@@ -43,12 +43,19 @@ import {
 } from './domain/run-calc';
 import { runActionError, type RunStatus } from './domain/run-state';
 import {
+  applyStatutoryToWorker,
+  type StatutoryRule,
+} from './domain/statutory';
+import {
   DEFAULT_VALIDATION_THRESHOLDS,
   validateRun,
   type RunValidationThresholds,
   type WorkerValidationInput,
 } from './domain/run-validation';
 import { PayrollConfigService } from './payroll-config.service';
+import { StatutoryRulePacksService } from './statutory-rule-packs.service';
+import { PayslipsService } from './payslips.service';
+import { ExpenseClaimsService } from './expense-claims.service';
 import {
   ApprovePayrollRunDto as ApproveDto,
   CreatePayrollRunDto as CreateDto,
@@ -143,6 +150,9 @@ export class PayrollRunsService {
     private readonly leaveRequests: LeaveRequestsService,
     private readonly attendance: AttendanceService,
     private readonly config: PayrollConfigService,
+    private readonly statutory: StatutoryRulePacksService,
+    private readonly payslips: PayslipsService,
+    private readonly expenseClaims: ExpenseClaimsService,
   ) {}
 
   // ── Read ───────────────────────────────────────────────────────────────────
@@ -310,7 +320,7 @@ export class PayrollRunsService {
         }),
         tx.organisation.findUnique({
           where: { id: run.organisationId },
-          select: { currency: true },
+          select: { currency: true, country: true },
         }),
       ]);
 
@@ -321,6 +331,28 @@ export class PayrollRunsService {
           (w.endDate == null || w.endDate.getTime() >= periodStart.getTime()),
       );
       const workerIds = eligible.map((w) => w.id);
+
+      // M3a: the org's effective statutory pack for this country + period.
+      // Never invented — null when the org has configured none.
+      const statutoryRules: StatutoryRule[] =
+        (org?.country
+          ? await this.statutory.activePackFor(
+              tx,
+              run.organisationId,
+              org.country,
+              periodEnd,
+            )
+          : null) ?? [];
+
+      // M3d: fold finance-approved reimbursements into this run as earnings.
+      const reimbursementsByWorker =
+        await this.expenseClaims.consumeApprovedForRun(
+          tx,
+          { id: run.id, organisationId: run.organisationId },
+          workerIds,
+          periodEnd,
+        );
+      const employerCostsByWorker = new Map<string, number>();
 
       const [leaveByWorker, absenceByWorker] = await Promise.all([
         this.leaveRequests.leaveForPayroll({
@@ -416,9 +448,55 @@ export class PayrollRunsService {
           recurring: recurringByWorker.get(worker.id) ?? [],
         });
 
-        totals.gross += result.grossMinorUnits;
-        totals.deductions += result.deductionsMinorUnits;
-        totals.net += result.netMinorUnits;
+        // M3d: finance-approved reimbursements for this worker are extra
+        // earnings folded into the run.
+        for (const reimbursement of reimbursementsByWorker.get(worker.id) ?? []) {
+          result.lines.push({
+            itemType: 'REIMBURSEMENT',
+            description: reimbursement.description,
+            amountMinorUnits: reimbursement.amountMinorUnits,
+          });
+        }
+
+        // M3a: apply the statutory pack (rules-as-data). The base for banded
+        // rules is the gross of earnings *before* statutory lines.
+        if (statutoryRules.length > 0) {
+          const grossBeforeStatutory = result.lines
+            .filter((l) => l.amountMinorUnits > 0)
+            .reduce((sum, l) => sum + l.amountMinorUnits, 0);
+          const basicSalary = result.lines
+            .filter((l) => l.itemType === 'BASIC_SALARY')
+            .reduce((sum, l) => sum + l.amountMinorUnits, 0);
+          const applied = applyStatutoryToWorker(
+            worker.id,
+            {
+              workerId: worker.id,
+              grossMinorUnits: grossBeforeStatutory,
+              basicSalaryMinorUnits: basicSalary,
+            },
+            statutoryRules,
+          );
+          for (const line of applied.lines) {
+            // Employee-side lines reduce net; employer-side lines are a cost,
+            // tracked separately and not part of the worker's pay lines.
+            if (line.amountMinorUnits < 0) {
+              result.lines.push({
+                itemType: line.itemType as RunItemType,
+                description: line.description,
+                amountMinorUnits: line.amountMinorUnits,
+              });
+            }
+          }
+          if (applied.employerMinorUnits > 0) {
+            employerCostsByWorker.set(worker.id, applied.employerMinorUnits);
+          }
+        }
+
+        // Recompute footer totals from the final line set so they reconcile.
+        const folded = foldWorkerLines(worker.id, result.lines);
+        totals.gross += folded.grossMinorUnits;
+        totals.deductions += folded.deductionsMinorUnits;
+        totals.net += folded.netMinorUnits;
 
         for (const line of result.lines) {
           itemRows.push({
@@ -960,6 +1038,45 @@ export class PayrollRunsService {
         throw new ConflictException('Payments already exist for this run');
       }
 
+      // M3a: recompute employer-side statutory costs for the payslips (these
+      // are a workforce cost, not a pay line, so they are not stored as items).
+      const org = await tx.organisation.findUnique({
+        where: { id: run.organisationId },
+        select: { country: true },
+      });
+      const statutoryRules: StatutoryRule[] =
+        (org?.country
+          ? await this.statutory.activePackFor(
+              tx,
+              run.organisationId,
+              org.country,
+              run.periodEnd,
+            )
+          : null) ?? [];
+      const employerCostsByWorker = new Map<string, number>();
+      if (statutoryRules.length > 0) {
+        for (const [workerId, lines] of byWorker) {
+          const gross = lines
+            .filter((l) => l.amountMinorUnits > 0)
+            .reduce((sum, l) => sum + l.amountMinorUnits, 0);
+          const basicSalary = lines
+            .filter((l) => l.itemType === 'BASIC_SALARY')
+            .reduce((sum, l) => sum + l.amountMinorUnits, 0);
+          const applied = applyStatutoryToWorker(
+            workerId,
+            {
+              workerId,
+              grossMinorUnits: gross,
+              basicSalaryMinorUnits: basicSalary,
+            },
+            statutoryRules,
+          );
+          if (applied.employerMinorUnits > 0) {
+            employerCostsByWorker.set(workerId, applied.employerMinorUnits);
+          }
+        }
+      }
+
       let paymentsCreated = 0;
       let totalPaid = 0;
       for (const [workerId, lines] of byWorker) {
@@ -981,6 +1098,22 @@ export class PayrollRunsService {
         totalPaid += folded.netMinorUnits;
       }
 
+      // M3b: freeze one payslip per worker from the run's item lines.
+      const periodLabel = this.periodLabel(run.periodStart, run.periodEnd);
+      const payslipsCreated = await this.payslips.generateForRun(
+        tx,
+        {
+          id: run.id,
+          organisationId: run.organisationId,
+          periodStart: run.periodStart,
+          periodEnd: run.periodEnd,
+          currency: run.currency,
+        },
+        byWorker,
+        employerCostsByWorker,
+        periodLabel,
+      );
+
       const updated = await tx.payrollRun.update({
         where: { id: run.id },
         data: { status: 'PROCESSED' },
@@ -989,7 +1122,7 @@ export class PayrollRunsService {
         action: AuditAction.PAYROLL_RUN_PROCESSED,
         targetType: 'payroll_run',
         targetId: run.id,
-        newValue: { paymentsCreated, totalPaidMinorUnits: totalPaid },
+        newValue: { paymentsCreated, totalPaidMinorUnits: totalPaid, payslipsCreated },
       });
       return {
         run: toPayrollRun(updated),
@@ -1090,6 +1223,23 @@ export class PayrollRunsService {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /** Human pay-period label, e.g. "September 2026". */
+  private periodLabel(periodStart: Date, periodEnd: Date): string {
+    const start = periodStart.toISOString().slice(0, 10);
+    const end = periodEnd.toISOString().slice(0, 10);
+    const sameMonth =
+      periodStart.getUTCFullYear() === periodEnd.getUTCFullYear() &&
+      periodStart.getUTCMonth() === periodEnd.getUTCMonth();
+    if (sameMonth) {
+      const month = periodStart.toLocaleString('en-US', {
+        month: 'long',
+        timeZone: 'UTC',
+      });
+      return `${month} ${periodStart.getUTCFullYear()}`;
+    }
+    return `${start} – ${end}`;
+  }
 
   private async loadRun(
     tx: Prisma.TransactionClient,

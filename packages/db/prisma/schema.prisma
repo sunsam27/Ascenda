@@ -183,6 +183,24 @@ enum PayItemCalculation {
   PERCENTAGE
 }
 
+/// Reimbursement (PAY-14) lifecycle: submit → manager review → finance
+/// approval → folded into a payroll run (PAID).
+enum ExpenseClaimStatus {
+  SUBMITTED
+  MANAGER_APPROVED
+  MANAGER_REJECTED
+  FINANCE_APPROVED
+  FINANCE_REJECTED
+  PAID
+  CANCELLED
+}
+
+/// Where an expense claim sits in its approval chain. Data-driven per org.
+enum ExpenseClaimApprovalRole {
+  MANAGER
+  FINANCE_APPROVER
+}
+
 enum PaymentStatus {
   PENDING
   PROCESSING
@@ -247,6 +265,12 @@ enum AuditAction {
   PAYROLL_CONFIG_CHANGED
   PAYMENT_APPROVED
   PAYMENT_STATUS_CHANGED
+  PAYSLIP_GENERATED
+  PAYSLIP_ACCESSED
+  PAYMENTS_EXPORTED
+  STATUTORY_RULE_PACK_CHANGED
+  EXPENSE_CLAIM_CREATED
+  EXPENSE_CLAIM_STATUS_CHANGED
   EXPORT_CREATED
   RESTRICTED_FIELD_ACCESSED
   SUPPORT_ACCESS
@@ -380,6 +404,8 @@ model Organisation {
   blackoutPeriods      BlackoutPeriod[]
   approvalWorkflows    ApprovalWorkflow[]
   payments             Payment[]
+  payslips             Payslip[]
+  expenseClaims        ExpenseClaim[]
   documents            Document[]
   auditLogs            AuditLog[]
   statutoryRulePacks   StatutoryRulePack[]
@@ -474,6 +500,8 @@ model Worker {
   payrollItems        PayrollItem[]
   recurringPayItems   RecurringPayItem[]
   payments            Payment[]
+  payslips            Payslip[]
+  expenseClaims       ExpenseClaim[]
   documents           Document[]
   workerIdentity      WorkerIdentity?
 
@@ -777,6 +805,7 @@ model PayrollRun {
   payCalendar  PayCalendar   @relation(fields: [payCalendarId], references: [id])
   items        PayrollItem[]
   payments     Payment[]
+  payslips     Payslip[]
   approvals    PayrollRunApproval[]
 
   @@index([organisationId])
@@ -901,6 +930,10 @@ model StatutoryRulePack {
   validFrom      DateTime
   validTo        DateTime?
   isActive       Boolean  @default(true)
+  /// LOC-03: false until a qualified professional has validated this pack.
+  validated      Boolean  @default(false)
+  validatedBy    String?
+  validatedAt    DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   createdBy      String
@@ -936,6 +969,83 @@ model Payment {
   @@index([organisationId])
   @@index([workerId, status])
   @@map("payments")
+}
+
+// ─── Payslips (PAY-13) ───────────────────────────────────────────────────────
+
+/// One payslip per worker per processed run. Totals equal the sum of the run's
+/// item lines for that worker. The PDF itself is rendered on demand; this row
+/// is the immutable record of what was paid and when.
+model Payslip {
+  id                 String   @id @default(uuid())
+  organisationId     String
+  payrollRunId       String
+  workerId           String
+  /// Pay-period label, e.g. "September 2026".
+  periodLabel        String
+  periodStart        DateTime
+  periodEnd          DateTime
+  currency           String
+  grossMinorUnits    Int
+  deductionsMinorUnits Int    @default(0)
+  employerCostsMinorUnits Int  @default(0)
+  netMinorUnits      Int
+  /// Frozen line items (earnings + deductions) as printed on the document.
+  lines              Json     @default("[]")
+  /// When the payslip became available to the worker (email notification sent).
+  availableAt        DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  payrollRun   PayrollRun   @relation(fields: [payrollRunId], references: [id])
+  worker       Worker       @relation(fields: [workerId], references: [id])
+
+  @@unique([payrollRunId, workerId])
+  @@index([organisationId])
+  @@index([workerId])
+  @@map("payslips")
+}
+
+// ─── Reimbursements (PAY-14) ─────────────────────────────────────────────────
+
+/// Reimbursement / expense claim. Flows: SUBMITTED → MANAGER_APPROVED →
+/// FINANCE_APPROVED → folded into the next run (PAID). Amounts are positive
+/// integer minor units; a receipt is stored as a document reference/URL.
+model ExpenseClaim {
+  id               String               @id @default(uuid())
+  organisationId   String
+  workerId         String
+  /// REIMBURSEMENT | EXPENSE | TRAVEL | ... (org-defined label, free text).
+  type             String
+  description      String
+  /// Positive integer minor units.
+  amountMinorUnits Int
+  currency         String
+  /// Receipt reference (uploaded document id or external URL).
+  receiptUrl       String?
+  status           ExpenseClaimStatus   @default(SUBMITTED)
+  /// Whoever approved/rejected the current step.
+  managerDecidedById  String?
+  managerDecidedAt    DateTime?
+  managerComment      String?
+  financeDecidedById  String?
+  financeDecidedAt    DateTime?
+  financeComment      String?
+  /// Set when the claim is attached to a payroll run as a reimbursement line.
+  paidPayrollRunId String?
+  paidAt           DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  createdBy        String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  worker       Worker       @relation(fields: [workerId], references: [id])
+
+  @@index([organisationId])
+  @@index([organisationId, status])
+  @@index([workerId, status])
+  @@map("expense_claims")
 }
 
 // ─── Approvals ───────────────────────────────────────────────────────────────

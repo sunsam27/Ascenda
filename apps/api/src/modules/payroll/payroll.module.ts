@@ -12,6 +12,12 @@ import { PayrollRunsController } from './payroll-runs.controller';
 import { PayrollRunsService } from './payroll-runs.service';
 import { PayrollConfigController } from './payroll-config.controller';
 import { PayrollConfigService } from './payroll-config.service';
+import { StatutoryRulePacksController } from './statutory-rule-packs.controller';
+import { StatutoryRulePacksService } from './statutory-rule-packs.service';
+import { PayslipsController } from './payslips.controller';
+import { PayslipsService } from './payslips.service';
+import { ExpenseClaimsController } from './expense-claims.controller';
+import { ExpenseClaimsService } from './expense-claims.service';
 
 @Module({
   imports: [AuditModule, PeopleModule, TimeLeaveModule],
@@ -21,6 +27,9 @@ import { PayrollConfigService } from './payroll-config.service';
     RecurringPayItemsController,
     PayrollRunsController,
     PayrollConfigController,
+    StatutoryRulePacksController,
+    PayslipsController,
+    ExpenseClaimsController,
   ],
   providers: [
     PayrollService,
@@ -28,6 +37,9 @@ import { PayrollConfigService } from './payroll-config.service';
     RecurringPayItemsService,
     PayrollRunsService,
     PayrollConfigService,
+    StatutoryRulePacksService,
+    PayslipsService,
+    ExpenseClaimsService,
   ],
   exports: [
     PayrollService,
@@ -35,6 +47,9 @@ import { PayrollConfigService } from './payroll-config.service';
     RecurringPayItemsService,
     PayrollRunsService,
     PayrollConfigService,
+    StatutoryRulePacksService,
+    PayslipsService,
+    ExpenseClaimsService,
   ],
 })
 export class PayrollModule {}

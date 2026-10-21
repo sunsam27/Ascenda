@@ -19,11 +19,15 @@
 | PAY-09 | ✅ done | Item overrides require a reason and are audit-logged (`PAYROLL_ITEM_OVERRIDDEN`) |
 | PAY-10 | ✅ done | Configurable thresholds (salary-change %, deduction ratio bps, bank requirement); warnings ack-gated before approval |
 | PAY-11 | ✅ done | Configurable approval chain snapshotted on submit; preparer can never approve; OWNER overrides any step |
-| PAY-12 | ⏳ next | Payslips + statutory rule-pack engine (M3) |
+| LOC-02 | ✅ done | Statutory rule packs are organisation-configured DATA (rules-as-data), effective-dated, never invented here |
+| LOC-03 | ✅ done | Packs are flagged "not validated by a professional" until an admin marks them validated; edits clear the flag |
+| PAY-12 | 🟡 partial | Statutory rule-pack engine (M3a) + bank-upload payment file export (M3c) done; multi-currency/FX (PAY-15) deferred |
+| PAY-13 | ✅ done | Immutable per-worker payslip generated at `process`, private PDF download, self-service scoped + audited (M3b) |
+| PAY-14 | ✅ done | Reimbursements: submit → manager → finance → folded into the next run as a `REIMBURSEMENT` earning (M3d) |
 
-Statutory rules, payslip generation/delivery, reimbursements and bank-file
-export are explicitly deferred to M3 — the run engine stops at creating
-per-worker `Payment` rows.
+Deferred beyond M3 (P1/P2): PAY-15 multi-currency + FX, PAY-16 year-end
+statements / remittance schedules, PAY-17 automated bank payments / loans /
+benefits.
 
 ## Interfaces
 Modules communicate through explicit interfaces — never by accessing another
@@ -42,13 +46,29 @@ module's tables directly. The payroll preview reads:
   `foldWorkerLines`, `reverseLines`, `componentItemType`). `PAY-05`
 - `domain/run-validation.ts` — pre-approval validation report
   (`validateRun`, defaults). `PAY-08`/`PAY-10`
+- `domain/statutory.ts` — pure statutory engine: effective-dated rule packs,
+  FLAT / PERCENT_CAPPED (floor/cap) / PERCENT_BANDS amount resolution, employee
+  lines vs employer costs, structural rule/pack validation. `LOC-02`/`LOC-03`/
+  `PAY-12`
+- `domain/payslip-pdf.ts` — payslip PDF renderer (pdfkit → `Buffer`). `PAY-13`
+- `statutory-rule-packs.controller.ts` / `statutory-rule-packs.service.ts` —
+  rule-pack CRUD + `PATCH :id/validation`; `activePackFor` resolves the
+  effective pack applied at `process`/`prepare`. `LOC-02`/`LOC-03`/`PAY-12`
+- `payslips.controller.ts` / `payslips.service.ts` — list/get/download
+  (`GET :id/pdf`) + `generateForRun` (idempotent freeze from run item lines at
+  `process`); SELF vs ORG scoping. `PAY-13`
+- `expense-claims.controller.ts` / `expense-claims.service.ts` — reimbursement
+  workflow (manager then finance decisions, separation of duties) +
+  `consumeApprovedForRun`, which folds finance-approved claims into the next run.
+  `PAY-14`
 - `payroll-runs.controller.ts` / `payroll-runs.service.ts` — run lifecycle:
   prepare/review/override/submit/approve/reject/process/lock/reverse.
   `PAY-05`…`PAY-11`
 - `payroll-config.controller.ts` / `payroll-config.service.ts` — per-org approval
   chain + validation thresholds. `PAY-10`/`PAY-11`
 - `../payments/payments.controller.ts` / `payments.service.ts` — payment listing
-  + status transitions (`PAYMENT_TRANSITIONS`). `PAY-07`
+  + status transitions (`PAYMENT_TRANSITIONS`) + bank-upload CSV export
+  (`GET /payments/export`, `domain/payment-export.ts`). `PAY-07`/`PAY-12`
 - `domain/pay-calendar.ts` — pure calendar config validation + period maths
   (`payPeriodsForYear`, cut-off state). `PAY-04`
 - `domain/recurring-pay-item.ts` — pure validation + amount resolution for
@@ -60,6 +80,8 @@ module's tables directly. The payroll preview reads:
   recurring deduction/employer-cost CRUD + list filters. `PAY-02`/`PAY-03`
 - `dto/payroll-preview-query.dto.ts` — period + worker ids.
 - `dto/pay-calendar.dto.ts` / `dto/recurring-pay-item.dto.ts` — write/query DTOs.
+- `dto/statutory-rule-pack.dto.ts` / `dto/payslip.dto.ts` /
+  `dto/expense-claim.dto.ts` — M3 write/query DTOs.
 
 Pay-structure component maths live with People:
 - `../people/domain/pay-structure.ts` — component validation, sum invariant,
@@ -83,3 +105,21 @@ Pay-structure component maths live with People:
 - E2E: `node --env-file=packages\db\.env apps\api\test\e2e\phase3-m2-payroll-runs.cjs`
   (54 checks over PAY-05..PAY-11: prepare/validate/override/submit/approve/
   process/lock/reverse, warnings ack flow, multi-step chain, guards + audits).
+- E2E: `node --env-file=packages\db\.env apps\api\test\e2e\phase3-m3-statutory-payslips.cjs`
+  (37 checks over M3a..M3d: rule-pack CRUD/validation/effectivity, statutory
+  lines applied at `prepare`, payslip generation + PDF at `process`, payment
+  CSV export, reimbursement approval flow, self-service scoping, audits + auth).
+
+## M3 boundaries (documented product decisions)
+- Statutory rule packs start **empty** — admins author them; the code never
+  invents country rates (CLAUDE.md). A pack applied by a run is flagged as not
+  yet "validated by a professional" until an admin marks it.
+- Employee statutory lines become `payroll_item` deduction lines; employer-side
+  statutory costs are **not** persisted as item lines (they would corrupt the
+  `foldWorkerLines` net maths) — they are recomputed at `process` and stored on
+  the payslip's `employerCostsMinorUnits`.
+- The payment-export CSV contains a **masked** account number only; raw account
+  numbers are envelope-encrypted at rest and are never decrypted by API code.
+- Payslips are immutable once generated (idempotent `generateForRun`); a
+  regenerated run's payslips are re-created from the run's frozen lines.
+- PDF rendering uses `pdfkit` (added in M3).

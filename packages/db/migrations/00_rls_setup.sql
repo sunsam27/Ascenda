@@ -65,7 +65,7 @@ DECLARE
     'leave_balances', 'attendance_records', 'holidays', 'blackout_periods',
     'pay_calendars',
     'payroll_runs', 'payroll_items', 'recurring_pay_items', 'statutory_rule_packs', 'payments',
-    'payroll_run_approvals', 'payroll_config',
+    'payroll_run_approvals', 'payroll_config', 'payslips', 'expense_claims',
     'approval_workflows', 'documents', 'audit_log', 'subscriptions',
     'notifications'
   ];

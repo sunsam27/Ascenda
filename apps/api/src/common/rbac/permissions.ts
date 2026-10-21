@@ -48,6 +48,9 @@ const BUSINESS_RESOURCES = [
   'bank_accounts',
   'payroll',
   'payments',
+  'payslips',
+  'statutory_rule_packs',
+  'expense_claims',
   'documents',
   'approvals',
   'analytics',
@@ -77,6 +80,13 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
   [SystemRole.PAYROLL_ADMINISTRATOR]: [
     ...perm('payroll', ['read', 'create', 'update'], PermissionScope.ORGANISATION),
     ...perm('payments', ['read', 'create', 'update'], PermissionScope.ORGANISATION),
+    ...perm('payslips', READ, PermissionScope.ORGANISATION),
+    ...perm(
+      'statutory_rule_packs',
+      ['read', 'create', 'update'],
+      PermissionScope.ORGANISATION,
+    ),
+    ...perm('expense_claims', ['read', 'create', 'update'], PermissionScope.ORGANISATION),
     ...perm('compensation', CRUD, PermissionScope.ORGANISATION),
     ...perm('bank_accounts', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.ORGANISATION),
@@ -85,6 +95,9 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
   [SystemRole.FINANCE_APPROVER]: [
     ...perm('payroll', ['read', 'approve', 'export'], PermissionScope.ORGANISATION),
     ...perm('payments', ['read', 'approve', 'export'], PermissionScope.ORGANISATION),
+    ...perm('payslips', READ, PermissionScope.ORGANISATION),
+    ...perm('statutory_rule_packs', READ, PermissionScope.ORGANISATION),
+    ...perm('expense_claims', ['read', 'approve'], PermissionScope.ORGANISATION),
     ...perm('compensation', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.ORGANISATION),
   ],
@@ -102,6 +115,8 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('holidays', READ, PermissionScope.ORGANISATION),
     ...perm('blackout_periods', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.TEAM),
+    ...perm('expense_claims', ['read', 'approve'], PermissionScope.TEAM),
+    ...perm('expense_claims', ['create'], PermissionScope.SELF),
   ],
 
   [SystemRole.EMPLOYEE_SELF]: [
@@ -111,6 +126,8 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('holidays', READ, PermissionScope.ORGANISATION),
     ...perm('blackout_periods', READ, PermissionScope.ORGANISATION),
     ...perm('documents', READ, PermissionScope.SELF),
+    ...perm('payslips', READ, PermissionScope.SELF),
+    ...perm('expense_claims', ['read', 'create'], PermissionScope.SELF),
   ],
 
   [SystemRole.VOLUNTEER_SELF]: [
@@ -120,6 +137,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('holidays', READ, PermissionScope.ORGANISATION),
     ...perm('blackout_periods', READ, PermissionScope.ORGANISATION),
     ...perm('documents', READ, PermissionScope.SELF),
+    ...perm('payslips', READ, PermissionScope.SELF),
   ],
 
   [SystemRole.AUDITOR]: [

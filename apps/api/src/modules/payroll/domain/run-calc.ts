@@ -21,7 +21,8 @@ export type RunItemType =
   | 'ALLOWANCE'
   | 'DEDUCTION'
   | 'TAX'
-  | 'EMPLOYEE_PENSION';
+  | 'EMPLOYEE_PENSION'
+  | 'REIMBURSEMENT';
 
 export interface RunComponentInput {
   /** Stable machine code, e.g. `BASIC_SALARY`, `HOUSING_ALLOWANCE`. */

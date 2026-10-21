@@ -10,7 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { PaymentStatus } from '@ascenda/types';
+import { PaymentExportFormat, PaymentStatus } from '@ascenda/types';
 
 /** Statuses a payment may be moved to. The service enforces the matrix. */
 export const PAYMENT_STATUS_ACTIONS: Array<'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REVERSED'> = [
@@ -56,4 +56,18 @@ export class ListPaymentsQueryDto {
   @Min(1)
   @Max(200)
   pageSize: number = 50;
+}
+
+export class ExportPaymentsQueryDto {
+  @IsOptional()
+  @IsUUID()
+  payrollRunId?: string;
+
+  @IsOptional()
+  @IsEnum(PaymentStatus)
+  status?: PaymentStatus;
+
+  @IsOptional()
+  @IsEnum(PaymentExportFormat)
+  format: PaymentExportFormat = PaymentExportFormat.CSV;
 }

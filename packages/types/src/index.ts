@@ -200,6 +200,92 @@ export enum PaymentStatus {
   REVERSED = 'REVERSED',
 }
 
+// ── Payslips (PAY-13) ─────────────────────────────────────────────────────────
+
+/** One printable pay line frozen onto a payslip. */
+export interface PayslipLine {
+  type: PayrollItemType;
+  description: string;
+  /** Positive for earnings, negative for deductions (integer minor units). */
+  amountMinorUnits: number;
+}
+
+export interface Payslip extends TenantEntity {
+  payrollRunId: string;
+  workerId: string;
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  currency: string;
+  grossMinorUnits: number;
+  deductionsMinorUnits: number;
+  employerCostsMinorUnits: number;
+  netMinorUnits: number;
+  lines: PayslipLine[];
+  availableAt: string;
+}
+
+export interface PayslipListQuery extends PaginatedQuery {
+  payrollRunId?: string;
+  workerId?: string;
+}
+
+// ── Reimbursements (PAY-14) ───────────────────────────────────────────────────
+
+export enum ExpenseClaimStatus {
+  SUBMITTED = 'SUBMITTED',
+  MANAGER_APPROVED = 'MANAGER_APPROVED',
+  MANAGER_REJECTED = 'MANAGER_REJECTED',
+  FINANCE_APPROVED = 'FINANCE_APPROVED',
+  FINANCE_REJECTED = 'FINANCE_REJECTED',
+  PAID = 'PAID',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum ExpenseClaimApprovalRole {
+  MANAGER = 'MANAGER',
+  FINANCE_APPROVER = 'FINANCE_APPROVER',
+}
+
+export interface ExpenseClaim extends TenantEntity {
+  workerId: string;
+  type: string;
+  description: string;
+  /** Positive integer minor units. */
+  amountMinorUnits: number;
+  currency: string;
+  receiptUrl?: string;
+  status: ExpenseClaimStatus;
+  managerDecidedById?: string;
+  managerDecidedAt?: string;
+  managerComment?: string;
+  financeDecidedById?: string;
+  financeDecidedAt?: string;
+  financeComment?: string;
+  paidPayrollRunId?: string;
+  paidAt?: string;
+  createdBy: string;
+}
+
+export interface CreateExpenseClaimDto {
+  workerId: string;
+  type: string;
+  description: string;
+  /** Positive integer minor units. */
+  amountMinorUnits: number;
+  receiptUrl?: string | null;
+}
+
+export interface DecideExpenseClaimDto {
+  decision: 'APPROVE' | 'REJECT';
+  comment?: string | null;
+}
+
+export interface ExpenseClaimListQuery extends PaginatedQuery {
+  workerId?: string;
+  status?: ExpenseClaimStatus;
+}
+
 // ── Approvals ─────────────────────────────────────────────────────────────────
 
 export enum ApprovalStatus {
@@ -260,6 +346,12 @@ export enum AuditAction {
   PAYROLL_CONFIG_CHANGED = 'PAYROLL_CONFIG_CHANGED',
   PAYMENT_APPROVED = 'PAYMENT_APPROVED',
   PAYMENT_STATUS_CHANGED = 'PAYMENT_STATUS_CHANGED',
+  PAYSLIP_GENERATED = 'PAYSLIP_GENERATED',
+  PAYSLIP_ACCESSED = 'PAYSLIP_ACCESSED',
+  PAYMENTS_EXPORTED = 'PAYMENTS_EXPORTED',
+  STATUTORY_RULE_PACK_CHANGED = 'STATUTORY_RULE_PACK_CHANGED',
+  EXPENSE_CLAIM_CREATED = 'EXPENSE_CLAIM_CREATED',
+  EXPENSE_CLAIM_STATUS_CHANGED = 'EXPENSE_CLAIM_STATUS_CHANGED',
   EXPORT_CREATED = 'EXPORT_CREATED',
   RESTRICTED_FIELD_ACCESSED = 'RESTRICTED_FIELD_ACCESSED',
   SUPPORT_ACCESS = 'SUPPORT_ACCESS',
@@ -1039,6 +1131,97 @@ export interface Payment extends TenantEntity {
   reference: string;
   description: string;
   processedAt?: string;
+}
+
+// ── Payment file export (PAY-12) ──────────────────────────────────────────────
+
+/** Bank-upload formats. Generic CSV is the only built-in format for now. */
+export enum PaymentExportFormat {
+  CSV = 'CSV',
+}
+
+export interface PaymentExportQuery {
+  payrollRunId?: string;
+  status?: PaymentStatus;
+  format?: PaymentExportFormat;
+}
+
+// ── Statutory rule packs (LOC-02 / LOC-03) ────────────────────────────────────
+
+/**
+ * Rule kinds the (data-driven) engine understands. Values are NEVER invented by
+ * the codebase — every number comes from the org-supplied pack.
+ */
+export type StatutoryRuleKind = 'PERCENT_BANDS' | 'FLAT' | 'PERCENT_CAPPED';
+
+/** Which base a rule applies to. */
+export type StatutoryRuleBase = 'GROSS' | 'BASIC_SALARY' | 'TAXABLE' | 'PENSIONABLE';
+
+/** Who bears the cost. */
+export type StatutoryRuleSide = 'EMPLOYEE' | 'EMPLOYER';
+
+/** Item types a statutory rule may produce. */
+export type StatutoryItemType =
+  | 'DEDUCTION'
+  | 'TAX'
+  | 'EMPLOYEE_PENSION'
+  | 'EMPLOYER_PENSION';
+
+export interface StatutoryBand {
+  /** Lower bound (inclusive) of the band, in integer minor units. */
+  upToMinorUnits: number | null;
+  /** Rate in basis points applied to the slice inside this band. */
+  rateBps: number;
+}
+
+export interface StatutoryRule {
+  /** Stable key within the pack, e.g. "PAYE". */
+  code: string;
+  label: string;
+  kind: StatutoryRuleKind;
+  base: StatutoryRuleBase;
+  side: StatutoryRuleSide;
+  /** The payroll item type this rule produces. */
+  itemType: StatutoryItemType;
+  /** PERCENT_BANDS: ordered bands. */
+  bands?: StatutoryBand[];
+  /** FLAT: fixed integer minor units. */
+  amountMinorUnits?: number;
+  /** PERCENT_CAPPED: rate in basis points + optional cap on the computed amount. */
+  rateBps?: number;
+  capMinorUnits?: number | null;
+  /** Optional floor/base for PERCENT_CAPPED, in integer minor units. */
+  baseFloorMinorUnits?: number | null;
+}
+
+export interface StatutoryRulePack extends TenantEntity {
+  country: string;
+  version: string;
+  rules: StatutoryRule[];
+  validFrom: string;
+  validTo?: string;
+  isActive: boolean;
+  /** LOC-03: true once a qualified professional has validated this pack. */
+  validated: boolean;
+  validatedBy?: string;
+  validatedAt?: string;
+  createdBy: string;
+}
+
+export interface CreateStatutoryRulePackDto {
+  country: string;
+  version: string;
+  rules: StatutoryRule[];
+  validFrom: string;
+  validTo?: string | null;
+  isActive?: boolean;
+}
+
+export type UpdateStatutoryRulePackDto = Partial<CreateStatutoryRulePackDto>;
+
+export interface StatutoryRulePackListQuery extends PaginatedQuery {
+  country?: string;
+  active?: boolean;
 }
 
 export interface ApprovalWorkflow extends TenantEntity {

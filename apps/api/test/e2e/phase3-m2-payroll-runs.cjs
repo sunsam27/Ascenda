@@ -164,6 +164,16 @@ async function main() {
       [orgId],
     );
     await db.query(
+      `DELETE FROM payslips WHERE "payrollRunId" IN (
+         SELECT id FROM payroll_runs WHERE "organisationId" = $1 AND notes LIKE 'M2 e2e %')`,
+      [orgId],
+    );
+    await db.query(
+      `DELETE FROM payslips WHERE "workerId" IN (
+         SELECT id FROM workers WHERE "organisationId" = $1 AND "employeeNumber" LIKE 'M2-%')`,
+      [orgId],
+    );
+    await db.query(
       `DELETE FROM payroll_items WHERE "payrollRunId" IN (
          SELECT id FROM payroll_runs WHERE "organisationId" = $1 AND notes LIKE 'M2 e2e %')`,
       [orgId],
@@ -711,6 +721,7 @@ async function main() {
       const runIds = cleanup.runIds.filter(Boolean);
       const workerIds = cleanup.workerIds.filter(Boolean);
       if (runIds.length) {
+        await db.query(`DELETE FROM payslips WHERE "payrollRunId" = ANY($1)`, [runIds]);
         await db.query(`DELETE FROM payments WHERE "payrollRunId" = ANY($1)`, [runIds]);
         await db.query(`DELETE FROM payroll_items WHERE "payrollRunId" = ANY($1)`, [runIds]);
         await db.query(`DELETE FROM payroll_run_approvals WHERE "payrollRunId" = ANY($1)`, [runIds]);

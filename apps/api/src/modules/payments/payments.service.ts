@@ -7,14 +7,16 @@ import {
 } from '@nestjs/common';
 import { AuditAction, Prisma } from '@ascenda/db';
 import type { Payment, PaymentStatus } from '@ascenda/types';
-import { PaymentStatus as Status } from '@ascenda/types';
+import { PaymentExportFormat, PaymentStatus as Status } from '@ascenda/types';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { getRequestContext } from '../../common/context/request-context';
 import { AuditService } from '../audit/audit.service';
 import {
+  ExportPaymentsQueryDto,
   ListPaymentsQueryDto,
   UpdatePaymentStatusDto,
 } from './dto/payment.dto';
+import { buildPaymentsCsv, type PaymentExportRow } from './domain/payment-export';
 
 type PaymentRow = Prisma.PaymentGetPayload<Record<string, never>>;
 
@@ -91,6 +93,103 @@ export class PaymentsService {
       const row = await tx.payment.findFirst({ where: { id } });
       if (!row) throw new NotFoundException('Payment not found');
       return toPayment(row);
+    });
+  }
+
+  /**
+   * PAY-12: build a bank-upload payment file. Read-only over payments, joined
+   * to each worker's primary bank account and name. The export itself is
+   * audit-logged (PAYMENTS_EXPORTED) as a sensitive data release.
+   */
+  async export(
+    query: ExportPaymentsQueryDto,
+  ): Promise<{ filename: string; contentType: string; content: string }> {
+    this.requireContext();
+    const format = query.format ?? PaymentExportFormat.CSV;
+    return this.prisma.withRequestContext(async (tx) => {
+      const where: Prisma.PaymentWhereInput = {
+        ...(query.payrollRunId ? { payrollRunId: query.payrollRunId } : {}),
+        ...(query.status ? { status: query.status } : {}),
+      };
+      const payments = await tx.payment.findMany({
+        where,
+        orderBy: { createdAt: 'asc' },
+      });
+
+      const workerIds = [...new Set(payments.map((p) => p.workerId))];
+      const workers = await tx.worker.findMany({
+        where: { id: { in: workerIds } },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          preferredName: true,
+        },
+      });
+      const workerName = new Map(
+        workers.map((w) => [
+          w.id,
+          w.preferredName?.trim() || `${w.firstName} ${w.lastName}`.trim(),
+        ]),
+      );
+
+      const accounts = await tx.bankAccount.findMany({
+        where: { workerId: { in: workerIds } },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        select: {
+          workerId: true,
+          bankName: true,
+          bankCode: true,
+          accountNumberMasked: true,
+          accountName: true,
+        },
+      });
+      const accountByWorker = new Map<
+        string,
+        (typeof accounts)[number]
+      >();
+      for (const account of accounts) {
+        if (!accountByWorker.has(account.workerId)) {
+          accountByWorker.set(account.workerId, account);
+        }
+      }
+
+      const rows: PaymentExportRow[] = payments.map((p) => {
+        const account = accountByWorker.get(p.workerId);
+        return {
+          reference: p.reference,
+          workerName: workerName.get(p.workerId) ?? '',
+          accountName: account?.accountName ?? workerName.get(p.workerId) ?? '',
+          bankName: account?.bankName ?? '',
+          bankCode: account?.bankCode ?? '',
+          accountNumberMasked: account?.accountNumberMasked ?? '',
+          amountMinorUnits: p.amountMinorUnits,
+          currency: p.currency,
+          status: p.status,
+          description: p.description,
+        };
+      });
+
+      const content = buildPaymentsCsv(rows);
+
+      await this.audit.record({
+        action: AuditAction.PAYMENTS_EXPORTED,
+        targetType: 'payment_export',
+        targetId: query.payrollRunId ?? 'all',
+        newValue: {
+          format,
+          paymentCount: rows.length,
+          payrollRunId: query.payrollRunId ?? null,
+          status: query.status ?? null,
+        },
+      });
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      return {
+        filename: `payments-export-${stamp}.csv`,
+        contentType: 'text/csv; charset=utf-8',
+        content,
+      };
     });
   }
 
