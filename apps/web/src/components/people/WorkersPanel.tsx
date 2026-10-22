@@ -7,12 +7,14 @@ import {
   Mail,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Upload,
   UserPlus,
 } from 'lucide-react';
 import {
   WorkerCategory,
+  WorkerInviteStatus,
   WorkerStatus,
   type Department,
   type Location,
@@ -170,8 +172,11 @@ export default function WorkersPanel({
   }
 
   async function invite(worker: WorkerSummary) {
+    const isResend = worker.inviteStatus === WorkerInviteStatus.PENDING;
     const ok = window.confirm(
-      `Email ${displayName(worker)} a link to set up their workspace login?`,
+      isResend
+        ? `Resend the workspace invitation to ${displayName(worker)}? Their previous link will stop working.`
+        : `Email ${displayName(worker)} a link to set up their workspace login?`,
     );
     if (!ok) return;
     setInvitingId(worker.id);
@@ -179,15 +184,21 @@ export default function WorkersPanel({
     setNotice('');
     try {
       const { data } = await api.post<{ data: WorkerInviteResult }>(
-        `/workers/${worker.id}/invite`,
+        isResend
+          ? `/workers/${worker.id}/invite/resend`
+          : `/workers/${worker.id}/invite`,
       );
       setWorkers((prev) =>
-        prev.map((w) => (w.id === worker.id ? { ...w, hasLogin: true } : w)),
+        prev.map((w) =>
+          w.id === worker.id
+            ? { ...w, hasLogin: true, inviteStatus: WorkerInviteStatus.PENDING }
+            : w,
+        ),
       );
       setNotice(
         data.data.emailSent
-          ? `Invitation sent to ${data.data.email}.`
-          : `Invitation created for ${data.data.email}. Email delivery is not configured here, so the link was written to the API log.`,
+          ? `${isResend ? 'Invitation resent' : 'Invitation sent'} to ${data.data.email}.`
+          : `${isResend ? 'Invitation recreated' : 'Invitation created'} for ${data.data.email}. Email delivery is not configured here, so the link was written to the API log.`,
       );
     } catch (err) {
       setActionError(
@@ -334,7 +345,12 @@ export default function WorkersPanel({
                         </span>
                         <span className={styles.nameMeta}>
                           {worker.employeeNumber} · {worker.email}
-                          {worker.hasLogin && (
+                          {worker.inviteStatus ===
+                            WorkerInviteStatus.PENDING && (
+                            <span className={styles.badgePending}>Invited</span>
+                          )}
+                          {worker.inviteStatus ===
+                            WorkerInviteStatus.ACCEPTED && (
                             <span className={styles.badgeLogin}>Login</span>
                           )}
                         </span>
@@ -370,18 +386,29 @@ export default function WorkersPanel({
                       >
                         <Pencil size={15} strokeWidth={2} />
                       </button>
-                      {!worker.hasLogin &&
+                      {worker.inviteStatus !== WorkerInviteStatus.ACCEPTED &&
                         worker.status !== WorkerStatus.TERMINATED && (
                           <button
                             type="button"
                             className={styles.iconButton}
                             onClick={() => invite(worker)}
                             disabled={invitingId === worker.id}
-                            aria-label={`Invite ${displayName(worker)} to the workspace`}
-                            title="Invite to workspace login"
+                            aria-label={
+                              worker.inviteStatus === WorkerInviteStatus.PENDING
+                                ? `Resend the workspace invitation to ${displayName(worker)}`
+                                : `Invite ${displayName(worker)} to the workspace`
+                            }
+                            title={
+                              worker.inviteStatus === WorkerInviteStatus.PENDING
+                                ? 'Resend invite'
+                                : 'Invite to workspace login'
+                            }
                           >
                             {invitingId === worker.id ? (
                               <Loader2 className={styles.spin} size={15} />
+                            ) : worker.inviteStatus ===
+                              WorkerInviteStatus.PENDING ? (
+                              <RefreshCw size={15} strokeWidth={2} />
                             ) : (
                               <Mail size={15} strokeWidth={2} />
                             )}

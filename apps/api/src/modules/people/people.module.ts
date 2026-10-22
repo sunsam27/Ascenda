@@ -9,6 +9,8 @@ import { LocationsController } from './locations.controller';
 import { LocationsService } from './locations.service';
 import { CompensationController } from './compensation.controller';
 import { CompensationService } from './compensation.service';
+import { BankAccountsController, BankLookupController } from './bank-accounts.controller';
+import { BankAccountsService } from './bank-accounts.service';
 
 @Module({
   imports: [AuditModule, IdentityAccessModule],
@@ -17,13 +19,16 @@ import { CompensationService } from './compensation.service';
     DepartmentsController,
     LocationsController,
     CompensationController,
+    BankAccountsController,
+    BankLookupController,
   ],
   providers: [
     WorkersService,
     DepartmentsService,
     LocationsService,
     CompensationService,
+    BankAccountsService,
   ],
-  exports: [WorkersService, DepartmentsService, LocationsService, CompensationService],
+  exports: [WorkersService, DepartmentsService, LocationsService, CompensationService, BankAccountsService],
 })
 export class PeopleModule {}

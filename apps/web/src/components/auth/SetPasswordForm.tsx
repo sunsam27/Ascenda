@@ -111,10 +111,17 @@ export default function SetPasswordForm() {
         axios.isAxiosError(err) && err.response?.data
           ? String((err.response.data as { message?: string }).message ?? '')
           : '';
-      setError(
-        message ||
-          'We could not set your password. The invitation may have expired — request access again.',
-      );
+      if (message) {
+        setError(message);
+      } else if (axios.isAxiosError(err) && err.response) {
+        setError(
+          `We could not set your password (server error ${err.response.status}). Please try again in a moment.`,
+        );
+      } else {
+        setError(
+          'We could not reach the server. Check your connection and try again.',
+        );
+      }
     }
   }
 
@@ -131,11 +138,13 @@ export default function SetPasswordForm() {
       <div className={styles.card}>
         <Header subtitle="Set your password" />
         <p className={styles.errorBanner} role="alert">
-          This invitation link is invalid or has expired.
+          This invitation link is invalid or has expired. If you already set your
+          password, sign in instead. Otherwise ask your workspace admin to resend
+          your invitation.
         </p>
         <p className={styles.footer}>
-          Need a workspace? <Link href="/signup">Create one</Link> or{' '}
-          <Link href="/login">sign in</Link>.
+          Already set up? <Link href="/login">Sign in</Link>. Need a workspace?{' '}
+          <Link href="/signup">Create one</Link>.
         </p>
       </div>
     );

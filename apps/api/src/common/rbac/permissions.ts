@@ -90,7 +90,9 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('remittance', ['read', 'export'], PermissionScope.ORGANISATION),
     ...perm('expense_claims', ['read', 'create', 'update'], PermissionScope.ORGANISATION),
     ...perm('compensation', CRUD, PermissionScope.ORGANISATION),
-    ...perm('bank_accounts', READ, PermissionScope.ORGANISATION),
+    // Bank details are entered by employees and corrected by payroll admins
+    // (e.g. when an account has a problem before the next pay run).
+    ...perm('bank_accounts', ['read', 'create', 'update'], PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.ORGANISATION),
   ],
 
@@ -131,6 +133,8 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('documents', READ, PermissionScope.SELF),
     ...perm('payslips', READ, PermissionScope.SELF),
     ...perm('expense_claims', ['read', 'create'], PermissionScope.SELF),
+    // Employees maintain their *own* bank account (self-service onboarding).
+    ...perm('bank_accounts', ['read', 'create', 'update'], PermissionScope.SELF),
   ],
 
   [SystemRole.VOLUNTEER_SELF]: [
@@ -141,6 +145,8 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('blackout_periods', READ, PermissionScope.ORGANISATION),
     ...perm('documents', READ, PermissionScope.SELF),
     ...perm('payslips', READ, PermissionScope.SELF),
+    // Volunteers may maintain their own bank account (e.g. stipend payouts).
+    ...perm('bank_accounts', ['read', 'create', 'update'], PermissionScope.SELF),
   ],
 
   [SystemRole.AUDITOR]: [

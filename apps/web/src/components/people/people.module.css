@@ -110,6 +110,15 @@
   background: var(--color-info-tint); color: var(--color-primary-text);
 }
 
+.badgePending {
+  display: inline-block; margin-left: var(--space-2); vertical-align: middle;
+  font-size: var(--text-overline); font-weight: var(--weight-semibold);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 1px var(--space-2); border-radius: var(--radius-pill);
+  background: var(--color-warning-tint, rgba(217, 119, 6, 0.12));
+  color: var(--color-warning-text, #b45309);
+}
+
 /* ── Pagination ────────────────────────────────────────────────────────────── */
 .pager { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 .pagerInfo { font-size: var(--text-body-sm); color: var(--color-text-muted); }

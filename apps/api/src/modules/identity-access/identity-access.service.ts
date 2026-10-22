@@ -25,6 +25,17 @@ const MIN_PASSWORD_LENGTH = 12;
 const ACCESS_TTL_SECONDS = 15 * 60; // 15 minutes
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+/**
+ * Where a signed-in member lands after auth. Self-service roles get their own
+ * dashboard (`/me`) rather than the organisation view, so employees never see
+ * other workers' data.
+ */
+export function homePathForRole(role: string | undefined | null): string {
+  return role === SystemRole.EMPLOYEE_SELF || role === SystemRole.VOLUNTEER_SELF
+    ? '/me'
+    : '/dashboard';
+}
+
 // TODO: Integrate with Have I Been Pwned API or local breached-password list
 async function isBreachedPassword(_password: string): Promise<boolean> {
   return false;
@@ -133,7 +144,11 @@ export class IdentityAccessService {
 
     this.logger.log(`User ${user.email} signed in`);
 
-    return { ...tokens, user, redirectTo: '/dashboard' };
+    return {
+      ...tokens,
+      user,
+      redirectTo: homePathForRole(membership?.role),
+    };
   }
 
   /**
@@ -199,7 +214,7 @@ export class IdentityAccessService {
     return {
       ...tokens,
       user: this.toSafeUser(user),
-      redirectTo: '/dashboard',
+      redirectTo: homePathForRole(payload['role'] as string | undefined),
     };
   }
 
@@ -316,7 +331,7 @@ export class IdentityAccessService {
     return {
       ...tokens,
       user: this.toSafeUser(fresh),
-      redirectTo: '/dashboard',
+      redirectTo: homePathForRole(membership?.role),
     };
   }
 
@@ -488,7 +503,7 @@ export class IdentityAccessService {
     return {
       ...tokens,
       user: this.toSafeUser(input.user),
-      redirectTo: '/dashboard',
+      redirectTo: homePathForRole(input.role),
     };
   }
 

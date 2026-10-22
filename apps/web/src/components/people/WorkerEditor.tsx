@@ -15,6 +15,7 @@ import {
 import { api } from '@/lib/api';
 import { useOrganisation } from '@/lib/useOrganisation';
 import CompensationPanel from './CompensationPanel';
+import BankAccountsPanel from './BankAccountsPanel';
 import styles from './people.module.css';
 
 interface Draft {
@@ -431,6 +432,11 @@ export default function WorkerEditor({
                     worker={worker}
                     currency={organisation?.currency ?? 'NGN'}
                   />
+                </div>
+
+                <p className={styles.sectionLabel}>Bank details</p>
+                <div className={styles.fieldFull}>
+                  <BankAccountsPanel workerId={worker.id} canManage />
                 </div>
               </>
             )}

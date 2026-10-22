@@ -19,6 +19,7 @@ import { ImportWorkersDto } from './dto/import-workers.dto';
 
 const ORG = PermissionScope.ORGANISATION;
 const TEAM = PermissionScope.TEAM;
+const SELF = PermissionScope.SELF;
 
 @ApiTags('workers')
 @ApiBearerAuth()
@@ -32,6 +33,13 @@ export class WorkersController {
   async list(@Query() query: ListWorkersQueryDto) {
     const { data, meta } = await this.service.list(query);
     return { data, meta };
+  }
+
+  @Get('me')
+  @ApiOperation({ summary: "The signed-in employee's own worker profile" })
+  @RequirePermission({ resource: 'workers', action: 'read', scope: SELF })
+  async me() {
+    return { data: await this.service.me() };
   }
 
   @Get(':id')
@@ -66,6 +74,15 @@ export class WorkersController {
   @ApiOperation({ summary: 'Email a workspace login invitation to a worker' })
   @RequirePermission({ resource: 'workers', action: 'update', scope: ORG })
   async invite(@Param('id') id: string) {
+    return { data: await this.service.invite(id) };
+  }
+
+  @Post(':id/invite/resend')
+  @ApiOperation({
+    summary: 'Re-send a workspace invitation (supersedes the previous link)',
+  })
+  @RequirePermission({ resource: 'workers', action: 'update', scope: ORG })
+  async resendInvite(@Param('id') id: string) {
     return { data: await this.service.invite(id) };
   }
 

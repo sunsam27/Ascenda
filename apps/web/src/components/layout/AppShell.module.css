@@ -13,12 +13,14 @@
   transition: margin-left var(--duration-base) var(--easing-base);
 }
 
+/* Fills the space beside the fixed sidebar. The gutters are symmetric, so the
+   content's left and right edges sit the same distance from the viewport. */
 .content {
   flex: 1;
   padding: var(--space-6) var(--space-8);
   padding-top: calc(var(--topbar-height) + var(--space-6));
-  width: min(100%, var(--content-max-width));
-  margin-inline: auto;
+  width: 100%;
+  min-width: 0;
 }
 
 /* Mobile: sidebar becomes overlay */

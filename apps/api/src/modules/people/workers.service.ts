@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { AuditAction, Prisma } from '@ascenda/db';
-import { SystemRole, WorkerCategory } from '@ascenda/types';
+import { SystemRole, WorkerCategory, WorkerInviteStatus } from '@ascenda/types';
 import type {
   PaginationMeta,
   WorkerCategory as WorkerCategoryType,
@@ -18,6 +18,7 @@ import type {
   EmploymentType as EmploymentTypeType,
   WorkerStatus as WorkerStatusType,
   WorkerSummary,
+  SelfWorkerProfile,
 } from '@ascenda/types';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { getRequestContext } from '../../common/context/request-context';
@@ -50,10 +51,11 @@ type WorkerRow = Prisma.WorkerGetPayload<{ include: typeof WORKER_INCLUDE }>;
 
 export function toWorkerSummary(
   worker: WorkerRow,
-  hasLogin = false,
+  inviteStatus: WorkerInviteStatus = WorkerInviteStatus.NONE,
 ): WorkerSummary {
   return {
-    hasLogin,
+    hasLogin: inviteStatus !== WorkerInviteStatus.NONE,
+    inviteStatus,
     userId: worker.userId ?? undefined,
     id: worker.id,
     organisationId: worker.organisationId,
@@ -137,7 +139,9 @@ export class WorkersService {
       const accounts = await this.accountsFor(tx, rows);
 
       return {
-        data: rows.map((row) => toWorkerSummary(row, accounts.has(row.userId ?? ''))),
+        data: rows.map((row) =>
+        toWorkerSummary(row, accounts.get(row.userId ?? '') ?? WorkerInviteStatus.NONE),
+      ),
         meta: {
           total,
           page,
@@ -157,7 +161,33 @@ export class WorkersService {
       });
       if (!worker) throw new NotFoundException('Worker not found');
       const accounts = await this.accountsFor(tx, [worker]);
-      return toWorkerSummary(worker, accounts.has(worker.userId ?? ''));
+      return toWorkerSummary(
+        worker,
+        accounts.get(worker.userId ?? '') ?? WorkerInviteStatus.NONE,
+      );
+    });
+  }
+
+  /**
+   * The signed-in employee's own record. Resolves the worker linked to the
+   * caller (`Worker.userId`) so a self-service account can read the profile the
+   * organisation entered — names, job title, org details — without the broader
+   * `workers:read` scope a directory listing would require. Employees cannot
+   * edit this data.
+   */
+  async me(): Promise<SelfWorkerProfile> {
+    const { userId } = this.requireContext();
+    return this.prisma.withRequestContext(async (tx) => {
+      const worker = await tx.worker.findFirst({
+        where: { userId },
+        include: WORKER_INCLUDE,
+      });
+      if (!worker) throw new NotFoundException('No worker record for this user');
+      return {
+        worker: toWorkerSummary(worker),
+        // Employees own neither their salary view nor directory access; this
+        // is deliberately the worker profile only.
+      };
     });
   }
 
@@ -299,7 +329,10 @@ export class WorkersService {
           include: WORKER_INCLUDE,
         });
         const accounts = await this.accountsFor(tx, [worker]);
-        return toWorkerSummary(worker, accounts.has(worker.userId ?? ''));
+        return toWorkerSummary(
+        worker,
+        accounts.get(worker.userId ?? '') ?? WorkerInviteStatus.NONE,
+      );
       } catch (error) {
         if (isUniqueViolation(error)) {
           throw new ConflictException(
@@ -329,7 +362,10 @@ export class WorkersService {
         include: WORKER_INCLUDE,
       });
       const accounts = await this.accountsFor(tx, [worker]);
-      return toWorkerSummary(worker, accounts.has(worker.userId ?? ''));
+      return toWorkerSummary(
+        worker,
+        accounts.get(worker.userId ?? '') ?? WorkerInviteStatus.NONE,
+      );
     });
   }
 
@@ -572,16 +608,24 @@ export class WorkersService {
   private async accountsFor(
     tx: Prisma.TransactionClient,
     workers: { userId: string | null }[],
-  ): Promise<Set<string>> {
+  ): Promise<Map<string, WorkerInviteStatus>> {
     const ids = workers
       .map((w) => w.userId)
       .filter((id): id is string => !!id);
-    if (ids.length === 0) return new Set();
-    const users = await tx.user.findMany({
-      where: { id: { in: ids } },
-      select: { id: true },
+    if (ids.length === 0) return new Map();
+    // A linked user means an invitation was sent; it is ACCEPTED once the
+    // membership's acceptedAt is stamped (they chose a password), otherwise
+    // it is still PENDING.
+    const memberships = await tx.membership.findMany({
+      where: { userId: { in: ids } },
+      select: { userId: true, acceptedAt: true },
     });
-    return new Set(users.map((u) => u.id));
+    const statuses = new Map<string, WorkerInviteStatus>();
+    for (const userId of ids) statuses.set(userId, WorkerInviteStatus.PENDING);
+    for (const m of memberships) {
+      if (m.acceptedAt) statuses.set(m.userId, WorkerInviteStatus.ACCEPTED);
+    }
+    return statuses;
   }
 
   private requireContext(): { organisationId: string; userId: string } {

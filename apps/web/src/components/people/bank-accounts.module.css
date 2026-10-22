@@ -1,0 +1,211 @@
+.compact {
+  padding: 0;
+}
+
+/* Blend into an enclosing card — removes the "white box inside a card" look. */
+.flush {
+  border: none;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 0.5rem;
+}
+
+.verified {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-success, #12b76a);
+}
+
+.detected {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-success, #12b76a) 12%, transparent);
+  color: var(--color-success-strong, #027a48);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.changeLink {
+  margin-left: auto;
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #667085);
+}
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--color-text, inherit);
+  cursor: pointer;
+}
+
+/* ── Account list — premium tiles ─────────────────────────────────────────── */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: 14px;
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-primary) 4%, transparent);
+  transition:
+    background var(--duration-fast) var(--easing-base),
+    border-color var(--duration-fast) var(--easing-base);
+}
+
+.row:hover {
+  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+  border-color: var(--color-border-strong);
+}
+
+.rowIcon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--color-primary-light);
+  color: var(--color-primary-text);
+}
+
+.rowBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.rowTop {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.rowBank {
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMask {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.rowVerified {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--color-success);
+  font-weight: var(--weight-semibold);
+}
+
+.rowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+}
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-success-tint);
+  color: var(--color-success);
+  font-size: var(--text-overline);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+.emptyState {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: 14px;
+  border: 1px dashed var(--color-border-strong);
+  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+}
+
+.emptyIcon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--color-primary-light);
+  color: var(--color-primary-text);
+}
+
+.emptyText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.emptyTitle {
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.emptySub {
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+}

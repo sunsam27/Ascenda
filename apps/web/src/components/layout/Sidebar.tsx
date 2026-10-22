@@ -33,6 +33,16 @@ const navItems = [
   { href: '/analytics',   label: 'Analytics',  icon: BarChart3 },
 ];
 
+// Self-service roles (employees/volunteers) get their own minimal navigation,
+// pointing at the personal `/me` workspace instead of the organisation views.
+const selfNavItems = [
+  { href: '/me',          label: 'My workspace', icon: LayoutDashboard },
+  { href: '/time-leave',  label: 'Time & Leave', icon: CalendarClock },
+  { href: '/documents',   label: 'Documents',    icon: FileText },
+];
+
+const SELF_ROLES = new Set(['EMPLOYEE_SELF', 'VOLUNTEER_SELF']);
+
 export default function Sidebar() {
   return (
     <aside className={`glass-nav ${styles.sidebar}`} aria-label="Main navigation">
@@ -49,6 +59,12 @@ export function SidebarContent() {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useCurrentUser();
+
+  const isSelf = Boolean(user?.role && SELF_ROLES.has(user.role));
+  const items = isSelf ? selfNavItems : navItems;
+  // Self-service roles only ever see Settings when the org grants it; EMPLOYEE_
+  // SELF has no `settings` grant, so hide the link to avoid a dead end.
+  const showSettings = !isSelf;
 
   async function handleSignOut() {
     try {
@@ -79,7 +95,7 @@ export function SidebarContent() {
       {/* Navigation */}
       <nav className={styles.nav}>
         <ul role="list" className={styles.navList}>
-          {navItems.map(({ href, label, icon: Icon }) => {
+          {items.map(({ href, label, icon: Icon }) => {
             const isActive = pathname === href || pathname.startsWith(`${href}/`);
             return (
               <li key={href}>
@@ -99,10 +115,12 @@ export function SidebarContent() {
 
       {/* Bottom section */}
       <div className={styles.bottom}>
-        <Link href="/settings" className={`${styles.navItem} ${pathname.startsWith('/settings') ? styles.active : ''}`}>
-          <Settings size={20} strokeWidth={1.75} aria-hidden="true" />
-          <span>Settings</span>
-        </Link>
+        {showSettings && (
+          <Link href="/settings" className={`${styles.navItem} ${pathname.startsWith('/settings') ? styles.active : ''}`}>
+            <Settings size={20} strokeWidth={1.75} aria-hidden="true" />
+            <span>Settings</span>
+          </Link>
+        )}
 
         <div className={styles.divider} role="separator" />
 

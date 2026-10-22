@@ -1,0 +1,550 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-muted, #667085);
+}
+
+/* Profile + bank cards. Explicit columns (not auto-fit): the supporting cards
+   below span the full row, and an auto-fit track crossed by a spanning item
+   can never collapse, which leaves an empty column beside the cards. The
+   bank card holds more detail, so it takes the larger share of the row. */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+/* Main content + right rail (upcoming holidays). */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.mainColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.rail {
+  position: sticky;
+  top: calc(var(--topbar-height, 64px) + 1rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    position: static;
+  }
+}
+
+.card {
+  position: relative;
+  padding: 1.5rem;
+  border-radius: var(--radius-card, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  overflow: hidden;
+}
+
+/* Soft brand sheen along the top edge — premium, subtle. */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 140px;
+  background: radial-gradient(
+    120% 100% at 0% 0%,
+    color-mix(in srgb, var(--color-primary) 10%, transparent),
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  position: relative;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.cardIcon {
+  color: var(--color-text-muted, #667085);
+}
+
+/* ── Upcoming holidays ─────────────────────────────────────────────────────── */
+.holidayList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.holidayRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: 14px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  transition:
+    border-color var(--duration-fast) var(--easing-base),
+    transform var(--duration-fast) var(--easing-base);
+}
+
+.holidayRow:hover {
+  border-color: var(--color-border-strong);
+  transform: translateX(2px);
+}
+
+/* The very next holiday gets a subtle brand accent. */
+.holidayNext {
+  border-color: color-mix(in srgb, var(--color-primary) 28%, transparent);
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--color-primary) 8%, var(--color-surface)),
+    var(--color-surface) 65%
+  );
+}
+
+.holidayDate {
+  flex: 0 0 auto;
+  width: 46px;
+  padding: 6px 0;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  background: var(--color-primary-light);
+  color: var(--color-primary-text);
+}
+
+.holidayDay {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.holidayMonth {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+
+.holidayBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.holidayName {
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.holidayMeta {
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.holidayCountdown {
+  flex: 0 0 auto;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-muted-tint);
+  color: var(--color-text-secondary);
+  font-size: var(--text-overline, 0.75rem);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.holidayNext .holidayCountdown {
+  background: var(--color-primary-light);
+  color: var(--color-primary-text);
+}
+
+.holidayEmpty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: 14px;
+  border: 1px dashed var(--color-border-strong);
+  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+}
+
+.holidayEmptyIcon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--color-primary-light);
+  color: var(--color-primary-text);
+}
+
+.holidayLink {
+  align-self: flex-start;
+  margin-top: var(--space-1);
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-primary-text);
+  text-decoration: none;
+}
+
+.holidayLink:hover {
+  text-decoration: underline;
+}
+
+.readonly {
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #667085);
+}
+
+/* ── Identity hero ─────────────────────────────────────────────────────────── */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  position: relative;
+}
+
+.identityAvatar {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  box-shadow:
+    0 8px 20px color-mix(in srgb, var(--color-primary) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.identityText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.identityName {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  line-height: 1.15;
+}
+
+.identityRole {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-text-muted, #667085);
+}
+
+.identityChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 0.6rem;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-muted-tint);
+  color: var(--color-text-secondary);
+  font-size: var(--text-overline, 0.75rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ── Fact strip ────────────────────────────────────────────────────────────── */
+.facts {
+  position: relative;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.factLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--text-overline, 0.75rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted, #667085);
+}
+
+.factValue {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.readonlyNote {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #667085);
+}
+
+.muted {
+  color: var(--color-text-muted, #667085);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.quickLinks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  grid-column: 1 / -1;
+}
+
+.quickLink {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.12s ease;
+}
+
+.quickLink:hover {
+  transform: translateY(-2px);
+}
+
+.quickLinkStatic {
+  cursor: default;
+}
+
+.quickLinkStatic:hover {
+  transform: none;
+}
+
+.quickLinkTitle {
+  display: block;
+  font-weight: 600;
+}
+
+.quickLinkSub {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #667085);
+}
+
+.payslips {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  grid-column: 1 / -1;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.spinnerRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text-muted, #667085);
+  padding: 2rem 0;
+}
+
+.message {
+  padding: 2rem;
+  border-radius: 16px;
+  text-align: center;
+}
+
+.messageTitle {
+  font-weight: 650;
+  margin: 0 0 0.25rem;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 960px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quickLinks {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .facts {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .identityAvatar {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
+    font-size: 1.15rem;
+  }
+  .identityName {
+    font-size: 1.2rem;
+  }
+}
+
+/* Onboarding gate — blocking until bank details are added. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(16, 24, 40, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.modal {
+  width: 100%;
+  max-width: 460px;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 18px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.modalIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--color-info-tint, rgba(59, 130, 246, 0.12));
+  color: var(--color-primary-text, #1d4ed8);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.modalText {
+  margin: 0;
+  color: var(--color-text-muted, #667085);
+  font-size: 0.92rem;
+}
+
+.modalNote {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #667085);
+}
+
+.modalError {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-danger-text, #b42318);
+}

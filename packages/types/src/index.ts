@@ -556,6 +556,18 @@ export interface WorkerSummary extends TenantEntity {
   hasLogin: boolean;
   /** The linked platform user id, when the worker has a workspace login. */
   userId?: string;
+  /**
+   * Workspace-invitation state: NONE (never invited), PENDING (invited but has
+   * not set a password yet), or ACCEPTED (has an active login).
+   */
+  inviteStatus: WorkerInviteStatus;
+}
+
+/** Workspace-invitation lifecycle for a worker. */
+export enum WorkerInviteStatus {
+  NONE = 'NONE',
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
 }
 
 /** Result of sending a workspace login invitation to a worker. */
@@ -566,6 +578,57 @@ export interface WorkerInviteResult {
   /** False when SMTP is unconfigured and the invite was logged instead. */
   emailSent: boolean;
 }
+
+/**
+ * A worker's bank account (self-service or org-managed). The account number is
+ * stored encrypted at rest and only ever surfaced masked.
+ */
+export interface BankAccount extends TenantEntity {
+  workerId: string;
+  bankName: string;
+  bankCode: string;
+  /** Display-only masked account number, e.g. "****1234". */
+  accountNumberMasked: string;
+  accountName: string;
+  isVerified: boolean;
+  isPrimary: boolean;
+  createdBy: string;
+}
+
+/** A detected Nigerian bank (code + display name). */
+export interface DetectedBank {
+  bankCode: string;
+  bankName: string;
+}
+
+/** Create/update payload for a worker bank account (employee or org). */
+export interface CreateBankAccountDto {
+  accountNumber: string;
+  accountName: string;
+  /** Optional — the server auto-detects from the account number when omitted. */
+  bankName?: string;
+  bankCode?: string;
+  isPrimary?: boolean;
+}
+
+export interface UpdateBankAccountDto {
+  accountNumber?: string;
+  accountName?: string;
+  bankName?: string;
+  bankCode?: string;
+  isPrimary?: boolean;
+  /** Org-only: mark the account verified after manual review. */
+  isVerified?: boolean;
+}
+
+/**
+ * The signed-in employee's self-service profile: the worker record the
+ * organisation entered (read-only to the employee).
+ */
+export interface SelfWorkerProfile {
+  worker: WorkerSummary;
+}
+
 
 export interface WorkerListQuery extends PaginatedQuery {
   status?: WorkerStatus;
