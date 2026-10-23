@@ -554,6 +554,10 @@ function RunDetailView({
 
   const errors = validations?.errors ?? [];
   const warnings = validations?.warnings ?? [];
+  const notices = validations?.notices ?? [];
+  const noEligibleWorkers = notices.some(
+    (issue) => issue.code === 'NO_ELIGIBLE_WORKERS',
+  );
   const needsAck = warnings.length > 0 && !validations?.acknowledgedAt;
 
   return (
@@ -622,7 +626,7 @@ function RunDetailView({
                 type="button"
                 className={`${styles.btn} ${styles.btnPrimary}`}
                 onClick={() => action('Prepare', 'prepare')}
-                disabled={!!busy}
+                disabled={!!busy || noEligibleWorkers}
               >
                 {busy === 'Prepare' ? <Loader2 className={styles.spin} size={15} /> : <RefreshCw size={15} />}
                 Prepare
@@ -642,7 +646,7 @@ function RunDetailView({
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={() => action('Submit', 'submit')}
-              disabled={!!busy || errors.length > 0}
+              disabled={!!busy || errors.length > 0 || items.length === 0}
             >
               <Send size={15} /> Submit for approval
             </button>
@@ -722,12 +726,19 @@ function RunDetailView({
       {/* Validations */}
       <div className={styles.section}>
         <span className={styles.sectionLabel}>Validation</span>
-        {errors.length === 0 && warnings.length === 0 ? (
+        {errors.length === 0 && warnings.length === 0 && notices.length === 0 ? (
           <p className={styles.muted}>
             No blocking issues{validations ? '' : ' (run not yet prepared)'}.
           </p>
         ) : (
           <ul className={styles.panelList}>
+            {notices.map((issue, i) => (
+              <li key={`n${i}`} className={`glass ${styles.panelItem}`}>
+                <span className={styles.panelItemBody}>
+                  <span className={styles.panelName}>{issue.message}</span>
+                </span>
+              </li>
+            ))}
             {errors.map((issue, i) => (
               <li key={`e${i}`} className={`glass ${styles.panelItem}`}>
                 <span className={styles.panelItemBody}>
@@ -783,7 +794,11 @@ function RunDetailView({
       <div className={styles.section}>
         <span className={styles.sectionLabel}>Item lines</span>
         {items.length === 0 ? (
-          <p className={styles.muted}>Not prepared yet.</p>
+          <p className={styles.muted}>
+            {noEligibleWorkers
+              ? 'No eligible workers for this month.'
+              : 'No item lines yet. Run Prepare to calculate them, or check that workers were ACTIVE or ON_LEAVE and employed during this pay period.'}
+          </p>
         ) : (
           [...byWorker.entries()].map(([workerId, lines]) => {
             const name =

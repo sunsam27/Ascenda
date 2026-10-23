@@ -365,7 +365,8 @@
 
 .quickLinks {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
   gap: 1.25rem;
   width: 100%;
 }
@@ -374,6 +375,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  height: 100%;
   padding: 1rem 1.1rem;
   border-radius: 14px;
   text-decoration: none;

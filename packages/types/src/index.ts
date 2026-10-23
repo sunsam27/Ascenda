@@ -1213,6 +1213,7 @@ export type RunValidationCode =
   | 'DUPLICATE_RUN'
   | 'DUPLICATE_WORKER'
   | 'NO_ITEMS'
+  | 'NO_ELIGIBLE_WORKERS'
   | 'SALARY_INCREASE'
   | 'HIGH_DEDUCTIONS'
   | 'NEGATIVE_NET';
@@ -1230,6 +1231,8 @@ export interface RunValidationIssue {
 export interface RunValidationResult {
   errors: RunValidationIssue[];
   warnings: RunValidationIssue[];
+  /** Informational messages that are not blocking errors or warnings. */
+  notices: RunValidationIssue[];
   /** Workers left out of the run (status not payroll-eligible) — flagged. */
   excluded: Array<{ workerId: string; status: string }>;
   thresholds: Pick<

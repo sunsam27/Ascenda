@@ -194,42 +194,40 @@ export default function EmployeeDashboard() {
                     />
                   )}
                 </section>
-
-              <div className={styles.quickLinks}>
-                <Link href="/time-leave" className={`glass ${styles.quickLink}`}>
-                  <CalendarClock size={20} strokeWidth={1.75} aria-hidden />
-                  <span>
-                    <span className={styles.quickLinkTitle}>Time &amp; Leave</span>
-                    <span className={styles.quickLinkSub}>Request and track leave</span>
-                  </span>
-                </Link>
-                <Link href="/documents" className={`glass ${styles.quickLink}`}>
-                  <FileText size={20} strokeWidth={1.75} aria-hidden />
-                  <span>
-                    <span className={styles.quickLinkTitle}>Documents</span>
-                    <span className={styles.quickLinkSub}>Your files and contracts</span>
-                  </span>
-                </Link>
-                {worker?.locationName && (
-                  <span className={`glass ${styles.quickLink} ${styles.quickLinkStatic}`}>
-                    <MapPin size={20} strokeWidth={1.75} aria-hidden />
-                    <span>
-                      <span className={styles.quickLinkTitle}>{worker.locationName}</span>
-                      <span className={styles.quickLinkSub}>Work location</span>
-                    </span>
-                  </span>
-                )}
-              </div>
-
-              <section className={styles.payslips} aria-labelledby="me-payslips">
-                <h2 id="me-payslips" className={styles.sectionTitle}>
-                  My payslips
-                </h2>
-                <PayslipsPanel selfService />
-              </section>
             </div>
 
+            <div className={styles.quickLinks}>
+              <Link href="/time-leave" className={`glass ${styles.quickLink}`}>
+                <CalendarClock size={20} strokeWidth={1.75} aria-hidden />
+                <span>
+                  <span className={styles.quickLinkTitle}>Time &amp; Leave</span>
+                  <span className={styles.quickLinkSub}>Request and track leave</span>
+                </span>
+              </Link>
+              <Link href="/documents" className={`glass ${styles.quickLink}`}>
+                <FileText size={20} strokeWidth={1.75} aria-hidden />
+                <span>
+                  <span className={styles.quickLinkTitle}>Documents</span>
+                  <span className={styles.quickLinkSub}>Your files and contracts</span>
+                </span>
+              </Link>
+              {worker?.locationName && (
+                <span className={`glass ${styles.quickLink} ${styles.quickLinkStatic}`}>
+                  <MapPin size={20} strokeWidth={1.75} aria-hidden />
+                  <span>
+                    <span className={styles.quickLinkTitle}>{worker.locationName}</span>
+                    <span className={styles.quickLinkSub}>Work location</span>
+                  </span>
+                </span>
+              )}
+            </div>
 
+            <section className={styles.payslips} aria-labelledby="me-payslips">
+              <h2 id="me-payslips" className={styles.sectionTitle}>
+                My payslips
+              </h2>
+              <PayslipsPanel selfService />
+            </section>
           </div>
         </div>
       )}

@@ -18,6 +18,7 @@ import type {
   PayrollRunStatus,
   RejectPayrollRunDto,
   ReversePayrollRunDto,
+  RunValidationIssue,
   RunValidationResult,
   SystemRole,
   UpdatePayrollItemDto,
@@ -397,6 +398,13 @@ export class PayrollRunsService {
           w.startDate.getTime() <= periodEnd.getTime() &&
           (w.endDate == null || w.endDate.getTime() >= periodStart.getTime()),
       );
+      if (eligible.length === 0) {
+        const start = periodStart.toISOString().slice(0, 10);
+        const end = periodEnd.toISOString().slice(0, 10);
+        throw new BadRequestException(
+          `No eligible workers for the ${start} to ${end} pay period. Workers must be ACTIVE or ON_LEAVE and employed during that period.`,
+        );
+      }
       const workerIds = eligible.map((w) => w.id);
 
       // M3a: the org's effective statutory pack for this country + period.
@@ -806,6 +814,7 @@ export class PayrollRunsService {
             ),
         )
         .map((w) => ({ workerId: w.id, status: w.status }));
+      const eligibleCount = allWorkers.length - excluded.length;
 
       const previousRun = await tx.payrollRun.findFirst({
         where: {
@@ -899,9 +908,23 @@ export class PayrollRunsService {
         }
       }
 
+      const notices: RunValidationIssue[] = [];
+      if (eligibleCount === 0) {
+        // An empty run with nobody to pay is an expected state, not an error:
+        // surface it as a neutral notice instead of the blocking NO_ITEMS error.
+        result.errors = result.errors.filter(
+          (issue) => issue.code !== 'NO_ITEMS',
+        );
+        notices.push({
+          code: 'NO_ELIGIBLE_WORKERS',
+          message: 'No eligible workers for this month',
+        });
+      }
+
       return {
         errors: result.errors,
         warnings: result.warnings,
+        notices,
         excluded,
         thresholds: thresholds ?? DEFAULT_VALIDATION_THRESHOLDS,
         acknowledgedAt: run.validationAcknowledgedAt?.toISOString(),
