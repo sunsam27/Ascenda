@@ -19,7 +19,6 @@ import { useCurrentUser, displayNameOf } from '@/lib/useCurrentUser';
 import { useOrganisation } from '@/lib/useOrganisation';
 import BankAccountsPanel from '@/components/people/BankAccountsPanel';
 import PayslipsPanel from '@/components/payroll/PayslipsPanel';
-import UpcomingHolidays from './UpcomingHolidays';
 import styles from './me.module.css';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -230,9 +229,7 @@ export default function EmployeeDashboard() {
               </section>
             </div>
 
-            <aside className={styles.rail}>
-              <UpcomingHolidays />
-            </aside>
+
           </div>
         </div>
       )}

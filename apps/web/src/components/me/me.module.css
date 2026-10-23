@@ -2,7 +2,10 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  padding: 1.5rem;
+  width: 100%;
+  min-width: 0;
+  max-width: 100% !important;
+  flex: 1 1 auto;
 }
 
 .header {
@@ -23,23 +26,19 @@
   color: var(--color-text-muted, #667085);
 }
 
-/* Profile + bank cards. Explicit columns (not auto-fit): the supporting cards
-   below span the full row, and an auto-fit track crossed by a spanning item
-   can never collapse, which leaves an empty column beside the cards. The
-   bank card holds more detail, so it takes the larger share of the row. */
+/* Profile + bank cards — stretch to fill available width. Bank details gets
+   more space since it carries more information. */
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.25rem;
-  align-items: start;
+  align-items: stretch;
+  width: 100%;
 }
 
-/* Main content + right rail (upcoming holidays). */
 .layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
-  gap: 1.25rem;
-  align-items: start;
+  width: 100%;
+  max-width: 100%;
 }
 
 .mainColumn {
@@ -47,25 +46,7 @@
   flex-direction: column;
   gap: 1.25rem;
   min-width: 0;
-}
-
-.rail {
-  position: sticky;
-  top: calc(var(--topbar-height, 64px) + 1rem);
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  min-width: 0;
-}
-
-@media (max-width: 1180px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-
-  .rail {
-    position: static;
-  }
+  width: 100%;
 }
 
 .card {
@@ -76,6 +57,8 @@
   flex-direction: column;
   gap: 1.1rem;
   overflow: hidden;
+  height: 100%;
+  min-width: 0;
 }
 
 /* Soft brand sheen along the top edge — premium, subtle. */
@@ -382,9 +365,9 @@
 
 .quickLinks {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  width: 100%;
 }
 
 .quickLink {
@@ -425,7 +408,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  grid-column: 1 / -1;
+  width: 100%;
 }
 
 .sectionTitle {
