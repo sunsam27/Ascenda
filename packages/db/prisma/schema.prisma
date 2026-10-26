@@ -52,8 +52,11 @@ enum EmploymentType {
 enum WorkerStatus {
   ACTIVE
   ON_LEAVE
+  PROBATION
   SUSPENDED
   TERMINATED
+  RESIGNED
+  INACTIVE
   DRAFT
 }
 
@@ -167,6 +170,7 @@ enum PayrollItemType {
   BASIC_SALARY
   ALLOWANCE
   BONUS
+  OVERTIME
   DEDUCTION
   EMPLOYER_PENSION
   EMPLOYEE_PENSION
@@ -204,9 +208,21 @@ enum ExpenseClaimApprovalRole {
 enum PaymentStatus {
   PENDING
   PROCESSING
-  COMPLETED
+  APPROVED
+  PAID
+  CANCELLED
   FAILED
   REVERSED
+  /// Legacy terminal status retained for historical rows.
+  COMPLETED
+}
+
+/// PAY-12: a bank payment batch groups the payments produced by a payroll run.
+enum PaymentBatchStatus {
+  DRAFT
+  APPROVED
+  PAID
+  CANCELLED
 }
 
 enum ApprovalStatus {
@@ -224,6 +240,7 @@ enum DocumentType {
   OFFER_LETTER
   POLICY
   CERTIFICATION
+  RECEIPT
   OTHER
 }
 
@@ -266,6 +283,11 @@ enum AuditAction {
   PAYROLL_CONFIG_CHANGED
   PAYMENT_APPROVED
   PAYMENT_STATUS_CHANGED
+  PAYMENT_BATCH_CREATED
+  PAYMENT_BATCH_APPROVED
+  PAYMENT_BATCH_PAID
+  PAYMENT_BATCH_CANCELLED
+  STEP_UP_AUTHENTICATED
   PAYSLIP_GENERATED
   PAYSLIP_ACCESSED
   PAYMENTS_EXPORTED
@@ -321,6 +343,15 @@ enum NotificationType {
   LEAVE_REQUEST_DELEGATED
   LEAVE_REQUEST_CANCELLED
   LEAVE_ACCRUAL_RUN
+  PAYROLL_RUN_SUBMITTED
+  PAYROLL_RUN_APPROVED
+  PAYROLL_RUN_REJECTED
+  PAYROLL_RUN_PROCESSED
+  PAYSLIPS_AVAILABLE
+  PAYMENT_BATCH_APPROVED
+  PAYMENT_BATCH_PAID
+  PAYMENT_FAILED
+  BANK_DETAILS_CHANGED
 }
 
 // ─── Identity & Access ───────────────────────────────────────────────────────
@@ -408,6 +439,7 @@ model Organisation {
   blackoutPeriods      BlackoutPeriod[]
   approvalWorkflows    ApprovalWorkflow[]
   payments             Payment[]
+  paymentBatches       PaymentBatch[]
   payslips             Payslip[]
   expenseClaims        ExpenseClaim[]
   documents            Document[]
@@ -579,6 +611,11 @@ model BankAccount {
   accountName            String
   isVerified             Boolean  @default(false)
   isPrimary              Boolean  @default(false)
+  /// PAY-10: set whenever bank details change so payroll can review before
+  /// the next payment run.
+  requiresPayrollReview  Boolean  @default(false)
+  payrollReviewedAt      DateTime?
+  payrollReviewedBy      String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
   createdBy              String
@@ -811,6 +848,7 @@ model PayrollRun {
   payCalendar  PayCalendar   @relation(fields: [payCalendarId], references: [id])
   items        PayrollItem[]
   payments     Payment[]
+  paymentBatches PaymentBatch[]
   payslips     Payslip[]
   approvals    PayrollRunApproval[]
 
@@ -883,6 +921,13 @@ model PayrollConfig {
   deductionRatioWarnBps   Int      @default(5000)
   /// Blocking error when a run worker has no bank account on file.
   requireBankDetails      Boolean  @default(true)
+  /// PAY-09: attendance-derived overtime is opt-in so enabling it cannot
+  /// silently change an existing organisation's payroll.
+  overtimeEnabled         Boolean  @default(false)
+  /// PAY-09: overtime pay multiplier in basis points (15000 = 1.5x).
+  overtimeMultiplierBps   Int      @default(15000)
+  /// PAY-09: a full working day in minutes (480 = 8 hours).
+  standardDailyMinutes    Int      @default(480)
   /// PAY-16: month the organisation's tax/leave year starts (1 = January). The
   /// year boundary is configuration data, not an assumption (LOC-02).
   taxYearStartMonth       Int      @default(1)
@@ -955,10 +1000,46 @@ model StatutoryRulePack {
 
 // ─── Payments ────────────────────────────────────────────────────────────────
 
+/// PAY-12: a traceable bank payment batch for a payroll run. Approval and
+/// export are separate from marking the batch paid after bank confirmation.
+model PaymentBatch {
+  id                 String             @id @default(uuid())
+  organisationId     String
+  payrollRunId       String?
+  reference          String
+  label              String
+  status             PaymentBatchStatus @default(DRAFT)
+  currency           String
+  totalMinorUnits    Int                @default(0)
+  paymentCount       Int                @default(0)
+  approvedAt         DateTime?
+  approvedBy         String?
+  exportedAt         DateTime?
+  exportedBy         String?
+  paidAt             DateTime?
+  cancelledAt        DateTime?
+  cancelledBy        String?
+  cancellationReason String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  createdBy          String
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  payrollRun   PayrollRun?  @relation(fields: [payrollRunId], references: [id])
+  payments     Payment[]
+
+  @@unique([organisationId, reference])
+  @@index([organisationId])
+  @@index([organisationId, status])
+  @@index([payrollRunId])
+  @@map("payment_batches")
+}
+
 model Payment {
   id                   String        @id @default(uuid())
   organisationId       String
   payrollRunId         String?
+  paymentBatchId       String?
   workerId             String
   /// Integer minor units
   amountMinorUnits     Int
@@ -973,10 +1054,12 @@ model Payment {
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
   payrollRun   PayrollRun?  @relation(fields: [payrollRunId], references: [id])
+  paymentBatch PaymentBatch? @relation(fields: [paymentBatchId], references: [id])
   worker       Worker       @relation(fields: [workerId], references: [id])
 
   @@index([organisationId])
   @@index([workerId, status])
+  @@index([paymentBatchId])
   @@map("payments")
 }
 
@@ -1070,6 +1153,8 @@ model ExpenseClaim {
   currency         String
   /// Receipt reference (uploaded document id or external URL).
   receiptUrl       String?
+  /// PAY-14: uploaded receipt stored through DocumentsService.
+  receiptDocumentId String?
   status           ExpenseClaimStatus   @default(SUBMITTED)
   /// Whoever approved/rejected the current step.
   managerDecidedById  String?
@@ -1085,8 +1170,9 @@ model ExpenseClaim {
   updatedAt        DateTime             @updatedAt
   createdBy        String
 
-  organisation Organisation @relation(fields: [organisationId], references: [id])
-  worker       Worker       @relation(fields: [workerId], references: [id])
+  organisation    Organisation @relation(fields: [organisationId], references: [id])
+  worker          Worker       @relation(fields: [workerId], references: [id])
+  receiptDocument Document?    @relation("ExpenseClaimReceipt", fields: [receiptDocumentId], references: [id])
 
   @@index([organisationId])
   @@index([organisationId, status])
@@ -1158,8 +1244,9 @@ model Document {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  organisation Organisation? @relation(fields: [organisationId], references: [id])
-  worker       Worker?       @relation(fields: [workerId], references: [id])
+  organisation    Organisation?  @relation(fields: [organisationId], references: [id])
+  worker          Worker?        @relation(fields: [workerId], references: [id])
+  expenseClaims   ExpenseClaim[] @relation("ExpenseClaimReceipt")
 
   @@index([organisationId])
   @@index([workerId, type])

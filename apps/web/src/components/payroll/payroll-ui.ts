@@ -6,6 +6,7 @@ import axios from 'axios';
 import {
   ExpenseClaimStatus,
   PayFrequency,
+  PaymentBatchStatus,
   PaymentStatus,
   PayrollItemType,
   PayrollRunApprovalStatus,
@@ -45,6 +46,9 @@ export const APPROVAL_STATUS_LABEL: Record<PayrollRunApprovalStatus, string> = {
 export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
   [PaymentStatus.PENDING]: 'Pending',
   [PaymentStatus.PROCESSING]: 'Processing',
+  [PaymentStatus.APPROVED]: 'Approved',
+  [PaymentStatus.PAID]: 'Paid',
+  [PaymentStatus.CANCELLED]: 'Cancelled',
   [PaymentStatus.COMPLETED]: 'Completed',
   [PaymentStatus.FAILED]: 'Failed',
   [PaymentStatus.REVERSED]: 'Reversed',
@@ -53,15 +57,33 @@ export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
 export const PAYMENT_STATUS_TONE: Record<PaymentStatus, string> = {
   [PaymentStatus.PENDING]: 'badge',
   [PaymentStatus.PROCESSING]: 'badgeWarning',
+  [PaymentStatus.APPROVED]: 'badgeInfo',
+  [PaymentStatus.PAID]: 'badgeSuccess',
+  [PaymentStatus.CANCELLED]: 'badge',
   [PaymentStatus.COMPLETED]: 'badgeSuccess',
   [PaymentStatus.FAILED]: 'badgeDanger',
   [PaymentStatus.REVERSED]: 'badgeWarning',
+};
+
+export const PAYMENT_BATCH_STATUS_LABEL: Record<PaymentBatchStatus, string> = {
+  [PaymentBatchStatus.DRAFT]: 'Draft',
+  [PaymentBatchStatus.APPROVED]: 'Approved',
+  [PaymentBatchStatus.PAID]: 'Paid',
+  [PaymentBatchStatus.CANCELLED]: 'Cancelled',
+};
+
+export const PAYMENT_BATCH_STATUS_TONE: Record<PaymentBatchStatus, string> = {
+  [PaymentBatchStatus.DRAFT]: 'badge',
+  [PaymentBatchStatus.APPROVED]: 'badgeInfo',
+  [PaymentBatchStatus.PAID]: 'badgeSuccess',
+  [PaymentBatchStatus.CANCELLED]: 'badge',
 };
 
 export const ITEM_TYPE_LABEL: Record<PayrollItemType, string> = {
   [PayrollItemType.BASIC_SALARY]: 'Basic salary',
   [PayrollItemType.ALLOWANCE]: 'Allowance',
   [PayrollItemType.BONUS]: 'Bonus',
+  [PayrollItemType.OVERTIME]: 'Overtime',
   [PayrollItemType.DEDUCTION]: 'Deduction',
   [PayrollItemType.EMPLOYER_PENSION]: 'Employer pension',
   [PayrollItemType.EMPLOYEE_PENSION]: 'Employee pension',

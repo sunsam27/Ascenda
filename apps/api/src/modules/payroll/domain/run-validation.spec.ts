@@ -88,6 +88,21 @@ describe('validateRun — blocking errors (PAY-08 / PAY-10)', () => {
 });
 
 describe('validateRun — ack-required warnings (PAY-10)', () => {
+  it('warns when bank details changed and still need payroll review', () => {
+    const result = validateRun(
+      input({
+        workers: [worker({ bankDetailsAwaitingReview: true })],
+      }),
+    );
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        code: 'BANK_DETAILS_UNREVIEWED',
+        workerId: 'w1',
+      }),
+    );
+  });
+
   it('warns when gross rises above the configured percentage', () => {
     const result = validateRun(
       input({

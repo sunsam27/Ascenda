@@ -19,6 +19,7 @@ import { recurringItemAmountMinor, RecurringPayItemInput } from './recurring-pay
 export type RunItemType =
   | 'BASIC_SALARY'
   | 'ALLOWANCE'
+  | 'OVERTIME'
   | 'DEDUCTION'
   | 'TAX'
   | 'EMPLOYEE_PENSION'
@@ -52,6 +53,16 @@ export interface WorkerPrepareInput {
   absenceDays: number;
   /** Active, employee-side recurring items valid for the period. */
   recurring: RunRecurringInput[];
+  /** PAY-09: attendance-derived overtime, in minutes. */
+  overtimeMinutes?: number;
+  /** PAY-09: overtime enabled by org config. */
+  overtimeEnabled?: boolean;
+  /** PAY-09: overtime multiplier in basis points (15000 = 1.5x). */
+  overtimeMultiplierBps?: number;
+  /** PAY-09: standard working day length in minutes. */
+  standardDailyMinutes?: number;
+  /** Daily rate used for overtime (minor units) when derived from base. */
+  dailyRateMinorUnits?: number;
 }
 
 export interface PreparedLine {
@@ -115,6 +126,38 @@ export function prepareWorker(input: WorkerPrepareInput): PreparedWorkerResult {
       description: 'Unexcused absence',
       amountMinorUnits: -absence,
     });
+  }
+
+  // PAY-09: attendance-derived overtime, added only when enabled and overtime minutes exist.
+  if (
+    input.overtimeEnabled &&
+    input.overtimeMinutes &&
+    input.overtimeMinutes > 0
+  ) {
+    const standardMinutes = Math.max(60, Math.round(input.standardDailyMinutes ?? 480));
+    const multiplierBps = Math.max(10000, Math.round(input.overtimeMultiplierBps ?? 15000));
+    const dailyRate =
+      input.dailyRateMinorUnits && input.dailyRateMinorUnits > 0
+        ? input.dailyRateMinorUnits
+        : wd > 0
+          ? Math.round(gross / wd)
+          : 0;
+    if (dailyRate > 0 && standardMinutes > 0) {
+      const hourlyRate = dailyRate / (standardMinutes / 60);
+      const overtimeRate = hourlyRate * (multiplierBps / 10000);
+      const overtimeAmount = Math.max(
+        0,
+        Math.round(overtimeRate * (input.overtimeMinutes / 60)),
+      );
+      if (overtimeAmount > 0) {
+        gross += overtimeAmount;
+        lines.push({
+          itemType: 'OVERTIME',
+          description: 'Overtime',
+          amountMinorUnits: overtimeAmount,
+        });
+      }
+    }
   }
 
   let deductions = absence;

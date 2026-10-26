@@ -55,8 +55,11 @@ const EMPLOYMENT_LABEL: Record<EmploymentType, string> = {
 const STATUS_LABEL: Record<WorkerStatus, string> = {
   [WorkerStatus.ACTIVE]: 'Active',
   [WorkerStatus.ON_LEAVE]: 'On leave',
+  [WorkerStatus.PROBATION]: 'Probation',
   [WorkerStatus.SUSPENDED]: 'Suspended',
   [WorkerStatus.TERMINATED]: 'Terminated',
+  [WorkerStatus.RESIGNED]: 'Resigned',
+  [WorkerStatus.INACTIVE]: 'Inactive',
   [WorkerStatus.DRAFT]: 'Draft',
 };
 

@@ -3,10 +3,11 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { AuditAction, Prisma } from '@ascenda/db';
+import { AuditAction, NotificationType, Prisma } from '@ascenda/db';
 import type {
   ApprovePayrollRunDto,
   CreatePayrollItemDto,
@@ -23,7 +24,8 @@ import type {
   SystemRole,
   UpdatePayrollItemDto,
 } from '@ascenda/types';
-import { SystemRole as Role } from '@ascenda/types';
+import { PaymentBatchStatus, SystemRole as Role } from '@ascenda/types';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { getRequestContext } from '../../common/context/request-context';
 import { AuditService } from '../audit/audit.service';
@@ -31,6 +33,7 @@ import { CompensationService } from '../people/compensation.service';
 import { LeaveRequestsService } from '../time-leave/leave-requests.service';
 import { AttendanceService } from '../time-leave/attendance.service';
 import { parseDateOnly } from '../time-leave/holidays.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   payPeriodsForYear,
   type PayCalendarConfig,
@@ -73,7 +76,14 @@ type ItemRow = Prisma.PayrollItemGetPayload<Record<string, never>>;
 type ApprovalRow = Prisma.PayrollRunApprovalGetPayload<Record<string, never>>;
 
 /** Worker statuses included in a pay run; everything else is excluded + flagged. */
-const PAYROLL_ELIGIBLE_STATUSES = ['ACTIVE', 'ON_LEAVE'] as const;
+const PAYROLL_ELIGIBLE_STATUSES = [
+  'ACTIVE',
+  'ON_LEAVE',
+  'PROBATION',
+  // A resigned worker still gets a final run when their end date falls inside
+  // the period; the date filters below exclude anyone who left earlier.
+  'RESIGNED',
+] as const;
 
 // Payroll prep/validation does a per-worker N+1 sweep (compensation, bank
 // accounts, leave, absences) against a remote pooled Postgres. That can blow
@@ -150,6 +160,8 @@ function toApproval(row: ApprovalRow): PayrollRunApproval {
  */
 @Injectable()
 export class PayrollRunsService {
+  private readonly logger = new Logger(PayrollRunsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -160,6 +172,7 @@ export class PayrollRunsService {
     private readonly statutory: StatutoryRulePacksService,
     private readonly payslips: PayslipsService,
     private readonly expenseClaims: ExpenseClaimsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── Read ───────────────────────────────────────────────────────────────────
@@ -429,7 +442,8 @@ export class PayrollRunsService {
         );
       const employerCostsByWorker = new Map<string, number>();
 
-      const [leaveByWorker, absenceByWorker] = await Promise.all([
+      const payrollConfig = await this.config.get();
+      const [leaveByWorker, absenceByWorker, overtimeByWorker] = await Promise.all([
         this.leaveRequests.leaveForPayroll({
           periodStart,
           periodEnd,
@@ -440,6 +454,14 @@ export class PayrollRunsService {
           periodEnd,
           workerIds,
         }),
+        payrollConfig.overtimeEnabled
+          ? this.attendance.overtimeMinutesInPeriod({
+              periodStart,
+              periodEnd,
+              workerIds,
+              standardDailyMinutes: payrollConfig.standardDailyMinutes,
+            })
+          : Promise.resolve({} as Record<string, number>),
       ]);
 
       const recurringByWorker = new Map<string, RunRecurringInput[]>();
@@ -513,6 +535,8 @@ export class PayrollRunsService {
           ];
         }
 
+        const baseGross = components.reduce((s,comp)=>s+Math.max(0,Math.round(comp.amountMinorUnits)),0);
+        const rateDaily = leave.workingDays>0?Math.round(baseGross/leave.workingDays):0;
         const result = prepareWorker({
           workerId: worker.id,
           components,
@@ -521,6 +545,11 @@ export class PayrollRunsService {
           unpaidLeaveDays: leave.unpaidLeaveDays,
           absenceDays: absenceByWorker[worker.id] ?? 0,
           recurring: recurringByWorker.get(worker.id) ?? [],
+          overtimeEnabled: payrollConfig.overtimeEnabled,
+          overtimeMinutes: overtimeByWorker[worker.id] ?? 0,
+          overtimeMultiplierBps: payrollConfig.overtimeMultiplierBps,
+          standardDailyMinutes: payrollConfig.standardDailyMinutes,
+          dailyRateMinorUnits: rateDaily,
         });
 
         // M3d: finance-approved reimbursements for this worker are extra
@@ -847,9 +876,13 @@ export class PayrollRunsService {
           worker.id,
           run.periodEnd,
         );
-        const bankCount = await tx.bankAccount.count({
-          where: { workerId: worker.id },
-        });
+        const [bankCount, unreviewedBank] = await Promise.all([
+          tx.bankAccount.count({ where: { workerId: worker.id } }),
+          tx.bankAccount.findFirst({
+            where: { workerId: worker.id, requiresPayrollReview: true },
+            select: { id: true },
+          }),
+        ]);
         const identifier = `${worker.employeeNumber} (${worker.firstName} ${worker.lastName})`;
         workerInputs.push({
           workerId: worker.id,
@@ -859,6 +892,7 @@ export class PayrollRunsService {
             (rate.grossAmountMinorUnits > 0 ||
               (rate.components?.length ?? 0) > 0),
           hasBankAccount: bankCount > 0,
+          bankDetailsAwaitingReview: unreviewedBank != null,
           grossMinorUnits: grossByWorker.get(worker.id) ?? 0,
           deductionMinorUnits: deductionsByWorker.get(worker.id) ?? 0,
           netMinorUnits: netByWorker.get(worker.id) ?? 0,
@@ -989,6 +1023,21 @@ export class PayrollRunsService {
           warningCount: issues.warnings.length,
         },
       });
+      await this.notify({
+        organisationId: run.organisationId,
+        actorUserId: userId,
+        roles: config.approvalChain.slice(0, 1),
+        intent: {
+          type: NotificationType.PAYROLL_RUN_SUBMITTED,
+          title: 'Payroll run awaiting approval',
+          body: `A payroll run for ${this.periodLabel(
+            run.periodStart,
+            run.periodEnd,
+          )} was submitted for approval.`,
+          link: '/payroll',
+          metadata: { payrollRunId: run.id },
+        },
+      });
       return toPayrollRun(updated);
     }, HEAVY_TX);
   }
@@ -1086,6 +1135,31 @@ export class PayrollRunsService {
           comment: dto.comment ?? null,
         },
       });
+      await this.notify({
+        organisationId: run.organisationId,
+        actorUserId: userId,
+        roles: fullyApproved
+          ? [Role.PAYROLL_ADMINISTRATOR]
+          : remaining
+              .filter((s) => s.status === 'PENDING')
+              .map((s) => s.role as SystemRole)
+              .slice(0, 1),
+        userIds: [run.submittedById].filter(Boolean) as string[],
+        intent: {
+          type: NotificationType.PAYROLL_RUN_APPROVED,
+          title: fullyApproved
+            ? 'Payroll run approved'
+            : 'Payroll approval step completed',
+          body: fullyApproved
+            ? `The payroll run for ${this.periodLabel(
+                run.periodStart,
+                run.periodEnd,
+              )} is fully approved and ready to process.`
+            : `Step ${next.stepNumber} of the payroll approval chain was completed.`,
+          link: '/payroll',
+          metadata: { payrollRunId: run.id, fullyApproved },
+        },
+      });
       return toPayrollRun(updated);
     }, HEAVY_TX);
   }
@@ -1120,6 +1194,22 @@ export class PayrollRunsService {
         targetType: 'payroll_run',
         targetId: run.id,
         newValue: { comment: dto.comment, actorRole: role },
+      });
+      await this.notify({
+        organisationId: run.organisationId,
+        actorUserId: userId,
+        roles: [Role.PAYROLL_ADMINISTRATOR],
+        userIds: [run.submittedById].filter(Boolean) as string[],
+        intent: {
+          type: NotificationType.PAYROLL_RUN_REJECTED,
+          title: 'Payroll run rejected',
+          body: `The payroll run for ${this.periodLabel(
+            run.periodStart,
+            run.periodEnd,
+          )} was rejected.${dto.comment ? ` Note: ${dto.comment}` : ''}`,
+          link: '/payroll',
+          metadata: { payrollRunId: run.id },
+        },
       });
       return toPayrollRun(updated);
     }, HEAVY_TX);
@@ -1218,6 +1308,47 @@ export class PayrollRunsService {
         totalPaid += folded.netMinorUnits;
       }
 
+      // PAY-12: payments are assembled into a draft bank batch immediately so
+      // finance can review, approve and export them as one audited artefact.
+      let paymentBatchId: string | null = null;
+      if (paymentsCreated > 0) {
+        const batchReference = `PB-${run.periodEnd
+          .toISOString()
+          .slice(0, 10)
+          .replace(/-/g, '')}-${randomUUID().slice(0, 8).toUpperCase()}`;
+        const batch = await tx.paymentBatch.create({
+          data: {
+            organisationId: run.organisationId,
+            payrollRunId: run.id,
+            reference: batchReference,
+            label: `Payroll ${run.periodStart
+              .toISOString()
+              .slice(0, 10)} – ${run.periodEnd.toISOString().slice(0, 10)}`,
+            status: PaymentBatchStatus.DRAFT,
+            currency: run.currency,
+            totalMinorUnits: totalPaid,
+            paymentCount: paymentsCreated,
+            createdBy: userId,
+          },
+        });
+        await tx.payment.updateMany({
+          where: { payrollRunId: run.id, paymentBatchId: null },
+          data: { paymentBatchId: batch.id },
+        });
+        paymentBatchId = batch.id;
+        await this.audit.record({
+          action: AuditAction.PAYMENT_BATCH_CREATED,
+          targetType: 'payment_batch',
+          targetId: batch.id,
+          newValue: {
+            reference: batchReference,
+            payrollRunId: run.id,
+            paymentCount: paymentsCreated,
+            totalMinorUnits: totalPaid,
+          },
+        });
+      }
+
       // M3b: freeze one payslip per worker from the run's item lines.
       const periodLabel = this.periodLabel(run.periodStart, run.periodEnd);
       const payslipsCreated = await this.payslips.generateForRun(
@@ -1242,7 +1373,27 @@ export class PayrollRunsService {
         action: AuditAction.PAYROLL_RUN_PROCESSED,
         targetType: 'payroll_run',
         targetId: run.id,
-        newValue: { paymentsCreated, totalPaidMinorUnits: totalPaid, payslipsCreated },
+        newValue: {
+          paymentsCreated,
+          totalPaidMinorUnits: totalPaid,
+          payslipsCreated,
+          paymentBatchId,
+        },
+      });
+      await this.notify({
+        organisationId: run.organisationId,
+        actorUserId: userId,
+        roles: [Role.PAYROLL_ADMINISTRATOR, Role.FINANCE_APPROVER],
+        intent: {
+          type: NotificationType.PAYROLL_RUN_PROCESSED,
+          title: 'Payroll run processed',
+          body: `The payroll run for ${this.periodLabel(
+            run.periodStart,
+            run.periodEnd,
+          )} was processed (${paymentsCreated} payments). Payslips are available.`,
+          link: '/payroll',
+          metadata: { payrollRunId: run.id, paymentBatchId },
+        },
       });
       return {
         run: toPayrollRun(updated),
@@ -1420,6 +1571,53 @@ export class PayrollRunsService {
       throw new UnauthorizedException('No membership for this organisation');
     }
     return membership.role as SystemRole;
+  }
+
+  private async notify(input: {
+    organisationId: string;
+    actorUserId: string;
+    roles?: SystemRole[];
+    userIds?: string[];
+    intent: {
+      type: NotificationType;
+      title: string;
+      body: string;
+      link?: string;
+      metadata?: Record<string, unknown>;
+    };
+  }): Promise<void> {
+    try {
+      const recipients = new Set<string>(input.userIds ?? []);
+      if (input.roles && input.roles.length > 0) {
+        const members = await this.prisma.withRequestContext((tx) =>
+          tx.membership.findMany({
+            where: {
+              organisationId: input.organisationId,
+              isActive: true,
+              role: { in: input.roles },
+            },
+            select: { userId: true },
+          }),
+        );
+        for (const member of members) recipients.add(member.userId);
+      }
+      recipients.delete(input.actorUserId);
+      if (recipients.size === 0) return;
+      await this.notifications.emit({
+        organisationId: input.organisationId,
+        actorUserId: input.actorUserId,
+        intents: [...recipients].map((recipientUserId) => ({
+          recipientUserId,
+          ...input.intent,
+        })),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Payroll notification failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   private requireContext(): { organisationId: string; userId: string } {

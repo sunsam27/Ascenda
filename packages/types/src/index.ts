@@ -69,8 +69,11 @@ export enum EmploymentType {
 export enum WorkerStatus {
   ACTIVE = 'ACTIVE',
   ON_LEAVE = 'ON_LEAVE',
+  PROBATION = 'PROBATION',
   SUSPENDED = 'SUSPENDED',
   TERMINATED = 'TERMINATED',
+  RESIGNED = 'RESIGNED',
+  INACTIVE = 'INACTIVE',
   DRAFT = 'DRAFT',
 }
 
@@ -176,6 +179,7 @@ export enum PayrollItemType {
   BASIC_SALARY = 'BASIC_SALARY',
   ALLOWANCE = 'ALLOWANCE',
   BONUS = 'BONUS',
+  OVERTIME = 'OVERTIME',
   DEDUCTION = 'DEDUCTION',
   EMPLOYER_PENSION = 'EMPLOYER_PENSION',
   EMPLOYEE_PENSION = 'EMPLOYEE_PENSION',
@@ -195,9 +199,20 @@ export enum PayItemCalculation {
 export enum PaymentStatus {
   PENDING = 'PENDING',
   PROCESSING = 'PROCESSING',
+  APPROVED = 'APPROVED',
+  PAID = 'PAID',
+  CANCELLED = 'CANCELLED',
   COMPLETED = 'COMPLETED',
   FAILED = 'FAILED',
   REVERSED = 'REVERSED',
+}
+
+/** PAY-12: lifecycle of a payroll bank payment batch. */
+export enum PaymentBatchStatus {
+  DRAFT = 'DRAFT',
+  APPROVED = 'APPROVED',
+  PAID = 'PAID',
+  CANCELLED = 'CANCELLED',
 }
 
 // ── Payslips (PAY-13) ─────────────────────────────────────────────────────────
@@ -335,6 +350,7 @@ export interface ExpenseClaim extends TenantEntity {
   amountMinorUnits: number;
   currency: string;
   receiptUrl?: string;
+  receiptDocumentId?: string;
   status: ExpenseClaimStatus;
   managerDecidedById?: string;
   managerDecidedAt?: string;
@@ -385,6 +401,7 @@ export enum DocumentType {
   OFFER_LETTER = 'OFFER_LETTER',
   POLICY = 'POLICY',
   CERTIFICATION = 'CERTIFICATION',
+  RECEIPT = 'RECEIPT',
   OTHER = 'OTHER',
 }
 
@@ -426,6 +443,11 @@ export enum AuditAction {
   PAYROLL_CONFIG_CHANGED = 'PAYROLL_CONFIG_CHANGED',
   PAYMENT_APPROVED = 'PAYMENT_APPROVED',
   PAYMENT_STATUS_CHANGED = 'PAYMENT_STATUS_CHANGED',
+  PAYMENT_BATCH_CREATED = 'PAYMENT_BATCH_CREATED',
+  PAYMENT_BATCH_APPROVED = 'PAYMENT_BATCH_APPROVED',
+  PAYMENT_BATCH_PAID = 'PAYMENT_BATCH_PAID',
+  PAYMENT_BATCH_CANCELLED = 'PAYMENT_BATCH_CANCELLED',
+  STEP_UP_AUTHENTICATED = 'STEP_UP_AUTHENTICATED',
   PAYSLIP_GENERATED = 'PAYSLIP_GENERATED',
   PAYSLIP_ACCESSED = 'PAYSLIP_ACCESSED',
   PAYMENTS_EXPORTED = 'PAYMENTS_EXPORTED',
@@ -592,6 +614,9 @@ export interface BankAccount extends TenantEntity {
   accountName: string;
   isVerified: boolean;
   isPrimary: boolean;
+  requiresPayrollReview: boolean;
+  payrollReviewedAt?: string;
+  payrollReviewedBy?: string;
   createdBy: string;
 }
 
@@ -732,6 +757,9 @@ export interface BankAccount extends TenantEntity {
   accountName: string;
   isVerified: boolean;
   isPrimary: boolean;
+  requiresPayrollReview: boolean;
+  payrollReviewedAt?: string;
+  payrollReviewedBy?: string;
 }
 
 export interface Department extends TenantEntity {
@@ -1144,6 +1172,12 @@ export interface PayrollConfig {
   deductionRatioWarnBps: number;
   /** Blocking error when a run worker has no bank account on file (default true). */
   requireBankDetails: boolean;
+  /** PAY-09: attendance-derived overtime is opt-in (default false). */
+  overtimeEnabled: boolean;
+  /** PAY-09: overtime multiplier in basis points (15000 = 1.5x). */
+  overtimeMultiplierBps: number;
+  /** PAY-09: a full working day in minutes (480 = 8 hours). */
+  standardDailyMinutes: number;
   /** PAY-16: month the tax/leave year starts (1 = January; default 1). */
   taxYearStartMonth: number;
 }
@@ -1153,6 +1187,9 @@ export interface UpdatePayrollConfigDto {
   salaryChangeWarnPct?: number;
   deductionRatioWarnBps?: number;
   requireBankDetails?: boolean;
+  overtimeEnabled?: boolean;
+  overtimeMultiplierBps?: number;
+  standardDailyMinutes?: number;
   taxYearStartMonth?: number;
 }
 
@@ -1201,8 +1238,11 @@ export interface ReversePayrollRunDto {
 }
 
 export type UpdatePaymentStatusDto =
+  | { status: PaymentStatus.APPROVED }
   | { status: PaymentStatus.PROCESSING }
+  | { status: PaymentStatus.PAID }
   | { status: PaymentStatus.COMPLETED }
+  | { status: PaymentStatus.CANCELLED; reason: string }
   | { status: PaymentStatus.FAILED; reason: string }
   | { status: PaymentStatus.REVERSED; reason: string };
 
@@ -1210,6 +1250,7 @@ export type UpdatePaymentStatusDto =
 export type RunValidationCode =
   | 'MISSING_SALARY'
   | 'MISSING_BANK_DETAILS'
+  | 'BANK_DETAILS_UNREVIEWED'
   | 'DUPLICATE_RUN'
   | 'DUPLICATE_WORKER'
   | 'NO_ITEMS'
@@ -1287,8 +1328,28 @@ export interface CreateRecurringPayItemDto {
 
 export type UpdateRecurringPayItemDto = Partial<Omit<CreateRecurringPayItemDto, 'workerId'>>;
 
+export interface PaymentBatch extends TenantEntity {
+  payrollRunId?: string;
+  reference: string;
+  label: string;
+  status: PaymentBatchStatus;
+  currency: string;
+  totalMinorUnits: number;
+  paymentCount: number;
+  approvedAt?: string;
+  approvedBy?: string;
+  exportedAt?: string;
+  exportedBy?: string;
+  paidAt?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancellationReason?: string;
+  createdBy: string;
+}
+
 export interface Payment extends TenantEntity {
   payrollRunId?: string;
+  paymentBatchId?: string;
   workerId: string;
   /** Amount in minor units */
   amountMinorUnits: number;
@@ -1308,6 +1369,7 @@ export enum PaymentExportFormat {
 
 export interface PaymentExportQuery {
   payrollRunId?: string;
+  paymentBatchId?: string;
   status?: PaymentStatus;
   format?: PaymentExportFormat;
 }
@@ -1471,6 +1533,15 @@ export enum NotificationType {
   LEAVE_REQUEST_DELEGATED = 'LEAVE_REQUEST_DELEGATED',
   LEAVE_REQUEST_CANCELLED = 'LEAVE_REQUEST_CANCELLED',
   LEAVE_ACCRUAL_RUN = 'LEAVE_ACCRUAL_RUN',
+  PAYROLL_RUN_SUBMITTED = 'PAYROLL_RUN_SUBMITTED',
+  PAYROLL_RUN_APPROVED = 'PAYROLL_RUN_APPROVED',
+  PAYROLL_RUN_REJECTED = 'PAYROLL_RUN_REJECTED',
+  PAYROLL_RUN_PROCESSED = 'PAYROLL_RUN_PROCESSED',
+  PAYSLIPS_AVAILABLE = 'PAYSLIPS_AVAILABLE',
+  PAYMENT_BATCH_APPROVED = 'PAYMENT_BATCH_APPROVED',
+  PAYMENT_BATCH_PAID = 'PAYMENT_BATCH_PAID',
+  PAYMENT_FAILED = 'PAYMENT_FAILED',
+  BANK_DETAILS_CHANGED = 'BANK_DETAILS_CHANGED',
 }
 
 /** A per-recipient in-app notification for the signed-in user. */

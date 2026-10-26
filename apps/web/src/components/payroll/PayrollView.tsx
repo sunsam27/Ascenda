@@ -132,6 +132,7 @@ export default function PayrollView() {
       ) : activeTab === 'payments' ? (
         <PaymentsPanel
           canManage={canManagePayments}
+          canApprove={canApprove}
           canExport={canExportPayments}
         />
       ) : activeTab === 'claims' ? (

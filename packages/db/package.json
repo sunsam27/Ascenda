@@ -16,6 +16,7 @@
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:rls": "node --env-file=.env scripts/apply-sql.cjs migrations/00_rls_setup.sql",
+    "db:integrity": "node --env-file=.env scripts/apply-sql.cjs migrations/01_payroll_integrity.sql",
     "db:isolation-test": "node --env-file=.env scripts/isolation-test.cjs",
     "db:studio": "prisma studio",
     "clean": "rm -rf dist"

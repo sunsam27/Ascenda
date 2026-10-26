@@ -300,8 +300,11 @@ const STATUS_MAP: Record<string, WorkerStatus> = {
   active: WorkerStatus.ACTIVE,
   'on leave': WorkerStatus.ON_LEAVE,
   onleave: WorkerStatus.ON_LEAVE,
+  probation: WorkerStatus.PROBATION,
   suspended: WorkerStatus.SUSPENDED,
   terminated: WorkerStatus.TERMINATED,
+  resigned: WorkerStatus.RESIGNED,
+  inactive: WorkerStatus.INACTIVE,
   draft: WorkerStatus.DRAFT,
 };
 

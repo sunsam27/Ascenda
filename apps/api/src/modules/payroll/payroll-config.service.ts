@@ -23,6 +23,9 @@ export function toPayrollConfig(row: PayrollConfigRow): PayrollConfig {
     salaryChangeWarnPct: row.salaryChangeWarnPct,
     deductionRatioWarnBps: row.deductionRatioWarnBps,
     requireBankDetails: row.requireBankDetails,
+    overtimeEnabled: row.overtimeEnabled,
+    overtimeMultiplierBps: row.overtimeMultiplierBps,
+    standardDailyMinutes: row.standardDailyMinutes,
     taxYearStartMonth: row.taxYearStartMonth,
   };
 }
@@ -57,6 +60,9 @@ export class PayrollConfigService {
               DEFAULT_VALIDATION_THRESHOLDS.deductionRatioWarnBps,
             requireBankDetails:
               DEFAULT_VALIDATION_THRESHOLDS.requireBankDetails,
+            overtimeEnabled: false,
+            overtimeMultiplierBps: 15000,
+            standardDailyMinutes: 480,
             taxYearStartMonth: 1,
           };
     });
@@ -98,6 +104,15 @@ export class PayrollConfigService {
         ...(dto.requireBankDetails !== undefined
           ? { requireBankDetails: dto.requireBankDetails }
           : {}),
+        ...(dto.overtimeEnabled !== undefined
+          ? { overtimeEnabled: dto.overtimeEnabled }
+          : {}),
+        ...(dto.overtimeMultiplierBps !== undefined
+          ? { overtimeMultiplierBps: dto.overtimeMultiplierBps }
+          : {}),
+        ...(dto.standardDailyMinutes !== undefined
+          ? { standardDailyMinutes: dto.standardDailyMinutes }
+          : {}),
         ...(dto.taxYearStartMonth !== undefined
           ? { taxYearStartMonth: dto.taxYearStartMonth }
           : {}),
@@ -116,6 +131,9 @@ export class PayrollConfigService {
           salaryChangeWarnPct: row.salaryChangeWarnPct,
           deductionRatioWarnBps: row.deductionRatioWarnBps,
           requireBankDetails: row.requireBankDetails,
+          overtimeEnabled: row.overtimeEnabled,
+          overtimeMultiplierBps: row.overtimeMultiplierBps,
+          standardDailyMinutes: row.standardDailyMinutes,
           taxYearStartMonth: row.taxYearStartMonth,
         },
       });

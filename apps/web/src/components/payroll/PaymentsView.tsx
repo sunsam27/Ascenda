@@ -8,6 +8,8 @@ import styles from '@/components/payroll/payroll.module.css';
 const PAYMENT_MANAGERS = new Set(['OWNER', 'PAYROLL_ADMINISTRATOR']);
 /** Roles permitted by the org-wide `payments:export` grant. */
 const PAYMENT_EXPORTERS = new Set(['OWNER', 'FINANCE_APPROVER']);
+/** Roles permitted by the org-wide `payments:approve` grant. */
+const PAYMENT_APPROVERS = new Set(['OWNER', 'FINANCE_APPROVER']);
 /** Roles that may read payments (everything else is denied by the API). */
 const PAYMENT_READERS = new Set([
   'OWNER',
@@ -38,6 +40,7 @@ export default function PaymentsView() {
       ) : canRead ? (
         <PaymentsPanel
           canManage={PAYMENT_MANAGERS.has(role)}
+          canApprove={PAYMENT_APPROVERS.has(role)}
           canExport={PAYMENT_EXPORTERS.has(role)}
         />
       ) : (

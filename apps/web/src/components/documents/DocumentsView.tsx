@@ -35,6 +35,7 @@ const TYPE_LABEL: Record<DocumentType, string> = {
   [DocumentType.OFFER_LETTER]: 'Offer letter',
   [DocumentType.POLICY]: 'Policy',
   [DocumentType.CERTIFICATION]: 'Certification',
+  [DocumentType.RECEIPT]: 'Receipt',
   [DocumentType.OTHER]: 'Other',
 };
 
@@ -45,6 +46,7 @@ const TYPE_ORDER: DocumentType[] = [
   DocumentType.CERTIFICATION,
   DocumentType.PAYSLIP,
   DocumentType.POLICY,
+  DocumentType.RECEIPT,
   DocumentType.OTHER,
 ];
 

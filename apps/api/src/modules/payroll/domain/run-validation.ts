@@ -15,6 +15,7 @@
 export type RunValidationCode =
   | 'MISSING_SALARY'
   | 'MISSING_BANK_DETAILS'
+  | 'BANK_DETAILS_UNREVIEWED'
   | 'DUPLICATE_RUN'
   | 'DUPLICATE_WORKER'
   | 'NO_ITEMS'
@@ -52,6 +53,8 @@ export interface WorkerValidationInput {
   identifier: string;
   hasCompensation: boolean;
   hasBankAccount: boolean;
+  /** Bank details changed since the last payroll review (requires sign-off). */
+  bankDetailsAwaitingReview?: boolean;
   /** This run's prorated earnings for the worker. */
   grossMinorUnits: number;
   /** Absolute deduction magnitude for the worker. */
@@ -124,6 +127,14 @@ export function validateRun(input: RunValidationInput): RunValidationOutput {
         code: 'MISSING_BANK_DETAILS',
         workerId: worker.workerId,
         message: `Worker ${worker.identifier} has no bank account on file — payments cannot be processed`,
+      });
+    }
+
+    if (worker.hasBankAccount && worker.bankDetailsAwaitingReview) {
+      warnings.push({
+        code: 'BANK_DETAILS_UNREVIEWED',
+        workerId: worker.workerId,
+        message: `Worker ${worker.identifier} has bank details changed since the last payroll review — confirm them before paying`,
       });
     }
 

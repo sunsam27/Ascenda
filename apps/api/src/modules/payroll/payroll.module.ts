@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { PeopleModule } from '../people/people.module';
 import { TimeLeaveModule } from '../time-leave/time-leave.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { PayrollController } from './payroll.controller';
 import { PayrollService } from './payroll.service';
 import { PayCalendarsController } from './pay-calendars.controller';
@@ -22,7 +23,7 @@ import { ExpenseClaimsController } from './expense-claims.controller';
 import { ExpenseClaimsService } from './expense-claims.service';
 
 @Module({
-  imports: [AuditModule, PeopleModule, TimeLeaveModule],
+  imports: [AuditModule, PeopleModule, TimeLeaveModule, NotificationsModule],
   controllers: [
     PayrollController,
     PayCalendarsController,

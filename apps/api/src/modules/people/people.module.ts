@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { IdentityAccessModule } from '../identity-access/identity-access.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { WorkersController } from './workers.controller';
 import { WorkersService } from './workers.service';
 import { DepartmentsController } from './departments.controller';
@@ -13,7 +14,7 @@ import { BankAccountsController, BankLookupController } from './bank-accounts.co
 import { BankAccountsService } from './bank-accounts.service';
 
 @Module({
-  imports: [AuditModule, IdentityAccessModule],
+  imports: [AuditModule, IdentityAccessModule, NotificationsModule],
   controllers: [
     WorkersController,
     DepartmentsController,

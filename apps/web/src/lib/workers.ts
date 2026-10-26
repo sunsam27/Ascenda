@@ -27,6 +27,7 @@ export async function fetchAllWorkers(): Promise<WorkerSummary[]> {
 const SELECTABLE_WORKER_STATUSES: ReadonlySet<WorkerStatus> = new Set([
   WorkerStatus.ACTIVE,
   WorkerStatus.ON_LEAVE,
+  WorkerStatus.PROBATION,
 ]);
 
 export function isSelectableWorker(worker: WorkerSummary): boolean {

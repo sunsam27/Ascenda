@@ -87,6 +87,22 @@ export class BankAccountsController {
     return { data: await this.service.update(workerId, id, dto) };
   }
 
+  @Post(':id/review')
+  @ApiOperation({
+    summary: 'Payroll marks changed bank details as reviewed',
+  })
+  @RequirePermission({
+    resource: 'bank_accounts',
+    action: 'update',
+    scope: SELF,
+  })
+  async review(
+    @Param('workerId') workerId: string,
+    @Param('id') id: string,
+  ) {
+    return { data: await this.service.review(workerId, id) };
+  }
+
   @Delete(':id')
   @HttpCode(204)
   @ApiOperation({ summary: 'Remove a bank account' })

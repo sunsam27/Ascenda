@@ -22,11 +22,15 @@ describe('payment file export (PAY-12)', () => {
         accountName: 'Jane "JD" Doe',
         bankName: 'ACME Bank',
         bankCode: '000',
-        accountNumberMasked: '****1234',
+        accountNumber: '0123456789',
         amountMinorUnits: 100000,
         currency: 'NGN',
         status: 'PENDING',
         description: 'Payroll run 2026-09-01–2026-09-30',
+        payrollRunId: 'run-1',
+        paymentBatchReference: 'PB-1',
+        exportedBy: 'finance@example.com',
+        exportedAt: '2026-10-01T10:00:00.000Z',
       },
     ]);
     expect(csv).toContain('"Doe, Jane"');

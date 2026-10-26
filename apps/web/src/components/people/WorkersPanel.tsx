@@ -43,16 +43,22 @@ const CATEGORY_LABEL: Record<WorkerCategory, string> = {
 const STATUS_LABEL: Record<WorkerStatus, string> = {
   [WorkerStatus.ACTIVE]: 'Active',
   [WorkerStatus.ON_LEAVE]: 'On leave',
+  [WorkerStatus.PROBATION]: 'Probation',
   [WorkerStatus.SUSPENDED]: 'Suspended',
   [WorkerStatus.TERMINATED]: 'Terminated',
+  [WorkerStatus.RESIGNED]: 'Resigned',
+  [WorkerStatus.INACTIVE]: 'Inactive',
   [WorkerStatus.DRAFT]: 'Draft',
 };
 
 const STATUS_CLASS: Record<WorkerStatus, string | undefined> = {
   [WorkerStatus.ACTIVE]: styles.statusActive,
   [WorkerStatus.ON_LEAVE]: styles.statusOnLeave,
+  [WorkerStatus.PROBATION]: styles.statusOnLeave,
   [WorkerStatus.SUSPENDED]: styles.statusSuspended,
   [WorkerStatus.TERMINATED]: styles.statusTerminated,
+  [WorkerStatus.RESIGNED]: styles.statusTerminated,
+  [WorkerStatus.INACTIVE]: styles.statusDraft,
   [WorkerStatus.DRAFT]: styles.statusDraft,
 };
 

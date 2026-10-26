@@ -50,6 +50,25 @@ export class UpdatePayrollConfigDto {
   @IsBoolean()
   requireBankDetails?: boolean;
 
+  /** PAY-09: enable attendance-derived overtime (opt-in, default false). */
+  @IsOptional()
+  @IsBoolean()
+  overtimeEnabled?: boolean;
+
+  /** PAY-09: overtime multiplier in basis points (15000 = 1.5x). */
+  @IsOptional()
+  @IsInt()
+  @Min(10_000)
+  @Max(50_000)
+  overtimeMultiplierBps?: number;
+
+  /** PAY-09: a full working day in minutes (60..1440). */
+  @IsOptional()
+  @IsInt()
+  @Min(60)
+  @Max(1_440)
+  standardDailyMinutes?: number;
+
   /** PAY-16: month the tax/leave year starts (1 = January). */
   @IsOptional()
   @IsInt()

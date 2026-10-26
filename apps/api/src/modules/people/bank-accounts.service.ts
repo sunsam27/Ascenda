@@ -1,17 +1,20 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma } from '@ascenda/db';
-import { PermissionScope } from '@ascenda/types';
+import { AuditAction, NotificationType, Prisma } from '@ascenda/db';
+import { PermissionScope, SystemRole } from '@ascenda/types';
 import type { BankAccount } from '@ascenda/types';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { getRequestContext } from '../../common/context/request-context';
 import { getEffectiveScope } from '../../common/rbac/permissions';
 import { resolveReadScope } from '../../common/rbac/worker-scope';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CreateBankAccountDto,
   UpdateBankAccountDto,
@@ -37,6 +40,9 @@ export function toBankAccount(row: BankAccountRow): BankAccount {
     accountName: row.accountName,
     isVerified: row.isVerified,
     isPrimary: row.isPrimary,
+    requiresPayrollReview: row.requiresPayrollReview,
+    payrollReviewedAt: row.payrollReviewedAt?.toISOString(),
+    payrollReviewedBy: row.payrollReviewedBy ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     createdBy: row.createdBy,
@@ -54,9 +60,12 @@ export function toBankAccount(row: BankAccountRow): BankAccount {
  */
 @Injectable()
 export class BankAccountsService {
+  private readonly logger = new Logger(BankAccountsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async listForWorker(workerId: string): Promise<BankAccount[]> {
@@ -113,10 +122,12 @@ export class BankAccountsService {
           accountNumberMasked: maskAccountNumber(accountNumber),
           accountName: dto.accountName.trim(),
           isPrimary,
+          requiresPayrollReview: true,
           createdBy: this.actorId(),
         },
       });
       await this.auditBankChange('create', row);
+      await this.notifyBankChange('created', row);
       return toBankAccount(row);
     });
   }
@@ -165,6 +176,14 @@ export class BankAccountsService {
         });
       }
 
+      const accountNameChanged =
+        dto.accountName !== undefined &&
+        dto.accountName.trim() !== existing.accountName;
+      const bankChanged =
+        bankName !== existing.bankName || bankCode !== existing.bankCode;
+      const requiresReview =
+        accountNumberChanged || accountNameChanged || bankChanged;
+
       const row = await tx.bankAccount.update({
         where: { id: accountId },
         data: {
@@ -184,9 +203,53 @@ export class BankAccountsService {
           ...(dto.isVerified !== undefined && this.isOrganisationScope()
             ? { isVerified: dto.isVerified }
             : {}),
+          ...(requiresReview
+            ? {
+                requiresPayrollReview: true,
+                payrollReviewedAt: null,
+                payrollReviewedBy: null,
+              }
+            : {}),
         },
       });
       await this.auditBankChange('update', row);
+      if (requiresReview) await this.notifyBankChange('changed', row);
+      return toBankAccount(row);
+    });
+  }
+
+  /**
+   * Payroll marks a changed bank account as reviewed. Only org-scoped callers
+   * (payroll admins) may clear the review flag; employees cannot attest their
+   * own details.
+   */
+  async review(workerId: string, accountId: string): Promise<BankAccount> {
+    if (!this.isOrganisationScope()) {
+      throw new ForbiddenException(
+        'Only payroll administrators can review bank details',
+      );
+    }
+    const { userId } = this.requireContext();
+    return this.prisma.withRequestContext(async (tx) => {
+      await this.assertWorkerAccess(tx, workerId);
+      const existing = await tx.bankAccount.findFirst({
+        where: { id: accountId, workerId },
+      });
+      if (!existing) throw new NotFoundException('Bank account not found');
+      const row = await tx.bankAccount.update({
+        where: { id: accountId },
+        data: {
+          requiresPayrollReview: false,
+          payrollReviewedAt: new Date(),
+          payrollReviewedBy: userId,
+        },
+      });
+      await this.audit.record({
+        action: AuditAction.BANK_DETAILS_CHANGED,
+        targetType: 'bank_account',
+        targetId: row.id,
+        newValue: { reviewed: true, workerId },
+      });
       return toBankAccount(row);
     });
   }
@@ -253,6 +316,49 @@ export class BankAccountsService {
     throw new BadRequestException(
       'Bank could not be detected from the account number; please select a bank',
     );
+  }
+
+  private async notifyBankChange(
+    change: 'created' | 'changed',
+    row: BankAccountRow,
+  ): Promise<void> {
+    try {
+      const { organisationId, userId } = this.requireContext();
+      const members = await this.prisma.withRequestContext((tx) =>
+        tx.membership.findMany({
+          where: {
+            organisationId,
+            isActive: true,
+            role: {
+              in: [SystemRole.PAYROLL_ADMINISTRATOR, SystemRole.FINANCE_APPROVER],
+            },
+          },
+          select: { userId: true },
+        }),
+      );
+      const recipients = members
+        .map((m) => m.userId)
+        .filter((id) => id !== userId);
+      if (recipients.length === 0) return;
+      await this.notifications.emit({
+        organisationId,
+        actorUserId: userId,
+        intents: recipients.map((recipientUserId) => ({
+          recipientUserId,
+          type: NotificationType.BANK_DETAILS_CHANGED,
+          title: 'Bank details changed',
+          body: `A worker's bank account was ${change} and needs payroll review before the next run.`,
+          link: '/payroll',
+          metadata: { workerId: row.workerId, bankAccountId: row.id },
+        })),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Bank-change notification failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   private async auditBankChange(

@@ -20,6 +20,7 @@ import { Request, Response } from 'express';
 import { IdentityAccessService } from './identity-access.service';
 import { LoginDto } from './dto/login.dto';
 import { SetPasswordDto } from './dto/set-password.dto';
+import { StepUpDto } from './dto/step-up.dto';
 import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
@@ -117,6 +118,29 @@ export class IdentityAccessController {
   @ApiOperation({ summary: 'Get current authenticated user' })
   me(@Req() req: Request) {
     return { user: req.user };
+  }
+
+  /**
+   * SECURITY.md §2: short-lived step-up token for sensitive actions
+   * (payroll/payment approval, bank changes, exports).
+   */
+  @Post('step-up')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
+  @ApiOperation({ summary: 'Re-authenticate for a sensitive action' })
+  async stepUp(
+    @Req() req: Request & { user?: { sub?: string; organisationId?: string } },
+    @Body() dto: StepUpDto,
+  ) {
+    if (!req.user?.sub) {
+      throw new UnauthorizedException('Not signed in');
+    }
+    return this.authService.stepUp({
+      userId: req.user.sub,
+      organisationId: req.user.organisationId,
+      password: dto.password,
+      mfaCode: dto.mfaCode,
+    });
   }
 
   @Get('health')

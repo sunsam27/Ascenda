@@ -39,6 +39,7 @@ import { ListAttendanceQueryDto } from './dto/list-attendance.dto';
 import { ClockAttendanceDto } from './dto/clock-attendance.dto';
 import { AttendanceScheduleQueryDto } from './dto/attendance-schedule.dto';
 
+
 const ATTENDANCE_INCLUDE = {
   worker: { select: { firstName: true, lastName: true } },
 } satisfies Prisma.AttendanceRecordInclude;
@@ -610,5 +611,39 @@ export class AttendanceService {
       throw new UnauthorizedException('No active organisation for this request');
     }
     return { organisationId: ctx.organisationId, userId: ctx.userId };
+  }
+
+  async overtimeMinutesInPeriod(params: {
+    periodStart: Date;
+    periodEnd: Date;
+    workerIds: string[];
+    standardDailyMinutes?: number;
+  }): Promise<Record<string, number>> {
+    const standardDailyMinutes = params.standardDailyMinutes ?? 480;
+    return this.prisma.withRequestContext(async (tx) => {
+      const result: Record<string, number> = {};
+      for (const id of params.workerIds) result[id] = 0;
+      if (params.workerIds.length === 0) return result;
+
+      const rows = await tx.attendanceRecord.findMany({
+        where: {
+          workerId: { in: params.workerIds },
+          date: { gte: params.periodStart, lte: params.periodEnd },
+          hoursWorked: { not: null },
+        },
+        select: { workerId: true, hoursWorked: true },
+      });
+
+      for (const row of rows) {
+        const hours = row.hoursWorked ? Number(row.hoursWorked) : 0;
+        if (hours <= 0) continue;
+        const workedMinutes = Math.round(hours * 60);
+        const overtime = workedMinutes - standardDailyMinutes;
+        if (overtime > 0) {
+          result[row.workerId] = (result[row.workerId] ?? 0) + overtime;
+        }
+      }
+      return result;
+    });
   }
 }

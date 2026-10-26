@@ -15,6 +15,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuditAction, SystemRole } from '@ascenda/db';
 import type { InvitationDetails } from '@ascenda/types';
 import * as argon2 from 'argon2';
+import { authenticator } from 'otplib';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { generateOpaqueToken, hashToken } from '../../common/security/tokens';
 import { MailerService } from '../../common/mailer/mailer.service';
@@ -23,7 +24,13 @@ import { LoginDto } from './dto/login.dto';
 
 const MIN_PASSWORD_LENGTH = 12;
 const ACCESS_TTL_SECONDS = 15 * 60; // 15 minutes
+const STEP_UP_TTL_SECONDS = 5 * 60; // 5 minutes
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/** Step-up tokens are signed with a distinct secret so they cannot be used as access tokens. */
+export function stepUpSecret(base: string | undefined): string {
+  return `${base ?? 'fallback-secret'}:step-up`;
+}
 
 /**
  * Where a signed-in member lands after auth. Self-service roles get their own
@@ -505,6 +512,63 @@ export class IdentityAccessService {
       user: this.toSafeUser(input.user),
       redirectTo: homePathForRole(input.role),
     };
+  }
+
+  /**
+   * SECURITY.md §2: re-authenticate before changing bank details, approving
+   * payroll/payments or exporting payroll data. Returns a short-lived,
+   * purpose-scoped token the caller must send in `x-step-up-token`.
+   */
+  async stepUp(input: {
+    userId: string;
+    organisationId?: string;
+    password: string;
+    mfaCode?: string;
+  }): Promise<{ token: string; expiresIn: number }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: input.userId },
+    });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Unable to re-authenticate');
+    }
+
+    const validPassword = await argon2.verify(user.passwordHash, input.password);
+    if (!validPassword) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (user.isMfaEnabled) {
+      if (!input.mfaCode || !user.mfaSecret) {
+        throw new BadRequestException('MFA code is required');
+      }
+      const validMfa = authenticator.check(input.mfaCode, user.mfaSecret);
+      if (!validMfa) {
+        throw new UnauthorizedException('Invalid MFA code');
+      }
+    }
+
+    const token = this.jwt.sign(
+      {
+        sub: user.id,
+        purpose: 'step_up',
+        organisationId: input.organisationId ?? null,
+      },
+      {
+        secret: stepUpSecret(this.config.get<string>('JWT_ACCESS_SECRET')),
+        expiresIn: STEP_UP_TTL_SECONDS,
+      },
+    );
+
+    await this.audit.record({
+      action: AuditAction.STEP_UP_AUTHENTICATED,
+      organisationId: input.organisationId,
+      actorId: user.id,
+      targetType: 'user',
+      targetId: user.id,
+      newValue: { mfa: user.isMfaEnabled },
+    });
+
+    return { token, expiresIn: STEP_UP_TTL_SECONDS };
   }
 
   private toSafeUser(user: {
