@@ -797,7 +797,7 @@ function RunDetailView({
           <p className={styles.muted}>
             {noEligibleWorkers
               ? 'No eligible workers for this month.'
-              : 'No item lines yet. Run Prepare to calculate them, or check that workers were ACTIVE or ON_LEAVE and employed during this pay period.'}
+              : 'No item lines yet. Run Prepare to calculate them, or check that workers are eligible and employed during this pay period.'}
           </p>
         ) : (
           [...byWorker.entries()].map(([workerId, lines]) => {
