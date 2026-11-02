@@ -221,8 +221,36 @@ enum PaymentStatus {
 enum PaymentBatchStatus {
   DRAFT
   APPROVED
+  PROCESSING
   PAID
+  PARTIALLY_PAID
+  FAILED
   CANCELLED
+}
+
+/// Organisation-owned payout credentials. Ascenda never holds funds; transfers
+/// are made from the organisation's own Paystack/Flutterwave balance.
+enum PayoutProvider {
+  PAYSTACK
+  FLUTTERWAVE
+}
+
+enum PayoutAccountMode {
+  TEST
+  LIVE
+}
+
+enum PayoutAccountStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum PayoutStatus {
+  QUEUED
+  PROCESSING
+  PAID
+  FAILED
+  REVERSED
 }
 
 enum ApprovalStatus {
@@ -244,6 +272,58 @@ enum DocumentType {
   OTHER
 }
 
+/// ONB-01: a checklist is created for every worker and tracks the tasks that
+/// must be completed before their onboarding is considered done.
+enum OnboardingStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum ChecklistTaskStatus {
+  PENDING
+  COMPLETED
+  WAIVED
+}
+
+enum OnboardingTaskType {
+  PERSONAL_INFO
+  ID_DOCUMENT
+  BANK_DETAILS
+  AGREEMENT_SIGNATURE
+  POLICY_ACKNOWLEDGEMENT
+  MANAGER_MEETING
+  ORIENTATION
+  EQUIPMENT
+  TRAINING
+  CUSTOM
+}
+
+/// ONB-03: why a worker is leaving. RESIGNATION maps to WorkerStatus.RESIGNED;
+/// every other reason maps to TERMINATED when the exit is completed.
+enum ExitReason {
+  RESIGNATION
+  DISMISSAL
+  CONTRACT_END
+  RETIREMENT
+  REDUNDANCY
+  OTHER
+}
+
+enum OffboardingStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum OffboardingTaskType {
+  FINAL_PAY
+  EQUIPMENT_RETURN
+  ACCESS_REMOVAL
+  EXIT_INTERVIEW
+  KNOWLEDGE_TRANSFER
+  CUSTOM
+}
+
 enum AuditAction {
   LOGIN
   LOGIN_FAILED
@@ -256,6 +336,12 @@ enum AuditAction {
   WORKER_CREATED
   WORKER_UPDATED
   WORKER_DELETED
+  ONBOARDING_CHECKLIST_CREATED
+  ONBOARDING_TASK_UPDATED
+  OFFBOARDING_STARTED
+  OFFBOARDING_TASK_UPDATED
+  OFFBOARDING_COMPLETED
+  OFFBOARDING_CANCELLED
   COMPENSATION_CHANGED
   BANK_DETAILS_CHANGED
   LEAVE_TYPE_CHANGED
@@ -287,6 +373,9 @@ enum AuditAction {
   PAYMENT_BATCH_APPROVED
   PAYMENT_BATCH_PAID
   PAYMENT_BATCH_CANCELLED
+  PAYOUT_ACCOUNT_CHANGED
+  PAYOUT_BATCH_INITIATED
+  PAYOUT_STATUS_CHANGED
   STEP_UP_AUTHENTICATED
   PAYSLIP_GENERATED
   PAYSLIP_ACCESSED
@@ -358,25 +447,25 @@ enum NotificationType {
 
 /// Platform-level user account. Credentials managed separately.
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String   /// Argon2id hash — NEVER expose in responses
-  firstName    String
-  lastName     String
-  avatarUrl    String?
-  isMfaEnabled Boolean  @default(false)
-  mfaSecret    String?  /// Encrypted TOTP secret
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String /// Argon2id hash — NEVER expose in responses
+  firstName       String
+  lastName        String
+  avatarUrl       String?
+  isMfaEnabled    Boolean   @default(false)
+  mfaSecret       String? /// Encrypted TOTP secret
   /// Ascenda platform staff: may review/approve access requests and provision
   /// workspaces across tenants (SECURITY.md §8 — every action is audited).
-  isPlatformAdmin Boolean  @default(false)
-  lastLoginAt  DateTime?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isPlatformAdmin Boolean   @default(false)
+  lastLoginAt     DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  memberships       Membership[]
-  auditLogsAsActor  AuditLog[]   @relation("AuditActor")
-  notifications     Notification[] @relation("NotificationRecipient")
+  memberships      Membership[]
+  auditLogsAsActor AuditLog[]     @relation("AuditActor")
+  notifications    Notification[] @relation("NotificationRecipient")
 
   @@map("users")
 }
@@ -406,49 +495,52 @@ model Membership {
 // ─── Organisations ───────────────────────────────────────────────────────────
 
 model Organisation {
-  id          String           @id @default(uuid())
-  name        String
-  slug        String           @unique
-  type        OrganisationType
-  country     String           /// ISO 3166-1 alpha-2
-  currency    String           /// ISO 4217
-  timezone    String           /// IANA timezone
-  terminology Json             @default("{}") /// {"Department":"Ministry","Employee":"Pastor"}
+  id               String           @id @default(uuid())
+  name             String
+  slug             String           @unique
+  type             OrganisationType
+  country          String /// ISO 3166-1 alpha-2
+  currency         String /// ISO 4217
+  timezone         String /// IANA timezone
+  terminology      Json             @default("{}") /// {"Department":"Ministry","Employee":"Pastor"}
   /// Work-schedule defaults (PRD ATT-02). workDays = ISO weekdays Mon=1..Sun=7.
-  workDays         Int[]  @default([1, 2, 3, 4, 5])
-  workDayStart     String @default("09:00") /// HH:mm in the organisation timezone
-  workDayEnd       String @default("17:00") /// HH:mm in the organisation timezone
-  lateGraceMinutes Int    @default(0)
-  logoUrl     String?
-  isActive    Boolean          @default(true)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  workDays         Int[]            @default([1, 2, 3, 4, 5])
+  workDayStart     String           @default("09:00") /// HH:mm in the organisation timezone
+  workDayEnd       String           @default("17:00") /// HH:mm in the organisation timezone
+  lateGraceMinutes Int              @default(0)
+  logoUrl          String?
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
-  memberships          Membership[]
-  departments          Department[]
-  locations            Location[]
-  workers              Worker[]
-  payCalendars         PayCalendar[]
-  payrollRuns          PayrollRun[]
-  recurringPayItems    RecurringPayItem[]
-  leaveTypes           LeaveType[]
-  leaveRequests        LeaveRequest[]
-  leaveBalances        LeaveBalance[]
-  attendanceRecords    AttendanceRecord[]
-  holidayCalendars     Holiday[]
-  blackoutPeriods      BlackoutPeriod[]
-  approvalWorkflows    ApprovalWorkflow[]
-  payments             Payment[]
-  paymentBatches       PaymentBatch[]
-  payslips             Payslip[]
-  expenseClaims        ExpenseClaim[]
-  documents            Document[]
-  auditLogs            AuditLog[]
-  statutoryRulePacks   StatutoryRulePack[]
-  yearEndStatements    YearEndStatement[]
-  invitations          Invitation[]
-  notifications        Notification[]
-  subscription         Subscription?
+  memberships         Membership[]
+  departments         Department[]
+  locations           Location[]
+  workers             Worker[]
+  payCalendars        PayCalendar[]
+  payrollRuns         PayrollRun[]
+  recurringPayItems   RecurringPayItem[]
+  leaveTypes          LeaveType[]
+  leaveRequests       LeaveRequest[]
+  leaveBalances       LeaveBalance[]
+  attendanceRecords   AttendanceRecord[]
+  holidayCalendars    Holiday[]
+  blackoutPeriods     BlackoutPeriod[]
+  approvalWorkflows   ApprovalWorkflow[]
+  payments            Payment[]
+  paymentBatches      PaymentBatch[]
+  payoutAccount       PayoutAccount?
+  payouts             Payout[]
+  payoutWebhookEvents PayoutWebhookEvent[]
+  payslips            Payslip[]
+  expenseClaims       ExpenseClaim[]
+  documents           Document[]
+  auditLogs           AuditLog[]
+  statutoryRulePacks  StatutoryRulePack[]
+  yearEndStatements   YearEndStatement[]
+  invitations         Invitation[]
+  notifications       Notification[]
+  subscription        Subscription?
 
   @@map("organisations")
 }
@@ -473,26 +565,26 @@ model Department {
 }
 
 model Location {
-  id             String   @id @default(uuid())
-  organisationId String
-  name           String
-  address        String?
-  city           String?
-  country        String?
-  isActive       Boolean  @default(true)
+  id               String   @id @default(uuid())
+  organisationId   String
+  name             String
+  address          String?
+  city             String?
+  country          String?
+  isActive         Boolean  @default(true)
   /// Optional per-location overrides of the organisation's work schedule (ATT-02).
   /// An empty list means "inherit the organisation default".
-  workDays         Int[]  @default([])
+  workDays         Int[]    @default([])
   workDayStart     String?
   workDayEnd       String?
   lateGraceMinutes Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  createdBy      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdBy        String
 
-  organisation Organisation @relation(fields: [organisationId], references: [id])
-  workers      Worker[]
-  holidays     Holiday[]
+  organisation    Organisation     @relation(fields: [organisationId], references: [id])
+  workers         Worker[]
+  holidays        Holiday[]
   blackoutPeriods BlackoutPeriod[]
 
   @@index([organisationId])
@@ -502,27 +594,27 @@ model Location {
 // ─── People ──────────────────────────────────────────────────────────────────
 
 model Worker {
-  id               String         @id @default(uuid())
-  organisationId   String
-  userId           String?        /// Linked if they have a login
-  employeeNumber   String
-  firstName        String
-  lastName         String
-  preferredName    String?
-  email            String
-  phone            String?
-  category         WorkerCategory
-  employmentType   EmploymentType
-  status           WorkerStatus   @default(DRAFT)
-  jobTitle         String
-  departmentId     String?
-  locationId       String?
-  managerId        String?
-  startDate        DateTime
-  endDate          DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  createdBy        String
+  id             String         @id @default(uuid())
+  organisationId String
+  userId         String? /// Linked if they have a login
+  employeeNumber String
+  firstName      String
+  lastName       String
+  preferredName  String?
+  email          String
+  phone          String?
+  category       WorkerCategory
+  employmentType EmploymentType
+  status         WorkerStatus   @default(DRAFT)
+  jobTitle       String
+  departmentId   String?
+  locationId     String?
+  managerId      String?
+  startDate      DateTime
+  endDate        DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  createdBy      String
 
   organisation        Organisation         @relation(fields: [organisationId], references: [id])
   department          Department?          @relation(fields: [departmentId], references: [id])
@@ -537,11 +629,14 @@ model Worker {
   payrollItems        PayrollItem[]
   recurringPayItems   RecurringPayItem[]
   payments            Payment[]
+  payouts             Payout[]
   payslips            Payslip[]
   expenseClaims       ExpenseClaim[]
   documents           Document[]
   workerIdentity      WorkerIdentity?
   yearEndStatements   YearEndStatement[]
+  onboardingChecklist OnboardingChecklist?
+  offboardingCases    OffboardingCase[]
 
   @@unique([organisationId, employeeNumber])
   @@index([organisationId])
@@ -551,20 +646,20 @@ model Worker {
 
 /// Restricted fields — field-level encryption applied at application layer
 model WorkerIdentity {
-  id                   String   @id @default(uuid())
-  organisationId       String
-  workerId             String   @unique
+  id                  String    @id @default(uuid())
+  organisationId      String
+  workerId            String    @unique
   /// Encrypted; display masked last-4 only by default
-  nationalIdEncrypted  String?
-  nationalIdMasked     String?
-  taxIdEncrypted       String?
-  taxIdMasked          String?
-  nationalIdType       String?
-  dateOfBirth          DateTime?
-  gender               String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  createdBy            String
+  nationalIdEncrypted String?
+  nationalIdMasked    String?
+  taxIdEncrypted      String?
+  taxIdMasked         String?
+  nationalIdType      String?
+  dateOfBirth         DateTime?
+  gender              String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  createdBy           String
 
   worker Worker @relation(fields: [workerId], references: [id])
 
@@ -574,7 +669,7 @@ model WorkerIdentity {
 
 /// Effective-dated — query with valid_from <= date AND (valid_to IS NULL OR valid_to > date)
 model CompensationRecord {
-  id                    String      @id @default(uuid())
+  id                    String       @id @default(uuid())
   organisationId        String
   workerId              String
   /// Amount in integer minor currency units — NO FLOATS
@@ -588,8 +683,8 @@ model CompensationRecord {
   validFrom             DateTime
   validTo               DateTime?
   notes                 String?
-  createdAt             DateTime    @default(now())
-  updatedAt             DateTime    @updatedAt
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
   createdBy             String
 
   worker Worker @relation(fields: [workerId], references: [id])
@@ -601,23 +696,23 @@ model CompensationRecord {
 
 /// Bank account number stored encrypted at application layer
 model BankAccount {
-  id                     String   @id @default(uuid())
+  id                     String    @id @default(uuid())
   organisationId         String
   workerId               String
   bankName               String
   bankCode               String
-  accountNumberEncrypted String   /// AES-256-GCM envelope encrypted
-  accountNumberMasked    String   /// e.g. "****1234"
+  accountNumberEncrypted String /// AES-256-GCM envelope encrypted
+  accountNumberMasked    String /// e.g. "****1234"
   accountName            String
-  isVerified             Boolean  @default(false)
-  isPrimary              Boolean  @default(false)
+  isVerified             Boolean   @default(false)
+  isPrimary              Boolean   @default(false)
   /// PAY-10: set whenever bank details change so payroll can review before
   /// the next payment run.
-  requiresPayrollReview  Boolean  @default(false)
+  requiresPayrollReview  Boolean   @default(false)
   payrollReviewedAt      DateTime?
   payrollReviewedBy      String?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
   createdBy              String
 
   worker Worker @relation(fields: [workerId], references: [id])
@@ -630,28 +725,28 @@ model BankAccount {
 // ─── Time & Leave ────────────────────────────────────────────────────────────
 
 model LeaveType {
-  id               String            @id @default(uuid())
-  organisationId   String
-  name             String
-  category         LeaveTypeCategory
-  defaultBalance   Decimal           @db.Decimal(5, 1) /// Days — 0.5 increments OK here (not money)
-  isPaid           Boolean
-  requiresApproval Boolean           @default(true)
-  isActive         Boolean           @default(true)
+  id                    String             @id @default(uuid())
+  organisationId        String
+  name                  String
+  category              LeaveTypeCategory
+  defaultBalance        Decimal            @db.Decimal(5, 1) /// Days — 0.5 increments OK here (not money)
+  isPaid                Boolean
+  requiresApproval      Boolean            @default(true)
+  isActive              Boolean            @default(true)
   /// Accrual policy (PRD LVE-05).
-  accrualMethod    LeaveAccrualMethod @default(ANNUAL_UPFRONT)
-  carryOverEnabled Boolean            @default(false)
+  accrualMethod         LeaveAccrualMethod @default(ANNUAL_UPFRONT)
+  carryOverEnabled      Boolean            @default(false)
   /// Cap on days carried into the next leave year (null = uncapped).
-  carryOverMaxDays Decimal?           @db.Decimal(5, 1)
+  carryOverMaxDays      Decimal?           @db.Decimal(5, 1)
   /// Months into the new leave year before carried days expire (null = never).
   carryOverExpiryMonths Int?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  createdBy        String
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  createdBy             String
 
-  organisation   Organisation   @relation(fields: [organisationId], references: [id])
-  leaveRequests  LeaveRequest[]
-  leaveBalances  LeaveBalance[]
+  organisation    Organisation     @relation(fields: [organisationId], references: [id])
+  leaveRequests   LeaveRequest[]
+  leaveBalances   LeaveBalance[]
   blackoutPeriods BlackoutPeriod[]
 
   @@index([organisationId])
@@ -669,7 +764,7 @@ model LeaveRequest {
   startHalfDay       Boolean     @default(false)
   endHalfDay         Boolean     @default(false)
   /// Working days counted at submit — excludes weekends and public holidays.
-  days               Decimal     @db.Decimal(5, 2) @default(0)
+  days               Decimal     @default(0) @db.Decimal(5, 2)
   status             LeaveStatus @default(DRAFT)
   /// Restricted field — permission-gated (medical_or_leave_reason)
   reasonEncrypted    String?
@@ -789,19 +884,19 @@ model BlackoutPeriod {
 }
 
 model PayCalendar {
-  id             String      @id @default(uuid())
-  organisationId String
-  name           String
-  frequency      PayFrequency
-  dayOfMonth     Int?
-  dayOfWeek      Int?
+  id               String       @id @default(uuid())
+  organisationId   String
+  name             String
+  frequency        PayFrequency
+  dayOfMonth       Int?
+  dayOfWeek        Int?
   /// Cut-off day-of-month (PAY-04): changes after this day in the pay month
   /// wait for the next run. Null means no cut-off.
   cutOffDayOfMonth Int?
-  isActive       Boolean     @default(true)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  createdBy      String
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  createdBy        String
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
   payrollRuns  PayrollRun[]
@@ -813,44 +908,44 @@ model PayCalendar {
 /// Run states are strictly one-way: DRAFT → IN_REVIEW → PENDING_APPROVAL → APPROVED → PROCESSED → LOCKED
 /// Approved runs are immutable; fixes use reversal or next-run adjustments.
 model PayrollRun {
-  id                      String           @id @default(uuid())
-  organisationId          String
-  payCalendarId           String
-  periodStart             DateTime
-  periodEnd               DateTime
-  status                  PayrollRunStatus @default(DRAFT)
-  preparedById            String
+  id                         String           @id @default(uuid())
+  organisationId             String
+  payCalendarId              String
+  periodStart                DateTime
+  periodEnd                  DateTime
+  status                     PayrollRunStatus @default(DRAFT)
+  preparedById               String
   /// Separation of duties: preparer != approver
-  approvedById            String?
-  approvedAt              DateTime?
-  lockedAt                DateTime?
+  approvedById               String?
+  approvedAt                 DateTime?
+  lockedAt                   DateTime?
   /// PAY-07/06: who submitted for approval, and when warnings were acknowledged.
-  submittedById            String?
-  submittedAt              DateTime?
-  validationAcknowledgedAt DateTime?
+  submittedById              String?
+  submittedAt                DateTime?
+  validationAcknowledgedAt   DateTime?
   validationAcknowledgedById String?
   /// PAY-06: a reversal run points at the run it reverses; the original is
   /// stamped with reversedAt and can never be edited (corrections flow through
   /// the reversal run or the next period).
-  reversalOfRunId         String?
-  reversedAt              DateTime?
+  reversalOfRunId            String?
+  reversedAt                 DateTime?
   /// All money in minor units
-  totalGrossMinorUnits    Int              @default(0)
-  totalNetMinorUnits      Int              @default(0)
-  totalDeductionsMinorUnits Int            @default(0)
-  currency                String
-  notes                   String?
-  createdAt               DateTime         @default(now())
-  updatedAt               DateTime         @updatedAt
-  createdBy               String
+  totalGrossMinorUnits       Int              @default(0)
+  totalNetMinorUnits         Int              @default(0)
+  totalDeductionsMinorUnits  Int              @default(0)
+  currency                   String
+  notes                      String?
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
+  createdBy                  String
 
-  organisation Organisation  @relation(fields: [organisationId], references: [id])
-  payCalendar  PayCalendar   @relation(fields: [payCalendarId], references: [id])
-  items        PayrollItem[]
-  payments     Payment[]
+  organisation   Organisation         @relation(fields: [organisationId], references: [id])
+  payCalendar    PayCalendar          @relation(fields: [payCalendarId], references: [id])
+  items          PayrollItem[]
+  payments       Payment[]
   paymentBatches PaymentBatch[]
-  payslips     Payslip[]
-  approvals    PayrollRunApproval[]
+  payslips       Payslip[]
+  approvals      PayrollRunApproval[]
 
   @@index([organisationId])
   @@index([organisationId, status])
@@ -859,20 +954,20 @@ model PayrollRun {
 }
 
 model PayrollItem {
-  id                 String          @id @default(uuid())
-  organisationId     String
-  payrollRunId       String
-  workerId           String
-  type               PayrollItemType
-  description        String
+  id               String          @id @default(uuid())
+  organisationId   String
+  payrollRunId     String
+  workerId         String
+  type             PayrollItemType
+  description      String
   /// Positive for earnings, negative for deductions — integer minor units
-  amountMinorUnits   Int
-  currency           String
+  amountMinorUnits Int
+  currency         String
   /// PAY-09: set when the line was manually overridden after prepare; the
   /// reason is mandatory and the change itself is audit-logged.
-  overrideReason     String?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  overrideReason   String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   worker     Worker     @relation(fields: [workerId], references: [id])
   payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id])
@@ -886,18 +981,18 @@ model PayrollItem {
 /// PAY-11: one row per configured approval step, snapshotted onto the run when
 /// it is submitted. The run is approved only when every step is APPROVED.
 model PayrollRunApproval {
-  id            String                   @id @default(uuid())
+  id             String                   @id @default(uuid())
   organisationId String
-  payrollRunId  String
+  payrollRunId   String
   /// 1-based position in the configured chain.
-  stepNumber    Int
+  stepNumber     Int
   /// The system role that must satisfy this step (e.g. OWNER, FINANCE_APPROVER).
-  role          SystemRole
-  status        PayrollRunApprovalStatus @default(PENDING)
-  actorId       String?
-  comment       String?
-  createdAt     DateTime                 @default(now())
-  updatedAt     DateTime                 @updatedAt
+  role           SystemRole
+  status         PayrollRunApprovalStatus @default(PENDING)
+  actorId        String?
+  comment        String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
 
   payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id])
 
@@ -910,30 +1005,30 @@ model PayrollRunApproval {
 /// PAY-10/11: per-organisation payroll settings — approval chain and the
 /// configurable validation thresholds. Absent row = documented defaults.
 model PayrollConfig {
-  id                      String   @id @default(uuid())
-  organisationId          String   @unique
+  id                    String   @id @default(uuid())
+  organisationId        String   @unique
   /// Ordered approver roles, e.g. ["FINANCE_APPROVER","OWNER"]. Default ["OWNER"]
   /// (for small orgs the Payroll Administrator signs off by submitting).
-  approvalChain           String[] @default(["OWNER"])
+  approvalChain         String[] @default(["OWNER"])
   /// Warn when a worker's gross rises more than this % vs the previous run.
-  salaryChangeWarnPct     Int      @default(30)
+  salaryChangeWarnPct   Int      @default(30)
   /// Warn when a worker's deductions exceed this share of gross (bps, 5000 = 50%).
-  deductionRatioWarnBps   Int      @default(5000)
+  deductionRatioWarnBps Int      @default(5000)
   /// Blocking error when a run worker has no bank account on file.
-  requireBankDetails      Boolean  @default(true)
+  requireBankDetails    Boolean  @default(true)
   /// PAY-09: attendance-derived overtime is opt-in so enabling it cannot
   /// silently change an existing organisation's payroll.
-  overtimeEnabled         Boolean  @default(false)
+  overtimeEnabled       Boolean  @default(false)
   /// PAY-09: overtime pay multiplier in basis points (15000 = 1.5x).
-  overtimeMultiplierBps   Int      @default(15000)
+  overtimeMultiplierBps Int      @default(15000)
   /// PAY-09: a full working day in minutes (480 = 8 hours).
-  standardDailyMinutes    Int      @default(480)
+  standardDailyMinutes  Int      @default(480)
   /// PAY-16: month the organisation's tax/leave year starts (1 = January). The
   /// year boundary is configuration data, not an assumption (LOC-02).
-  taxYearStartMonth       Int      @default(1)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-  updatedBy               String?
+  taxYearStartMonth     Int      @default(1)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  updatedBy             String?
 
   @@map("payroll_config")
 }
@@ -945,25 +1040,25 @@ model PayrollConfig {
 /// employer cost, never net-deducted). Statutory rates are org-configured data
 /// here — never hard-coded per country.
 model RecurringPayItem {
-  id                 String              @id @default(uuid())
-  organisationId     String
-  workerId           String
+  id               String             @id @default(uuid())
+  organisationId   String
+  workerId         String
   /// DEDUCTION | TAX | EMPLOYEE_PENSION | EMPLOYER_PENSION (allow-listed in the DTO)
-  type               PayrollItemType
+  type             PayrollItemType
   /// Human label, e.g. "Cooperative", "Salary advance", "Employer pension".
-  name               String
-  calculation        PayItemCalculation
+  name             String
+  calculation      PayItemCalculation
   /// FIXED: positive integer minor units. Null when calculation = PERCENTAGE.
-  amountMinorUnits   Int?
+  amountMinorUnits Int?
   /// PERCENTAGE: basis points of period gross (500 = 5%). Null when FIXED.
-  rateBps            Int?
-  validFrom          DateTime
-  validTo            DateTime?
-  isActive           Boolean             @default(true)
-  notes              String?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  createdBy          String
+  rateBps          Int?
+  validFrom        DateTime
+  validTo          DateTime?
+  isActive         Boolean            @default(true)
+  notes            String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  createdBy        String
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
   worker       Worker       @relation(fields: [workerId], references: [id])
@@ -976,20 +1071,20 @@ model RecurringPayItem {
 
 /// Effective-dated country/statutory rule packs — NEVER hard-code tax rules
 model StatutoryRulePack {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   organisationId String
   country        String
   version        String
-  rules          Json     /// Versioned rule configuration
+  rules          Json /// Versioned rule configuration
   validFrom      DateTime
   validTo        DateTime?
-  isActive       Boolean  @default(true)
+  isActive       Boolean   @default(true)
   /// LOC-03: false until a qualified professional has validated this pack.
-  validated      Boolean  @default(false)
+  validated      Boolean   @default(false)
   validatedBy    String?
   validatedAt    DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
   createdBy      String
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
@@ -1006,6 +1101,7 @@ model PaymentBatch {
   id                 String             @id @default(uuid())
   organisationId     String
   payrollRunId       String?
+  payoutAccountId    String?
   reference          String
   label              String
   status             PaymentBatchStatus @default(DRAFT)
@@ -1016,6 +1112,8 @@ model PaymentBatch {
   approvedBy         String?
   exportedAt         DateTime?
   exportedBy         String?
+  payoutStartedAt    DateTime?
+  payoutCompletedAt  DateTime?
   paidAt             DateTime?
   cancelledAt        DateTime?
   cancelledBy        String?
@@ -1024,43 +1122,136 @@ model PaymentBatch {
   updatedAt          DateTime           @updatedAt
   createdBy          String
 
-  organisation Organisation @relation(fields: [organisationId], references: [id])
-  payrollRun   PayrollRun?  @relation(fields: [payrollRunId], references: [id])
-  payments     Payment[]
+  organisation  Organisation   @relation(fields: [organisationId], references: [id])
+  payrollRun    PayrollRun?    @relation(fields: [payrollRunId], references: [id])
+  payoutAccount PayoutAccount? @relation(fields: [payoutAccountId], references: [id])
+  payments      Payment[]
+  payouts       Payout[]
 
   @@unique([organisationId, reference])
   @@index([organisationId])
   @@index([organisationId, status])
   @@index([payrollRunId])
+  @@index([payoutAccountId])
   @@map("payment_batches")
 }
 
 model Payment {
-  id                   String        @id @default(uuid())
-  organisationId       String
-  payrollRunId         String?
-  paymentBatchId       String?
-  workerId             String
+  id               String        @id @default(uuid())
+  organisationId   String
+  payrollRunId     String?
+  paymentBatchId   String?
+  workerId         String
   /// Integer minor units
-  amountMinorUnits     Int
-  currency             String
-  status               PaymentStatus @default(PENDING)
-  reference            String        @unique
-  description          String
-  processedAt          DateTime?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  createdBy            String
+  amountMinorUnits Int
+  currency         String
+  status           PaymentStatus @default(PENDING)
+  reference        String        @unique
+  description      String
+  processedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  createdBy        String
 
-  organisation Organisation @relation(fields: [organisationId], references: [id])
-  payrollRun   PayrollRun?  @relation(fields: [payrollRunId], references: [id])
+  organisation Organisation  @relation(fields: [organisationId], references: [id])
+  payrollRun   PayrollRun?   @relation(fields: [payrollRunId], references: [id])
   paymentBatch PaymentBatch? @relation(fields: [paymentBatchId], references: [id])
-  worker       Worker       @relation(fields: [workerId], references: [id])
+  worker       Worker        @relation(fields: [workerId], references: [id])
+  payout       Payout?
 
   @@index([organisationId])
   @@index([workerId, status])
   @@index([paymentBatchId])
   @@map("payments")
+}
+
+/// Organisation-owned gateway account used to initiate salary transfers.
+model PayoutAccount {
+  id                     String              @id @default(uuid())
+  organisationId         String              @unique
+  provider               PayoutProvider
+  mode                   PayoutAccountMode   @default(TEST)
+  country                String
+  currency               String
+  accountName            String?
+  secretKeyEncrypted     String
+  webhookSecretEncrypted String?
+  keyLast4               String
+  status                 PayoutAccountStatus @default(ACTIVE)
+  balanceMinorUnits      Int?
+  balanceCurrency        String?
+  balanceCheckedAt       DateTime?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  createdBy              String
+  updatedBy              String
+
+  organisation   Organisation   @relation(fields: [organisationId], references: [id])
+  payouts        Payout[]
+  paymentBatches PaymentBatch[]
+
+  @@index([organisationId, status])
+  @@map("payout_accounts")
+}
+
+/// One gateway transfer attempt per payment. Provider references are unique
+/// inside an organisation and are used to reconcile asynchronous webhooks.
+model Payout {
+  id                  String         @id @default(uuid())
+  organisationId      String
+  payoutAccountId     String
+  paymentBatchId      String
+  paymentId           String         @unique
+  workerId            String
+  provider            PayoutProvider
+  status              PayoutStatus   @default(QUEUED)
+  amountMinorUnits    Int
+  currency            String
+  reference           String
+  providerTransferId  String?
+  recipientCode       String?
+  recipientName       String?
+  bankName            String?
+  bankCode            String?
+  accountNumberMasked String?
+  failureReason       String?
+  providerPayload     Json?
+  requestedAt         DateTime       @default(now())
+  completedAt         DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  organisation  Organisation  @relation(fields: [organisationId], references: [id])
+  payoutAccount PayoutAccount @relation(fields: [payoutAccountId], references: [id])
+  paymentBatch  PaymentBatch  @relation(fields: [paymentBatchId], references: [id])
+  payment       Payment       @relation(fields: [paymentId], references: [id])
+  worker        Worker        @relation(fields: [workerId], references: [id])
+
+  @@unique([organisationId, provider, reference])
+  @@index([organisationId])
+  @@index([paymentBatchId, status])
+  @@index([payoutAccountId])
+  @@index([workerId])
+  @@map("payouts")
+}
+
+/// Raw provider callbacks, retained for idempotency and dispute investigation.
+model PayoutWebhookEvent {
+  id             String         @id @default(uuid())
+  organisationId String
+  provider       PayoutProvider
+  eventKey       String         @unique
+  eventType      String
+  reference      String?
+  payload        Json
+  processedAt    DateTime?
+  createdAt      DateTime       @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId])
+  @@index([organisationId, reference])
+  @@map("payout_webhook_events")
 }
 
 // ─── Payslips (PAY-13) ───────────────────────────────────────────────────────
@@ -1069,25 +1260,25 @@ model Payment {
 /// item lines for that worker. The PDF itself is rendered on demand; this row
 /// is the immutable record of what was paid and when.
 model Payslip {
-  id                 String   @id @default(uuid())
-  organisationId     String
-  payrollRunId       String
-  workerId           String
+  id                      String   @id @default(uuid())
+  organisationId          String
+  payrollRunId            String
+  workerId                String
   /// Pay-period label, e.g. "September 2026".
-  periodLabel        String
-  periodStart        DateTime
-  periodEnd          DateTime
-  currency           String
-  grossMinorUnits    Int
-  deductionsMinorUnits Int    @default(0)
-  employerCostsMinorUnits Int  @default(0)
-  netMinorUnits      Int
+  periodLabel             String
+  periodStart             DateTime
+  periodEnd               DateTime
+  currency                String
+  grossMinorUnits         Int
+  deductionsMinorUnits    Int      @default(0)
+  employerCostsMinorUnits Int      @default(0)
+  netMinorUnits           Int
   /// Frozen line items (earnings + deductions) as printed on the document.
-  lines              Json     @default("[]")
+  lines                   Json     @default("[]")
   /// When the payslip became available to the worker (email notification sent).
-  availableAt        DateTime @default(now())
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  availableAt             DateTime @default(now())
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
   payrollRun   PayrollRun   @relation(fields: [payrollRunId], references: [id])
@@ -1106,26 +1297,26 @@ model Payslip {
 /// regenerating for the same worker + year is a no-op (idempotent). Reporting
 /// artefact only — Ascenda never moves funds.
 model YearEndStatement {
-  id                 String   @id @default(uuid())
-  organisationId     String
-  workerId           String
+  id                      String   @id @default(uuid())
+  organisationId          String
+  workerId                String
   /// Tax-year label, e.g. "2026" or "2026/2027".
-  taxYearLabel       String
-  periodStart        DateTime
-  periodEnd          DateTime
-  currency           String
-  grossMinorUnits    Int
-  deductionsMinorUnits Int    @default(0)
-  employerCostsMinorUnits Int  @default(0)
-  netMinorUnits      Int
+  taxYearLabel            String
+  periodStart             DateTime
+  periodEnd               DateTime
+  currency                String
+  grossMinorUnits         Int
+  deductionsMinorUnits    Int      @default(0)
+  employerCostsMinorUnits Int      @default(0)
+  netMinorUnits           Int
   /// Rolled-up annual lines (per pay type) as printed on the statement.
-  lines              Json     @default("[]")
+  lines                   Json     @default("[]")
   /// Number of payslips aggregated into this statement.
-  payslipCount       Int      @default(0)
+  payslipCount            Int      @default(0)
   /// LOC-03: false if any contributing statutory pack was not validated.
-  validatedByProfessional Boolean @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  validatedByProfessional Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
   worker       Worker       @relation(fields: [workerId], references: [id])
@@ -1142,33 +1333,33 @@ model YearEndStatement {
 /// FINANCE_APPROVED → folded into the next run (PAID). Amounts are positive
 /// integer minor units; a receipt is stored as a document reference/URL.
 model ExpenseClaim {
-  id               String               @id @default(uuid())
-  organisationId   String
-  workerId         String
+  id                 String             @id @default(uuid())
+  organisationId     String
+  workerId           String
   /// REIMBURSEMENT | EXPENSE | TRAVEL | ... (org-defined label, free text).
-  type             String
-  description      String
+  type               String
+  description        String
   /// Positive integer minor units.
-  amountMinorUnits Int
-  currency         String
+  amountMinorUnits   Int
+  currency           String
   /// Receipt reference (uploaded document id or external URL).
-  receiptUrl       String?
+  receiptUrl         String?
   /// PAY-14: uploaded receipt stored through DocumentsService.
-  receiptDocumentId String?
-  status           ExpenseClaimStatus   @default(SUBMITTED)
+  receiptDocumentId  String?
+  status             ExpenseClaimStatus @default(SUBMITTED)
   /// Whoever approved/rejected the current step.
-  managerDecidedById  String?
-  managerDecidedAt    DateTime?
-  managerComment      String?
-  financeDecidedById  String?
-  financeDecidedAt    DateTime?
-  financeComment      String?
+  managerDecidedById String?
+  managerDecidedAt   DateTime?
+  managerComment     String?
+  financeDecidedById String?
+  financeDecidedAt   DateTime?
+  financeComment     String?
   /// Set when the claim is attached to a payroll run as a reimbursement line.
-  paidPayrollRunId String?
-  paidAt           DateTime?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  createdBy        String
+  paidPayrollRunId   String?
+  paidAt             DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  createdBy          String
 
   organisation    Organisation @relation(fields: [organisationId], references: [id])
   worker          Worker       @relation(fields: [workerId], references: [id])
@@ -1186,7 +1377,7 @@ model ApprovalWorkflow {
   id             String         @id @default(uuid())
   organisationId String
   name           String
-  resourceType   String         /// "leave_request" | "payroll_run" | "payment" etc
+  resourceType   String /// "leave_request" | "payroll_run" | "payment" etc
   resourceId     String
   currentStep    Int            @default(0)
   status         ApprovalStatus @default(PENDING)
@@ -1194,7 +1385,7 @@ model ApprovalWorkflow {
   updatedAt      DateTime       @updatedAt
   createdBy      String
 
-  organisation  Organisation    @relation(fields: [organisationId], references: [id])
+  organisation  Organisation   @relation(fields: [organisationId], references: [id])
   steps         ApprovalStep[]
   leaveRequests LeaveRequest[]
 
@@ -1204,22 +1395,22 @@ model ApprovalWorkflow {
 }
 
 model ApprovalStep {
-  id                 String         @id @default(uuid())
-  approvalWorkflowId String
-  stepOrder          Int
-  approverId         String
-  status             ApprovalStatus @default(PENDING)
-  actedAt            DateTime?
-  note               String?
-  delegatedToId      String?
+  id                   String         @id @default(uuid())
+  approvalWorkflowId   String
+  stepOrder            Int
+  approverId           String
+  status               ApprovalStatus @default(PENDING)
+  actedAt              DateTime?
+  note                 String?
+  delegatedToId        String?
   /// Escalation (LVE-04): minutes after the step becomes active before it
   /// auto-escalates, and the computed deadline / escalation record.
   escalateAfterMinutes Int?
   dueAt                DateTime?
   escalatedAt          DateTime?
   escalatedToId        String?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
   workflow ApprovalWorkflow @relation(fields: [approvalWorkflowId], references: [id])
 
@@ -1244,9 +1435,9 @@ model Document {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  organisation    Organisation?  @relation(fields: [organisationId], references: [id])
-  worker          Worker?        @relation(fields: [workerId], references: [id])
-  expenseClaims   ExpenseClaim[] @relation("ExpenseClaimReceipt")
+  organisation  Organisation?  @relation(fields: [organisationId], references: [id])
+  worker        Worker?        @relation(fields: [workerId], references: [id])
+  expenseClaims ExpenseClaim[] @relation("ExpenseClaimReceipt")
 
   @@index([organisationId])
   @@index([workerId, type])
@@ -1256,6 +1447,100 @@ model Document {
 // ─── Audit Log ───────────────────────────────────────────────────────────────
 
 /// Append-only. Application DB role has INSERT only — no UPDATE or DELETE on this table.
+// ─── Onboarding & Offboarding (ONB-01/02/03) ─────────────────────────────────
+
+/// One checklist per worker, created automatically whenever a worker is added
+/// (directly or via CSV import) so onboarding is not tied to recruitment.
+model OnboardingChecklist {
+  id             String           @id @default(uuid())
+  organisationId String
+  workerId       String           @unique
+  status         OnboardingStatus @default(IN_PROGRESS)
+  startedAt      DateTime         @default(now())
+  completedAt    DateTime?
+  createdBy      String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  worker Worker           @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  tasks  OnboardingTask[]
+
+  @@index([organisationId, status])
+  @@map("onboarding_checklists")
+}
+
+model OnboardingTask {
+  id             String              @id @default(uuid())
+  organisationId String
+  checklistId    String
+  type           OnboardingTaskType
+  title          String
+  description    String?
+  isRequired     Boolean             @default(true)
+  status         ChecklistTaskStatus @default(PENDING)
+  sortOrder      Int                 @default(0)
+  dueDate        DateTime?
+  completedAt    DateTime?
+  completedBy    String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  checklist OnboardingChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@index([organisationId, status])
+  @@index([checklistId, sortOrder])
+  @@map("onboarding_tasks")
+}
+
+/// An exit case captures the reason and last working date. Completing it
+/// updates the worker's status (RESIGNED/TERMINATED) and endDate so the next
+/// payroll run pays any final amount through leaver proration (PAY-05).
+model OffboardingCase {
+  id              String            @id @default(uuid())
+  organisationId  String
+  workerId        String
+  exitReason      ExitReason
+  reasonDetail    String?
+  lastWorkingDate DateTime
+  noticeDate      DateTime?
+  status          OffboardingStatus @default(IN_PROGRESS)
+  completedAt     DateTime?
+  createdBy       String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  worker Worker            @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  tasks  OffboardingTask[]
+
+  @@index([organisationId, status])
+  @@index([organisationId, completedAt])
+  @@index([workerId])
+  @@map("offboarding_cases")
+}
+
+model OffboardingTask {
+  id                String              @id @default(uuid())
+  organisationId    String
+  offboardingCaseId String
+  type              OffboardingTaskType
+  title             String
+  description       String?
+  isRequired        Boolean             @default(true)
+  status            ChecklistTaskStatus @default(PENDING)
+  sortOrder         Int                 @default(0)
+  dueDate           DateTime?
+  completedAt       DateTime?
+  completedBy       String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  offboardingCase OffboardingCase @relation(fields: [offboardingCaseId], references: [id], onDelete: Cascade)
+
+  @@index([organisationId, status])
+  @@index([offboardingCaseId, sortOrder])
+  @@map("offboarding_tasks")
+}
+
 model AuditLog {
   id             String      @id @default(uuid())
   organisationId String
@@ -1289,18 +1574,18 @@ model AuditLog {
 // membership.
 
 model Invitation {
-  id             String    @id @default(uuid())
+  id             String     @id @default(uuid())
   organisationId String
   email          String
   role           SystemRole
   /// SHA-256 hex of the raw invitation token — never store the token itself.
-  tokenHash      String    @unique
+  tokenHash      String     @unique
   expiresAt      DateTime
   acceptedAt     DateTime?
   /// Platform admin who created the invitation.
   createdBy      String
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
 
@@ -1384,8 +1669,8 @@ model Subscription {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  organisation Organisation          @relation(fields: [organisationId], references: [id])
-  plan         Plan                  @relation(fields: [planId], references: [id])
+  organisation Organisation         @relation(fields: [organisationId], references: [id])
+  plan         Plan                 @relation(fields: [planId], references: [id])
   transactions BillingTransaction[]
 
   @@index([planId])
@@ -1397,25 +1682,25 @@ model Subscription {
 // org may not exist yet), so it links to an organisation once provisioned.
 
 model BillingTransaction {
-  id              String            @id @default(uuid())
-  provider        PaymentProvider
+  id               String            @id @default(uuid())
+  provider         PaymentProvider
   /// Gateway reference we generated and send to the provider (unique).
-  reference       String            @unique
+  reference        String            @unique
   /// Provider-assigned transaction id (Paystack id / Flutterwave tx id).
-  providerTxnId   String?
+  providerTxnId    String?
   amountMinorUnits Int
-  currency        String            @default("NGN")
-  status          TransactionStatus @default(PENDING)
-  payerEmail      String
-  planId          String?
-  registrationId  String?
-  organisationId  String?
-  subscriptionId  String?
+  currency         String            @default("NGN")
+  status           TransactionStatus @default(PENDING)
+  payerEmail       String
+  planId           String?
+  registrationId   String?
+  organisationId   String?
+  subscriptionId   String?
   /// Raw provider payload for reconciliation (never contains card data).
-  raw             Json?
-  paidAt          DateTime?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  raw              Json?
+  paidAt           DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   subscription Subscription? @relation(fields: [subscriptionId], references: [id])
 

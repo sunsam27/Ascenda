@@ -37,6 +37,7 @@ import {
   type ImportContext,
   type NormalizedWorker,
 } from './worker-import';
+import { createOnboardingForWorkers } from '../talent/domain/onboarding-defaults';
 
 /** Upper bound on rows accepted in a single import. */
 const MAX_IMPORT_ROWS = 5000;
@@ -236,6 +237,14 @@ export class WorkersService {
           },
           include: WORKER_INCLUDE,
         });
+        // ONB-02: onboarding applies to every worker added directly, not only
+        // recruitment hires. The checklist is created in the same transaction.
+        await createOnboardingForWorkers(
+          tx,
+          organisationId,
+          [worker.id],
+          userId,
+        );
         return toWorkerSummary(worker);
       } catch (error) {
         if (isUniqueViolation(error)) {
@@ -532,6 +541,20 @@ export class WorkersService {
       if (identityRows.length > 0) {
         await tx.workerIdentity.createMany({ data: identityRows });
       }
+
+      // ONB-02: imported workers get the same onboarding checklist as workers
+      // created individually. Re-read the ids so a concurrent duplicate skip
+      // cannot leave orphaned checklists.
+      const insertedWorkers = await tx.worker.findMany({
+        where: { id: { in: workerRows.map((row) => row.id) } },
+        select: { id: true },
+      });
+      await createOnboardingForWorkers(
+        tx,
+        organisationId,
+        insertedWorkers.map((row) => row.id),
+        userId,
+      );
 
       // Audit a summary only — never the raw CSV (which can be megabytes and
       // contain personal data). The interceptor skips /import routes for this.

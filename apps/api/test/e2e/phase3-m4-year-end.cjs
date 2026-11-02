@@ -211,6 +211,10 @@ async function main() {
          SELECT id FROM users WHERE email LIKE 'm4-%@ascenda.test')`,
     );
     await db.query(
+      `DELETE FROM notifications WHERE "recipientUserId" IN (
+         SELECT id FROM users WHERE email LIKE 'm4-%@ascenda.test')`,
+    );
+    await db.query(
       `DELETE FROM memberships WHERE "userId" IN (
          SELECT id FROM users WHERE email LIKE 'm4-%@ascenda.test')`,
     );
@@ -632,6 +636,7 @@ async function main() {
       }
       if (cleanup.userIds.length) {
         await db.query(`DELETE FROM audit_log WHERE "actorId" = ANY($1)`, [cleanup.userIds]);
+        await db.query(`DELETE FROM notifications WHERE "recipientUserId" = ANY($1)`, [cleanup.userIds]);
         await db.query(`DELETE FROM memberships WHERE "userId" = ANY($1)`, [cleanup.userIds]);
         await db.query(`DELETE FROM users WHERE id = ANY($1)`, [cleanup.userIds]);
       }

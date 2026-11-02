@@ -40,12 +40,13 @@ function check(ok, msg, detail) {
   }
 }
 
-async function req(method, path, body) {
+async function req(method, path, body, extraHeaders = {}) {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
       ...(cookie ? { Cookie: cookie } : {}),
+      ...extraHeaders,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -76,10 +77,13 @@ async function req(method, path, body) {
   return { status: res.status, json };
 }
 
-async function reqRaw(method, path) {
+async function reqRaw(method, path, extraHeaders = {}) {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: cookie ? { Cookie: cookie } : {},
+    headers: {
+      ...(cookie ? { Cookie: cookie } : {}),
+      ...extraHeaders,
+    },
   });
   const buf = Buffer.from(await res.arrayBuffer());
   return {
@@ -236,6 +240,10 @@ async function main() {
          SELECT id FROM users WHERE email LIKE 'm3-%@ascenda.test')`,
     );
     await db.query(
+      `DELETE FROM notifications WHERE "recipientUserId" IN (
+         SELECT id FROM users WHERE email LIKE 'm3-%@ascenda.test')`,
+    );
+    await db.query(
       `DELETE FROM memberships WHERE "userId" IN (
          SELECT id FROM users WHERE email LIKE 'm3-%@ascenda.test')`,
     );
@@ -331,6 +339,20 @@ async function main() {
       managerWorker,
     ]);
 
+    // Link worker B to a platform login so PAY-13's payslip-available
+    // notification (in-app + email) can be asserted end-to-end.
+    const payeeEmail = `m3-payee-${stamp}@ascenda.test`;
+    const payeeUser = await db.query(
+      `INSERT INTO users (id, email, "passwordHash", "firstName", "lastName", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid(), $1, $2, 'Ben', 'Beta', now(), now()) RETURNING id`,
+      [payeeEmail, passwordHash],
+    );
+    cleanup.userIds.push(payeeUser.rows[0].id);
+    await db.query(`UPDATE workers SET "userId" = $2 WHERE id = $1`, [
+      workerB,
+      payeeUser.rows[0].id,
+    ]);
+
     cleanup.compIds.push(
       await createComp(workerA, {
         payFrequency: 'MONTHLY',
@@ -358,13 +380,20 @@ async function main() {
     );
 
     for (const workerId of [workerA, workerB, managerWorker]) {
-      await db.query(
-        `INSERT INTO bank_accounts (id, "organisationId", "workerId", "bankName", "bankCode",
-           "accountNumberEncrypted", "accountNumberMasked", "accountName", "isVerified", "isPrimary",
-           "createdBy", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, 'Test Bank', '000', 'enc', '****1234', 'Test User', true, true, $3, now(), now())`,
-        [orgId, workerId, workerId],
-      );
+      const bank = await req('POST', `/workers/${workerId}/bank-accounts`, {
+        accountNumber: '0123456789',
+        accountName: 'Test User',
+        bankName: 'Test Bank',
+        bankCode: '000',
+        isPrimary: true,
+      });
+      const bankId = dataOf(bank).id;
+      if (!bankId) {
+        throw new Error(
+          `bank account create failed: ${bank.status} ${JSON.stringify(bank.json)}`,
+        );
+      }
+      await req('POST', `/workers/${workerId}/bank-accounts/${bankId}/review`);
       cleanup.bankWorkerIds.push(workerId);
     }
 
@@ -549,6 +578,21 @@ async function main() {
       `status=${processRes.status} ${JSON.stringify(processRes.json).slice(0, 200)}`,
     );
 
+    const payslipNotice = await db.query(
+      `SELECT n.id FROM notifications n
+       JOIN users u ON u.id = n."recipientUserId"
+       WHERE n."organisationId" = $1 AND u.email = $2
+         AND n.type = 'PAYSLIPS_AVAILABLE'
+         AND n.metadata->>'payrollRunId' = $3
+       LIMIT 1`,
+      [orgId, payeeEmail, run.id],
+    );
+    check(
+      payslipNotice.rowCount >= 1,
+      'PS0 payslip-available notification queued for a linked worker (email)',
+      `n=${payslipNotice.rowCount}`,
+    );
+
     const payslips = (await req('GET', `/payslips?payrollRunId=${run.id}`)).json.data || [];
     check(
       payslips.length >= 2,
@@ -577,7 +621,13 @@ async function main() {
 
     // ── M3c: PAYMENT FILE EXPORT (PAY-12) ───────────────────────────────────
     heading('M3c PAYMENT FILE EXPORT (PAY-12)');
-    const csv = await reqRaw('GET', `/payments/export?payrollRunId=${run.id}`);
+    const stepUpRes = await req('POST', '/auth/step-up', {
+      password: 'AscendaDemo123!',
+    });
+    const stepToken = dataOf(stepUpRes).token || stepUpRes.json?.token;
+    const csv = await reqRaw('GET', `/payments/export?payrollRunId=${run.id}`, {
+      'x-step-up-token': stepToken,
+    });
     check(
       csv.status === 200 && csv.contentType.includes('text/csv'),
       'E1 payment export returns a CSV',
@@ -764,6 +814,7 @@ async function main() {
       }
       if (cleanup.userIds.length) {
         await db.query(`DELETE FROM audit_log WHERE "actorId" = ANY($1)`, [cleanup.userIds]);
+        await db.query(`DELETE FROM notifications WHERE "recipientUserId" = ANY($1)`, [cleanup.userIds]);
         await db.query(`DELETE FROM memberships WHERE "userId" = ANY($1)`, [cleanup.userIds]);
         await db.query(`DELETE FROM users WHERE id = ANY($1)`, [cleanup.userIds]);
       }

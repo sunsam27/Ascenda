@@ -61,6 +61,7 @@ export default function PayrollView() {
   const canManagePacks = PAYROLL_ADMINS.has(role);
   const canManagePayments = PAYMENT_MANAGERS.has(role);
   const canExportPayments = APPROVERS.has(role);
+  const canConfigurePayout = role === 'OWNER';
   const canSubmitClaims = CLAIM_SUBMITTERS.has(role);
   const canReadOrg = ORG_READERS.has(role);
   const canReviewClaims = canApprove || role === 'MANAGER';
@@ -134,6 +135,7 @@ export default function PayrollView() {
           canManage={canManagePayments}
           canApprove={canApprove}
           canExport={canExportPayments}
+          canConfigurePayout={canConfigurePayout}
         />
       ) : activeTab === 'claims' ? (
         <ClaimsPanel

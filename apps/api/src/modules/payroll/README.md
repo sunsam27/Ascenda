@@ -18,16 +18,16 @@
 | PAY-08 | ✅ done | Eligibility (ACTIVE/ON_LEAVE, in-period); ineligible workers excluded + flagged; missing bank/salary block submission |
 | PAY-09 | ✅ done | Reviewers can override a line or add a one-off earning/deduction while DRAFT/IN_REVIEW; both require a reason and are audit-logged (`PAYROLL_ITEM_OVERRIDDEN` / `PAYROLL_ITEM_CREATED`) |
 | PAY-10 | ✅ done | Configurable thresholds (salary-change %, deduction ratio bps, bank requirement); warnings ack-gated before approval |
-| PAY-11 | ✅ done | Configurable approval chain snapshotted on submit; preparer can never approve; OWNER overrides any step |
+| PAY-11 | ✅ done | Configurable approval chain snapshotted on submit; preparer cannot approve unless they are an OWNER (audited self-approval override); OWNER overrides any step |
 | LOC-02 | ✅ done | Statutory rule packs are organisation-configured DATA (rules-as-data), effective-dated, never invented here |
 | LOC-03 | ✅ done | Packs are flagged "not validated by a professional" until an admin marks them validated; edits clear the flag |
-| PAY-12 | 🟡 partial | Statutory rule-pack engine (M3a) + bank-upload payment file export (M3c) done; multi-currency/FX (PAY-15) deferred |
-| PAY-13 | ✅ done | Immutable per-worker payslip generated at `process`, private PDF download, self-service scoped + audited (M3b) |
+| PAY-12 | ✅ done | Payment statuses + bank-upload payment file export (M3c); multi-currency/FX is PAY-15 (deferred) |
+| PAY-13 | ✅ done | Immutable per-worker payslip generated at `process`, payslip-available email to every paid worker, private PDF download, self-service scoped + audited (M3b) |
 | PAY-14 | ✅ done | Reimbursements: submit → manager → finance → folded into the next run as a `REIMBURSEMENT` earning (M3d) |
 | PAY-16 | ✅ done | Year-end statements (immutable, per worker/tax-year) + statutory remittance schedules + CSV export, scoped + audited (M4) |
+| PAY-17 | ✅ done | Org-owned Paystack/Flutterwave payout accounts + provider transfers to worker bank accounts, webhook reconciliation, balances and partial/failed batch states |
 
-Deferred beyond M4 (P1/P2): PAY-15 multi-currency + FX, PAY-17 automated bank
-payments / loans / benefits.
+Deferred beyond M4 (P1/P2): PAY-15 multi-currency + FX, loans / benefits.
 
 ## Interfaces
 Modules communicate through explicit interfaces — never by accessing another
@@ -81,6 +81,9 @@ module's tables directly. The payroll preview reads:
 - `../payments/payments.controller.ts` / `payments.service.ts` — payment listing
   + status transitions (`PAYMENT_TRANSITIONS`) + bank-upload CSV export
   (`GET /payments/export`, `domain/payment-export.ts`). `PAY-07`/`PAY-12`
+- `../payments/payouts/` — org-owned Paystack/Flutterwave payout accounts,
+  provider transfers, signed webhooks, signature verification, balance refresh
+  and partial/failed batch reconciliation. `PAY-17`
 - `domain/pay-calendar.ts` — pure calendar config validation + period maths
   (`payPeriodsForYear`, cut-off state). `PAY-04`
 - `domain/recurring-pay-item.ts` — pure validation + amount resolution for
@@ -122,7 +125,7 @@ Pay-structure component maths live with People:
   guards + audits).
 - E2E: `node --env-file=packages\db\.env apps\api\test\e2e\phase3-m3-statutory-payslips.cjs`
   (37 checks over M3a..M3d: rule-pack CRUD/validation/effectivity, statutory
-  lines applied at `prepare`, payslip generation + PDF at `process`, payment
+  lines applied at `prepare`, payslip generation + PDF at `process`, step-up payment
   CSV export, reimbursement approval flow, self-service scoping, audits + auth).
 - E2E: `node --env-file=packages\db\.env apps\api\test\e2e\phase3-m4-year-end.cjs`
   (28 checks over M4: statements generated from processed payslips + idempotency
@@ -137,17 +140,21 @@ Pay-structure component maths live with People:
   statutory costs are **not** persisted as item lines (they would corrupt the
   `foldWorkerLines` net maths) — they are recomputed at `process` and stored on
   the payslip's `employerCostsMinorUnits`.
-- The payment-export CSV contains a **masked** account number only; raw account
-  numbers are envelope-encrypted at rest and are never decrypted by API code.
+- Account numbers are decrypted only for the bank-file export and provider
+  payouts; they are envelope-encrypted at rest and API responses return the
+  masked value only.
 - Payslips are immutable once generated (idempotent `generateForRun`); a
   regenerated run's payslips are re-created from the run's frozen lines.
 - PDF rendering uses `pdfkit` (added in M3).
 
 ## M4 boundaries (documented product decisions)
 - Year-end statements and remittance schedules are **reporting/export artefacts
-  only** — Ascenda never moves funds and never invents a statutory rate, band or
-  scheme (CLAUDE.md). They aggregate the statutory lines a processed run already
-  froze on its payslips.
+  only** — Ascenda never invents a statutory rate, band or scheme (CLAUDE.md).
+  They aggregate the statutory lines a processed run already froze on its
+  payslips.
+- Ascenda never custodies payroll funds. Provider payouts move money from the
+  organisation's own Paystack/Flutterwave balance; the bank-file export remains
+  the no-provider fallback.
 - The tax-year window is **configuration data** (`PayrollConfig.taxYearStartMonth`,
   default `1` = calendar year). A January start labels the year `"2026"`; any
   other month spans two years (`"2026/2027"`). The window is half-open

@@ -66,6 +66,7 @@ export function toPaymentBatch(row: PaymentBatchRow): PaymentBatch {
     id: row.id,
     organisationId: row.organisationId,
     payrollRunId: row.payrollRunId ?? undefined,
+    payoutAccountId: row.payoutAccountId ?? undefined,
     reference: row.reference,
     label: row.label,
     status: row.status as BatchStatus,
@@ -76,6 +77,8 @@ export function toPaymentBatch(row: PaymentBatchRow): PaymentBatch {
     approvedBy: row.approvedBy ?? undefined,
     exportedAt: row.exportedAt?.toISOString(),
     exportedBy: row.exportedBy ?? undefined,
+    payoutStartedAt: row.payoutStartedAt?.toISOString(),
+    payoutCompletedAt: row.payoutCompletedAt?.toISOString(),
     paidAt: row.paidAt?.toISOString(),
     cancelledAt: row.cancelledAt?.toISOString(),
     cancelledBy: row.cancelledBy ?? undefined,
@@ -119,10 +122,18 @@ const BATCH_TRANSITIONS: Record<BatchStatus, BatchStatus[]> = {
     PaymentBatchStatus.CANCELLED,
   ],
   [PaymentBatchStatus.APPROVED]: [
+    PaymentBatchStatus.PROCESSING,
     PaymentBatchStatus.PAID,
     PaymentBatchStatus.CANCELLED,
   ],
+  [PaymentBatchStatus.PROCESSING]: [
+    PaymentBatchStatus.PAID,
+    PaymentBatchStatus.PARTIALLY_PAID,
+    PaymentBatchStatus.FAILED,
+  ],
   [PaymentBatchStatus.PAID]: [],
+  [PaymentBatchStatus.PARTIALLY_PAID]: [],
+  [PaymentBatchStatus.FAILED]: [],
   [PaymentBatchStatus.CANCELLED]: [],
 };
 

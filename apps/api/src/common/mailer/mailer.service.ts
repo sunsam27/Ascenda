@@ -83,6 +83,9 @@ export class MailerService implements OnModuleInit {
       port,
       secure: port === 465,
       auth: { user, pass },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     });
     this.logger.log(`Mailer ready (SMTP ${host}:${port})`);
   }

@@ -104,6 +104,24 @@ export function canPerformRunAction(
 }
 
 /**
+ * Separation-of-duties guard for approvals. The preparer may not approve their
+ * own run unless they are an OWNER; owners already override the approval chain.
+ */
+export function selfApprovalError({
+  preparedById,
+  actorId,
+  actorRole,
+}: {
+  preparedById: string;
+  actorId: string;
+  actorRole: string;
+}): string | null {
+  if (preparedById !== actorId) return null;
+  if (actorRole === 'OWNER') return null;
+  return 'Separation of duties: only an OWNER can approve a run they prepared';
+}
+
+/**
  * PAY-06: statuses in which a run is immutable — items, totals, and notes are
  * frozen; only reverse/lock-style terminal actions apply.
  */

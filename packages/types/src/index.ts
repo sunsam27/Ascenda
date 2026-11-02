@@ -34,6 +34,30 @@ export enum PaymentProvider {
   FLUTTERWAVE = 'FLUTTERWAVE',
 }
 
+/** Organisation-owned provider used for salary payouts. */
+export enum PayoutProvider {
+  PAYSTACK = 'PAYSTACK',
+  FLUTTERWAVE = 'FLUTTERWAVE',
+}
+
+export enum PayoutAccountMode {
+  TEST = 'TEST',
+  LIVE = 'LIVE',
+}
+
+export enum PayoutAccountStatus {
+  ACTIVE = 'ACTIVE',
+  DISABLED = 'DISABLED',
+}
+
+export enum PayoutStatus {
+  QUEUED = 'QUEUED',
+  PROCESSING = 'PROCESSING',
+  PAID = 'PAID',
+  FAILED = 'FAILED',
+  REVERSED = 'REVERSED',
+}
+
 export enum TransactionStatus {
   PENDING = 'PENDING',
   PROCESSING = 'PROCESSING',
@@ -211,7 +235,10 @@ export enum PaymentStatus {
 export enum PaymentBatchStatus {
   DRAFT = 'DRAFT',
   APPROVED = 'APPROVED',
+  PROCESSING = 'PROCESSING',
   PAID = 'PAID',
+  PARTIALLY_PAID = 'PARTIALLY_PAID',
+  FAILED = 'FAILED',
   CANCELLED = 'CANCELLED',
 }
 
@@ -405,6 +432,56 @@ export enum DocumentType {
   OTHER = 'OTHER',
 }
 
+// ── Onboarding & Offboarding ──────────────────────────────────────────────────
+
+export enum OnboardingStatus {
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+}
+
+export enum ChecklistTaskStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  WAIVED = 'WAIVED',
+}
+
+export enum OnboardingTaskType {
+  PERSONAL_INFO = 'PERSONAL_INFO',
+  ID_DOCUMENT = 'ID_DOCUMENT',
+  BANK_DETAILS = 'BANK_DETAILS',
+  AGREEMENT_SIGNATURE = 'AGREEMENT_SIGNATURE',
+  POLICY_ACKNOWLEDGEMENT = 'POLICY_ACKNOWLEDGEMENT',
+  MANAGER_MEETING = 'MANAGER_MEETING',
+  ORIENTATION = 'ORIENTATION',
+  EQUIPMENT = 'EQUIPMENT',
+  TRAINING = 'TRAINING',
+  CUSTOM = 'CUSTOM',
+}
+
+export enum ExitReason {
+  RESIGNATION = 'RESIGNATION',
+  DISMISSAL = 'DISMISSAL',
+  CONTRACT_END = 'CONTRACT_END',
+  RETIREMENT = 'RETIREMENT',
+  REDUNDANCY = 'REDUNDANCY',
+  OTHER = 'OTHER',
+}
+
+export enum OffboardingStatus {
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum OffboardingTaskType {
+  FINAL_PAY = 'FINAL_PAY',
+  EQUIPMENT_RETURN = 'EQUIPMENT_RETURN',
+  ACCESS_REMOVAL = 'ACCESS_REMOVAL',
+  EXIT_INTERVIEW = 'EXIT_INTERVIEW',
+  KNOWLEDGE_TRANSFER = 'KNOWLEDGE_TRANSFER',
+  CUSTOM = 'CUSTOM',
+}
+
 // ── Audit ─────────────────────────────────────────────────────────────────────
 
 export enum AuditAction {
@@ -419,6 +496,12 @@ export enum AuditAction {
   WORKER_CREATED = 'WORKER_CREATED',
   WORKER_UPDATED = 'WORKER_UPDATED',
   WORKER_DELETED = 'WORKER_DELETED',
+  ONBOARDING_CHECKLIST_CREATED = 'ONBOARDING_CHECKLIST_CREATED',
+  ONBOARDING_TASK_UPDATED = 'ONBOARDING_TASK_UPDATED',
+  OFFBOARDING_STARTED = 'OFFBOARDING_STARTED',
+  OFFBOARDING_TASK_UPDATED = 'OFFBOARDING_TASK_UPDATED',
+  OFFBOARDING_COMPLETED = 'OFFBOARDING_COMPLETED',
+  OFFBOARDING_CANCELLED = 'OFFBOARDING_CANCELLED',
   COMPENSATION_CHANGED = 'COMPENSATION_CHANGED',
   BANK_DETAILS_CHANGED = 'BANK_DETAILS_CHANGED',
   LEAVE_TYPE_CHANGED = 'LEAVE_TYPE_CHANGED',
@@ -1330,6 +1413,7 @@ export type UpdateRecurringPayItemDto = Partial<Omit<CreateRecurringPayItemDto, 
 
 export interface PaymentBatch extends TenantEntity {
   payrollRunId?: string;
+  payoutAccountId?: string;
   reference: string;
   label: string;
   status: PaymentBatchStatus;
@@ -1340,11 +1424,72 @@ export interface PaymentBatch extends TenantEntity {
   approvedBy?: string;
   exportedAt?: string;
   exportedBy?: string;
+  payoutStartedAt?: string;
+  payoutCompletedAt?: string;
   paidAt?: string;
   cancelledAt?: string;
   cancelledBy?: string;
   cancellationReason?: string;
   createdBy: string;
+}
+
+export interface PayoutAccountSummary {
+  provider: PayoutProvider;
+  mode: PayoutAccountMode;
+  country: string;
+  currency: string;
+  accountName?: string;
+  status: PayoutAccountStatus;
+  keyLast4: string;
+  webhookConfigured: boolean;
+  webhookUrl: string;
+  balanceMinorUnits?: number;
+  balanceCurrency?: string;
+  balanceCheckedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PayoutSummary {
+  id: string;
+  paymentBatchId: string;
+  paymentId: string;
+  workerId: string;
+  provider: PayoutProvider;
+  status: PayoutStatus;
+  amountMinorUnits: number;
+  currency: string;
+  reference: string;
+  providerTransferId?: string;
+  recipientName?: string;
+  bankName?: string;
+  bankCode?: string;
+  accountNumberMasked?: string;
+  failureReason?: string;
+  requestedAt: string;
+  completedAt?: string;
+}
+
+export interface PayoutBatchResult {
+  batch: PaymentBatch;
+  payouts: PayoutSummary[];
+  message: string;
+}
+
+export interface PayoutOption {
+  provider: PayoutProvider;
+  label: string;
+  currencies: string[];
+}
+
+export interface SavePayoutAccountDto {
+  provider: PayoutProvider;
+  mode: PayoutAccountMode;
+  country: string;
+  currency: string;
+  accountName?: string;
+  secretKey: string;
+  webhookSecret?: string;
 }
 
 export interface Payment extends TenantEntity {
@@ -1506,6 +1651,79 @@ export interface CreateDocumentDto {
 export interface DocumentListQuery extends PaginatedQuery {
   workerId?: string;
   type?: DocumentType;
+}
+
+// ── Onboarding & Offboarding ──────────────────────────────────────────────────
+
+export interface ChecklistTaskSummary {
+  id: string;
+  type: OnboardingTaskType | OffboardingTaskType;
+  title: string;
+  description?: string;
+  isRequired: boolean;
+  status: ChecklistTaskStatus;
+  sortOrder: number;
+  dueDate?: string;
+  completedAt?: string;
+  completedBy?: string;
+}
+
+export interface OnboardingChecklistSummary extends TenantEntity {
+  workerId: string;
+  workerName: string;
+  employeeNumber: string;
+  jobTitle: string;
+  startDate: string;
+  status: OnboardingStatus;
+  startedAt: string;
+  completedAt?: string;
+  /** Completed + waived tasks as a percentage of required tasks (0-100). */
+  progressPct: number;
+  totalTasks: number;
+  resolvedTasks: number;
+  outstandingTasks: number;
+  tasks: ChecklistTaskSummary[];
+}
+
+export interface OffboardingCaseSummary extends TenantEntity {
+  workerId: string;
+  workerName: string;
+  employeeNumber: string;
+  jobTitle: string;
+  departmentName?: string;
+  exitReason: ExitReason;
+  reasonDetail?: string;
+  lastWorkingDate: string;
+  noticeDate?: string;
+  status: OffboardingStatus;
+  completedAt?: string;
+  progressPct: number;
+  totalTasks: number;
+  resolvedTasks: number;
+  outstandingTasks: number;
+  tasks: ChecklistTaskSummary[];
+}
+
+export interface UpdateChecklistTaskDto {
+  status: ChecklistTaskStatus;
+}
+
+export interface StartOffboardingDto {
+  workerId: string;
+  exitReason: ExitReason;
+  reasonDetail?: string;
+  lastWorkingDate: string;
+  noticeDate?: string;
+}
+
+export interface OnboardingListQuery extends PaginatedQuery {
+  status?: OnboardingStatus;
+  search?: string;
+}
+
+export interface OffboardingListQuery extends PaginatedQuery {
+  status?: OffboardingStatus;
+  search?: string;
 }
 
 export interface AuditLog extends TenantEntity {

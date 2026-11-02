@@ -8,9 +8,16 @@ import { useOrganisation, terminologyOf } from '@/lib/useOrganisation';
 import WorkersPanel from './WorkersPanel';
 import DepartmentsPanel from './DepartmentsPanel';
 import LocationsPanel from './LocationsPanel';
+import OnboardingPanel from './OnboardingPanel';
+import OffboardingPanel from './OffboardingPanel';
 import styles from './people.module.css';
 
-type Tab = 'directory' | 'departments' | 'locations';
+type Tab =
+  | 'directory'
+  | 'departments'
+  | 'locations'
+  | 'onboarding'
+  | 'offboarding';
 
 export default function PeopleView() {
   const { organisation } = useOrganisation();
@@ -47,6 +54,8 @@ export default function PeopleView() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'directory', label: 'Directory' },
+    { id: 'onboarding', label: 'Onboarding' },
+    { id: 'offboarding', label: 'Offboarding' },
     { id: 'departments', label: `${t('Department')}s` },
     { id: 'locations', label: `${t('Location')}s` },
   ];
@@ -87,6 +96,8 @@ export default function PeopleView() {
       {tab === 'directory' && (
         <WorkersPanel departments={departments} locations={locations} t={t} />
       )}
+      {tab === 'onboarding' && <OnboardingPanel t={t} />}
+      {tab === 'offboarding' && <OffboardingPanel t={t} />}
       {tab === 'departments' && (
         <DepartmentsPanel
           departments={departments}

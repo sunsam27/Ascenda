@@ -42,12 +42,13 @@ function check(ok, msg, detail) {
   }
 }
 
-async function req(method, path, body) {
+async function req(method, path, body, extraHeaders = {}) {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
       ...(cookie ? { Cookie: cookie } : {}),
+      ...extraHeaders,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -214,6 +215,10 @@ async function main() {
     );
     await db.query(
       `DELETE FROM audit_log WHERE "actorId" IN (
+         SELECT id FROM users WHERE email LIKE 'pa-m2-%@ascenda.test' OR email LIKE 'fa-m2-%@ascenda.test')`,
+    );
+    await db.query(
+      `DELETE FROM notifications WHERE "recipientUserId" IN (
          SELECT id FROM users WHERE email LIKE 'pa-m2-%@ascenda.test' OR email LIKE 'fa-m2-%@ascenda.test')`,
     );
     await db.query(
@@ -599,17 +604,44 @@ async function main() {
       JSON.stringify(payD),
     );
 
-    const p1 = dataOf(await req('PATCH', `/payments/${payA.id}/status`, { status: 'PROCESSING' }));
-    const p2 = dataOf(await req('PATCH', `/payments/${payA.id}/status`, { status: 'COMPLETED' }));
-    check(
-      p1.status === 'PROCESSING' && p2.status === 'COMPLETED' && p2.processedAt != null,
-      'R13 payment lifecycle PENDING → PROCESSING → COMPLETED (processedAt stamped)',
-      JSON.stringify({ p1: p1.status, p2: p2.status, at: p2.processedAt }),
+    // PAY-12: process assembles the payments into a DRAFT batch, so the
+    // lifecycle is driven through the batch (step-up required).
+    const batchRow = await db.query(
+      `SELECT "paymentBatchId" FROM payments WHERE id = $1`,
+      [payA.id],
     );
-    const badTransition = await req('PATCH', `/payments/${payD.id}/status`, { status: 'COMPLETED' });
+    const batchId = batchRow.rows[0]?.paymentBatchId;
+    const stepUpRes = await req('POST', '/auth/step-up', {
+      password: 'AscendaDemo123!',
+    });
+    const stepToken = dataOf(stepUpRes).token || stepUpRes.json?.token;
+    const approvedBatch = dataOf(
+      await req('POST', `/payments/batches/${batchId}/approve`, undefined, {
+        'x-step-up-token': stepToken,
+      }),
+    );
+    const paidBatch = dataOf(
+      await req('POST', `/payments/batches/${batchId}/pay`, undefined, {
+        'x-step-up-token': stepToken,
+      }),
+    );
+    const paidPay = dataOf(await req('GET', `/payments/${payA.id}`));
+    check(
+      approvedBatch.status === 'APPROVED' &&
+        paidBatch.status === 'PAID' &&
+        paidPay.status === 'PAID' &&
+        paidPay.processedAt != null,
+      'R13 batch lifecycle DRAFT → APPROVED → PAID marks the payment PAID',
+      JSON.stringify({
+        batch: [approvedBatch.status, paidBatch.status],
+        payment: paidPay.status,
+        at: paidPay.processedAt,
+      }),
+    );
+    const badTransition = await req('PATCH', `/payments/${payD.id}/status`, { status: 'PAID' });
     check(
       badTransition.status === 409,
-      'R13 PENDING → COMPLETED directly is refused (409)',
+      'R13 a batched payment cannot be moved individually (409)',
       `status=${badTransition.status}`,
     );
 
@@ -815,6 +847,7 @@ async function main() {
         ]);
       }
       if (cleanup.userIds.length) {
+        await db.query(`DELETE FROM notifications WHERE "recipientUserId" = ANY($1)`, [cleanup.userIds]);
         await db.query(`DELETE FROM memberships WHERE "userId" = ANY($1)`, [cleanup.userIds]);
         await db.query(`DELETE FROM users WHERE id = ANY($1)`, [cleanup.userIds]);
       }

@@ -133,6 +133,10 @@ async function main() {
          SELECT id::text FROM users WHERE email LIKE 'bs-%@ascenda.test')`,
     );
     await db.query(
+      `DELETE FROM notifications WHERE "recipientUserId" IN (
+         SELECT id FROM users WHERE email LIKE 'bs-%@ascenda.test')`,
+    );
+    await db.query(
       `DELETE FROM memberships WHERE "userId" IN (
          SELECT id FROM users WHERE email LIKE 'bs-%@ascenda.test')`,
     );
@@ -539,6 +543,10 @@ async function main() {
           `DELETE FROM audit_log WHERE "actorId"::text = ANY($1::text[])`,
           [cleanup.userIds],
         );
+        await db.query(
+          `DELETE FROM notifications WHERE "recipientUserId" = ANY($1::text[])`,
+          [cleanup.userIds],
+        );
         await db.query(`DELETE FROM memberships WHERE "userId" = ANY($1::text[])`, [
           cleanup.userIds,
         ]);
@@ -548,6 +556,10 @@ async function main() {
       }
       // Invitation-created users (workers invited during the run).
       await db.query(`DELETE FROM invitations WHERE email LIKE 'bs-%'`);
+      await db.query(
+        `DELETE FROM notifications WHERE "recipientUserId" IN (
+           SELECT id FROM users WHERE email LIKE 'bs-%')`,
+      );
       await db.query(
         `DELETE FROM memberships WHERE "userId" IN (
            SELECT id FROM users WHERE email LIKE 'bs-%')`,

@@ -53,6 +53,8 @@ const BUSINESS_RESOURCES = [
   'remittance',
   'expense_claims',
   'documents',
+  'onboarding',
+  'offboarding',
   'approvals',
   'analytics',
   'settings',
@@ -74,6 +76,8 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('attendance', CRUD, PermissionScope.ORGANISATION),
     ...perm('holidays', CRUD, PermissionScope.ORGANISATION),
     ...perm('blackout_periods', CRUD, PermissionScope.ORGANISATION),
+    ...perm('onboarding', CRUD, PermissionScope.ORGANISATION),
+    ...perm('offboarding', CRUD, PermissionScope.ORGANISATION),
     ...perm('compensation', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.ORGANISATION),
   ],
@@ -93,6 +97,10 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     // Bank details are entered by employees and corrected by payroll admins
     // (e.g. when an account has a problem before the next pay run).
     ...perm('bank_accounts', ['read', 'create', 'update'], PermissionScope.ORGANISATION),
+    // Payroll needs to see onboarding progress (bank details/ID) and the exit
+    // final-pay task, but only HR owns the lifecycle records.
+    ...perm('onboarding', READ, PermissionScope.ORGANISATION),
+    ...perm('offboarding', ['read', 'update'], PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.ORGANISATION),
   ],
 
@@ -104,6 +112,8 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('remittance', ['read', 'export'], PermissionScope.ORGANISATION),
     ...perm('expense_claims', ['read', 'approve'], PermissionScope.ORGANISATION),
     ...perm('compensation', READ, PermissionScope.ORGANISATION),
+    ...perm('onboarding', READ, PermissionScope.ORGANISATION),
+    ...perm('offboarding', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.ORGANISATION),
   ],
 
@@ -162,6 +172,8 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
     ...perm('leave', READ, PermissionScope.ORGANISATION),
     ...perm('holidays', READ, PermissionScope.ORGANISATION),
     ...perm('blackout_periods', READ, PermissionScope.ORGANISATION),
+    ...perm('onboarding', READ, PermissionScope.ORGANISATION),
+    ...perm('offboarding', READ, PermissionScope.ORGANISATION),
     ...perm('payroll', READ, PermissionScope.ORGANISATION),
     ...perm('analytics', READ, PermissionScope.ORGANISATION),
   ],

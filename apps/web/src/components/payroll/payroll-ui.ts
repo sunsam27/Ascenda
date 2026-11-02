@@ -8,6 +8,7 @@ import {
   PayFrequency,
   PaymentBatchStatus,
   PaymentStatus,
+  PayoutStatus,
   PayrollItemType,
   PayrollRunApprovalStatus,
   PayrollRunStatus,
@@ -68,15 +69,37 @@ export const PAYMENT_STATUS_TONE: Record<PaymentStatus, string> = {
 export const PAYMENT_BATCH_STATUS_LABEL: Record<PaymentBatchStatus, string> = {
   [PaymentBatchStatus.DRAFT]: 'Draft',
   [PaymentBatchStatus.APPROVED]: 'Approved',
+  [PaymentBatchStatus.PROCESSING]: 'Processing',
   [PaymentBatchStatus.PAID]: 'Paid',
+  [PaymentBatchStatus.PARTIALLY_PAID]: 'Partially paid',
+  [PaymentBatchStatus.FAILED]: 'Failed',
   [PaymentBatchStatus.CANCELLED]: 'Cancelled',
 };
 
 export const PAYMENT_BATCH_STATUS_TONE: Record<PaymentBatchStatus, string> = {
   [PaymentBatchStatus.DRAFT]: 'badge',
   [PaymentBatchStatus.APPROVED]: 'badgeInfo',
+  [PaymentBatchStatus.PROCESSING]: 'badgeWarning',
   [PaymentBatchStatus.PAID]: 'badgeSuccess',
+  [PaymentBatchStatus.PARTIALLY_PAID]: 'badgeWarning',
+  [PaymentBatchStatus.FAILED]: 'badgeDanger',
   [PaymentBatchStatus.CANCELLED]: 'badge',
+};
+
+export const PAYOUT_STATUS_LABEL: Record<PayoutStatus, string> = {
+  [PayoutStatus.QUEUED]: 'Queued',
+  [PayoutStatus.PROCESSING]: 'Processing',
+  [PayoutStatus.PAID]: 'Paid',
+  [PayoutStatus.FAILED]: 'Failed',
+  [PayoutStatus.REVERSED]: 'Reversed',
+};
+
+export const PAYOUT_STATUS_TONE: Record<PayoutStatus, string> = {
+  [PayoutStatus.QUEUED]: 'badge',
+  [PayoutStatus.PROCESSING]: 'badgeWarning',
+  [PayoutStatus.PAID]: 'badgeSuccess',
+  [PayoutStatus.FAILED]: 'badgeDanger',
+  [PayoutStatus.REVERSED]: 'badgeWarning',
 };
 
 export const ITEM_TYPE_LABEL: Record<PayrollItemType, string> = {

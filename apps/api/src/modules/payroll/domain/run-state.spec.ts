@@ -3,6 +3,7 @@ import {
   isInApprovalChain,
   isRunImmutable,
   runActionError,
+  selfApprovalError,
 } from './run-state';
 
 describe('runActionError', () => {
@@ -77,6 +78,40 @@ describe('canPerformRunAction', () => {
   it('mirrors runActionError', () => {
     expect(canPerformRunAction('submit', 'IN_REVIEW')).toBe(true);
     expect(canPerformRunAction('submit', 'APPROVED')).toBe(false);
+  });
+});
+
+describe('selfApprovalError', () => {
+  const preparedById = 'user-1';
+
+  it('allows anyone other than the preparer to approve', () => {
+    expect(
+      selfApprovalError({
+        preparedById,
+        actorId: 'user-2',
+        actorRole: 'FINANCE_APPROVER',
+      }),
+    ).toBeNull();
+  });
+
+  it('allows an OWNER to approve a run they prepared', () => {
+    expect(
+      selfApprovalError({
+        preparedById,
+        actorId: preparedById,
+        actorRole: 'OWNER',
+      }),
+    ).toBeNull();
+  });
+
+  it('blocks non-owners from approving their own run', () => {
+    expect(
+      selfApprovalError({
+        preparedById,
+        actorId: preparedById,
+        actorRole: 'FINANCE_APPROVER',
+      }),
+    ).toContain('only an OWNER');
   });
 });
 

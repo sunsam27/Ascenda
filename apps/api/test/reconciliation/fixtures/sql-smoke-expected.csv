@@ -1,0 +1,3 @@
+employee_number,currency,gross_minor_units,deductions_minor_units,net_minor_units,employer_costs_minor_units,worker_name
+SMOKE-001,NGN,52000000,7500000,44500000,5000000,Ada Alpha
+SMOKE-002,NGN,30000000,1000000,29000000,3000000,Ben Beta

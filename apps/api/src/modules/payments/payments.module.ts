@@ -4,11 +4,27 @@ import { IdentityAccessModule } from '../identity-access/identity-access.module'
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
+import { FlutterwavePayoutProvider } from './payouts/flutterwave-payout.provider';
+import { PayoutGatewayRegistry } from './payouts/payout-gateway.registry';
+import { PayoutWebhooksController } from './payouts/payout-webhooks.controller';
+import { PaystackPayoutProvider } from './payouts/paystack-payout.provider';
+import { PayoutsController } from './payouts/payouts.controller';
+import { PayoutsService } from './payouts/payouts.service';
 
 @Module({
   imports: [AuditModule, IdentityAccessModule, NotificationsModule],
-  controllers: [PaymentsController],
-  providers: [PaymentsService],
-  exports: [PaymentsService],
+  controllers: [
+    PayoutsController,
+    PayoutWebhooksController,
+    PaymentsController,
+  ],
+  providers: [
+    PaymentsService,
+    PayoutsService,
+    PayoutGatewayRegistry,
+    PaystackPayoutProvider,
+    FlutterwavePayoutProvider,
+  ],
+  exports: [PaymentsService, PayoutsService],
 })
 export class PaymentsModule {}

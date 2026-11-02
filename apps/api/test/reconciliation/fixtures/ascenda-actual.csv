@@ -1,0 +1,6 @@
+employee_number,currency,gross_minor_units,deductions_minor_units,net_minor_units,employer_costs_minor_units,worker_name
+ASC-001,NGN,67500000,11000000,56500000,7500000,Ada Alpha
+ASC-002,NGN,50000000,8500000,41500000,5000000,Ben Beta
+ASC-003,NGN,32000000,5200000,26800000,3200000,Chidi Gamma
+ASC-004,NGN,45000000,9000000,36000000,4500000,Dara Delta
+ASC-005,NGN,120000000,24000000,96000000,12000000,Efe Epsilon

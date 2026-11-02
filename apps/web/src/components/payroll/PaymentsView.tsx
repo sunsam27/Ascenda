@@ -10,6 +10,8 @@ const PAYMENT_MANAGERS = new Set(['OWNER', 'PAYROLL_ADMINISTRATOR']);
 const PAYMENT_EXPORTERS = new Set(['OWNER', 'FINANCE_APPROVER']);
 /** Roles permitted by the org-wide `payments:approve` grant. */
 const PAYMENT_APPROVERS = new Set(['OWNER', 'FINANCE_APPROVER']);
+/** Roles permitted to store payout credentials (settings:update). */
+const PAYOUT_CONFIGURERS = new Set(['OWNER']);
 /** Roles that may read payments (everything else is denied by the API). */
 const PAYMENT_READERS = new Set([
   'OWNER',
@@ -42,6 +44,7 @@ export default function PaymentsView() {
           canManage={PAYMENT_MANAGERS.has(role)}
           canApprove={PAYMENT_APPROVERS.has(role)}
           canExport={PAYMENT_EXPORTERS.has(role)}
+          canConfigurePayout={PAYOUT_CONFIGURERS.has(role)}
         />
       ) : (
         <div className={`glass ${styles.message}`}>

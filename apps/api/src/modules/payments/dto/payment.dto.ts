@@ -8,6 +8,7 @@ import {
   IsString,
   IsUUID,
   Length,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -16,6 +17,8 @@ import {
   PaymentBatchStatus,
   PaymentExportFormat,
   PaymentStatus,
+  PayoutAccountMode,
+  PayoutProvider,
 } from '@ascenda/types';
 
 /** Statuses a payment may be moved to. The service enforces the matrix. */
@@ -134,4 +137,34 @@ export class CancelPaymentBatchDto {
   @IsString()
   @Length(1, 500)
   reason!: string;
+}
+
+export class SavePayoutAccountDto {
+  @IsEnum(PayoutProvider)
+  provider!: PayoutProvider;
+
+  @IsEnum(PayoutAccountMode)
+  mode!: PayoutAccountMode;
+
+  @IsString()
+  @Matches(/^[A-Za-z]{2}$/, { message: 'country must be a 2-letter code' })
+  country!: string;
+
+  @IsString()
+  @Matches(/^[A-Za-z]{3}$/, { message: 'currency must be a 3-letter code' })
+  currency!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 160)
+  accountName?: string;
+
+  @IsString()
+  @Length(10, 300)
+  secretKey!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(8, 300)
+  webhookSecret?: string;
 }

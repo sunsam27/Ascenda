@@ -7,6 +7,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuditAction, NotificationType, Prisma } from '@ascenda/db';
 import type {
   ApprovePayrollRunDto,
@@ -34,6 +35,7 @@ import { LeaveRequestsService } from '../time-leave/leave-requests.service';
 import { AttendanceService } from '../time-leave/attendance.service';
 import { parseDateOnly } from '../time-leave/holidays.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MailerService } from '../../common/mailer/mailer.service';
 import {
   payPeriodsForYear,
   type PayCalendarConfig,
@@ -46,7 +48,11 @@ import {
   RunItemType,
   RunRecurringInput,
 } from './domain/run-calc';
-import { runActionError, type RunStatus } from './domain/run-state';
+import {
+  runActionError,
+  selfApprovalError,
+  type RunStatus,
+} from './domain/run-state';
 import {
   applyStatutoryToWorker,
   type StatutoryRule,
@@ -173,6 +179,8 @@ export class PayrollRunsService {
     private readonly payslips: PayslipsService,
     private readonly expenseClaims: ExpenseClaimsService,
     private readonly notifications: NotificationsService,
+    private readonly mailer: MailerService,
+    private readonly appConfig: ConfigService,
   ) {}
 
   // ── Read ───────────────────────────────────────────────────────────────────
@@ -1063,10 +1071,16 @@ export class PayrollRunsService {
     return this.prisma.withRequestContext(async (tx) => {
       const run = await this.loadRun(tx, id);
       this.assertAction('approve', run);
-      if (run.preparedById === userId) {
-        throw new ForbiddenException(
-          'Separation of duties: the preparer cannot approve their own run',
-        );
+
+      const role = await this.actorRole(tx, organisationId, userId);
+      const isOwnerOverride = role === Role.OWNER;
+      const selfApprovalBlocked = selfApprovalError({
+        preparedById: run.preparedById,
+        actorId: userId,
+        actorRole: role,
+      });
+      if (selfApprovalBlocked) {
+        throw new ForbiddenException(selfApprovalBlocked);
       }
 
       const issues = await this.validations(id);
@@ -1085,7 +1099,6 @@ export class PayrollRunsService {
         );
       }
 
-      const role = await this.actorRole(tx, organisationId, userId);
       const steps = await tx.payrollRunApproval.findMany({
         where: { payrollRunId: run.id },
         orderBy: { stepNumber: 'asc' },
@@ -1093,7 +1106,6 @@ export class PayrollRunsService {
       const next = steps.find((s) => s.status === 'PENDING');
       if (!next) throw new ConflictException('Run has no pending approval step');
 
-      const isOwnerOverride = role === Role.OWNER;
       if (!isOwnerOverride && role !== (next.role as SystemRole)) {
         throw new ForbiddenException(
           `Step ${next.stepNumber} requires the ${next.role} role (your role: ${role})`,
@@ -1132,6 +1144,8 @@ export class PayrollRunsService {
           role: next.role,
           actorRole: role,
           fullyApproved,
+          selfApprovalOverride:
+            run.preparedById === userId && isOwnerOverride,
           comment: dto.comment ?? null,
         },
       });
@@ -1380,6 +1394,15 @@ export class PayrollRunsService {
           paymentBatchId,
         },
       });
+      if (payslipsCreated > 0 && run.reversalOfRunId == null) {
+        await this.notifyPayslipsAvailable(
+          tx,
+          run.organisationId,
+          run.id,
+          [...byWorker.keys()],
+          periodLabel,
+        );
+      }
       await this.notify({
         organisationId: run.organisationId,
         actorUserId: userId,
@@ -1571,6 +1594,73 @@ export class PayrollRunsService {
       throw new UnauthorizedException('No membership for this organisation');
     }
     return membership.role as SystemRole;
+  }
+
+  /**
+   * PAY-13: email each paid worker when their payslip becomes available.
+   * Workers with a login get an in-app notification (which also emails them);
+   * workers without a login are emailed directly at their payroll address.
+   * Best-effort: a mail failure never fails the processed run.
+   */
+  private async notifyPayslipsAvailable(
+    tx: Prisma.TransactionClient,
+    organisationId: string,
+    payrollRunId: string,
+    workerIds: string[],
+    periodLabel: string,
+  ): Promise<void> {
+    if (workerIds.length === 0) return;
+    try {
+      const workers = await tx.worker.findMany({
+        where: { id: { in: workerIds } },
+        select: {
+          id: true,
+          userId: true,
+          firstName: true,
+          lastName: true,
+          preferredName: true,
+          email: true,
+        },
+      });
+      const title = 'Your payslip is available';
+      const body = `Your payslip for ${periodLabel} is ready to download in Ascenda.`;
+
+      const linked = workers.filter((worker) => worker.userId);
+      if (linked.length > 0) {
+        await this.notifications.emit({
+          organisationId,
+          intents: linked.map((worker) => ({
+            recipientUserId: worker.userId as string,
+            type: NotificationType.PAYSLIPS_AVAILABLE,
+            title,
+            body,
+            link: '/payroll',
+            metadata: { payrollRunId, workerId: worker.id },
+          })),
+        });
+      }
+
+      const appUrl = this.appConfig.get<string>('WEB_APP_URL') ?? '';
+      for (const worker of workers.filter((row) => !row.userId)) {
+        const name =
+          worker.preferredName?.trim() ||
+          `${worker.firstName} ${worker.lastName}`.trim();
+        await this.mailer.sendNotification({
+          to: worker.email,
+          name,
+          title,
+          body,
+          link: '/payroll',
+          appUrl,
+        });
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Payslip notification failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   private async notify(input: {

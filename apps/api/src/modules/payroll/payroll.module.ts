@@ -3,6 +3,7 @@ import { AuditModule } from '../audit/audit.module';
 import { PeopleModule } from '../people/people.module';
 import { TimeLeaveModule } from '../time-leave/time-leave.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MailerModule } from '../../common/mailer/mailer.module';
 import { PayrollController } from './payroll.controller';
 import { PayrollService } from './payroll.service';
 import { PayCalendarsController } from './pay-calendars.controller';
@@ -23,7 +24,13 @@ import { ExpenseClaimsController } from './expense-claims.controller';
 import { ExpenseClaimsService } from './expense-claims.service';
 
 @Module({
-  imports: [AuditModule, PeopleModule, TimeLeaveModule, NotificationsModule],
+  imports: [
+    AuditModule,
+    PeopleModule,
+    TimeLeaveModule,
+    NotificationsModule,
+    MailerModule,
+  ],
   controllers: [
     PayrollController,
     PayCalendarsController,
