@@ -701,6 +701,11 @@ model BankAccount {
   workerId               String
   bankName               String
   bankCode               String
+  /// Payout providers publish their own bank code tables. When set, these
+  /// override `bankCode` for the matching provider. Unset overrides fall back
+  /// to the generic code; operators must check it against the provider's list.
+  paystackBankCode       String?
+  flutterwaveBankCode    String?
   accountNumberEncrypted String /// AES-256-GCM envelope encrypted
   accountNumberMasked    String /// e.g. "****1234"
   accountName            String
@@ -1216,6 +1221,12 @@ model Payout {
   accountNumberMasked String?
   failureReason       String?
   providerPayload     Json?
+  /// Transfer attempts made for this payment (first attempt = 1). Retries reuse
+  /// this row because `paymentId` is unique, issuing a fresh provider reference.
+  attemptCount        Int            @default(1)
+  lastAttemptAt       DateTime?
+  /// Last time reconciliation polled the provider for this transfer.
+  lastCheckedAt       DateTime?
   requestedAt         DateTime       @default(now())
   completedAt         DateTime?
   createdAt           DateTime       @default(now())

@@ -112,8 +112,11 @@ export class FlutterwavePayoutProvider implements PayoutGateway {
       }),
     );
     if (body.status === 'error') {
+      // Explicit rejection: the transfer was not created, so it is safe to
+      // record as FAILED (422) rather than waiting for reconciliation.
       throw new PayoutProviderError(
         stringValue(body.message) ?? 'Flutterwave rejected the transfer.',
+        422,
       );
     }
     const transfer = asJsonRecord(body.data);

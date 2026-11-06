@@ -115,8 +115,10 @@ export class PaystackPayoutProvider implements PayoutGateway {
     const recipient = asJsonRecord(recipientBody.data);
     const recipientCode = stringValue(recipient.recipient_code);
     if (!recipientCode) {
+      // No recipient means no transfer was attempted: safe to record FAILED.
       throw new PayoutProviderError(
         'Paystack did not return a transfer recipient code.',
+        422,
       );
     }
 
@@ -138,8 +140,11 @@ export class PaystackPayoutProvider implements PayoutGateway {
       }),
     );
     if (transferBody.status === false) {
+      // Explicit rejection: the transfer was not created, so it is safe to
+      // record as FAILED (422) rather than waiting for reconciliation.
       throw new PayoutProviderError(
         stringValue(transferBody.message) ?? 'Paystack rejected the transfer.',
+        422,
       );
     }
 

@@ -3,6 +3,7 @@ import { PayoutProvider, PayoutStatus } from '@ascenda/types';
 import { FlutterwavePayoutProvider } from './flutterwave-payout.provider';
 import { PaystackPayoutProvider } from './paystack-payout.provider';
 import {
+  hasFractionalMajorUnits,
   providerSupportsCurrency,
   payoutOptions,
 } from './payout-support';
@@ -33,6 +34,12 @@ describe('payout provider support', () => {
       providerSupportsCurrency(PayoutProvider.FLUTTERWAVE, 'KES'),
     ).toBe(true);
     expect(payoutOptions()).toHaveLength(2);
+  });
+
+  it('rejects fractional amounts only for zero-decimal currencies', () => {
+    expect(hasFractionalMajorUnits(10_050, 'XOF')).toBe(true);
+    expect(hasFractionalMajorUnits(10_000, 'XOF')).toBe(false);
+    expect(hasFractionalMajorUnits(10_050, 'NGN')).toBe(false);
   });
 });
 

@@ -36,6 +36,8 @@ export function toBankAccount(row: BankAccountRow): BankAccount {
     workerId: row.workerId,
     bankName: row.bankName,
     bankCode: row.bankCode,
+    paystackBankCode: row.paystackBankCode ?? undefined,
+    flutterwaveBankCode: row.flutterwaveBankCode ?? undefined,
     accountNumberMasked: row.accountNumberMasked,
     accountName: row.accountName,
     isVerified: row.isVerified,
@@ -97,6 +99,7 @@ export class BankAccountsService {
   ): Promise<BankAccount> {
     const { organisationId } = this.requireContext();
     const accountNumber = dto.accountNumber.replace(/\s+/g, '');
+    this.assertCanSetProviderCodes(dto);
     return this.prisma.withRequestContext(async (tx) => {
       await this.assertWorkerAccess(tx, workerId);
 
@@ -118,6 +121,10 @@ export class BankAccountsService {
           workerId,
           bankName: bank.bankName,
           bankCode: bank.bankCode,
+          paystackBankCode: this.normaliseProviderCode(dto.paystackBankCode),
+          flutterwaveBankCode: this.normaliseProviderCode(
+            dto.flutterwaveBankCode,
+          ),
           accountNumberEncrypted: encryptAccountNumber(accountNumber),
           accountNumberMasked: maskAccountNumber(accountNumber),
           accountName: dto.accountName.trim(),
@@ -137,6 +144,7 @@ export class BankAccountsService {
     accountId: string,
     dto: UpdateBankAccountDto,
   ): Promise<BankAccount> {
+    this.assertCanSetProviderCodes(dto);
     return this.prisma.withRequestContext(async (tx) => {
       await this.assertWorkerAccess(tx, workerId);
       const existing = await tx.bankAccount.findFirst({
@@ -169,6 +177,19 @@ export class BankAccountsService {
         }
       }
 
+      const routingChanged =
+        accountNumberChanged ||
+        bankName !== existing.bankName ||
+        bankCode !== existing.bankCode;
+      const paystackBankCode =
+        dto.paystackBankCode === undefined
+          ? (routingChanged ? null : existing.paystackBankCode)
+          : this.normaliseProviderCode(dto.paystackBankCode);
+      const flutterwaveBankCode =
+        dto.flutterwaveBankCode === undefined
+          ? (routingChanged ? null : existing.flutterwaveBankCode)
+          : this.normaliseProviderCode(dto.flutterwaveBankCode);
+
       if (dto.isPrimary) {
         await tx.bankAccount.updateMany({
           where: { workerId, id: { not: accountId } },
@@ -180,7 +201,10 @@ export class BankAccountsService {
         dto.accountName !== undefined &&
         dto.accountName.trim() !== existing.accountName;
       const bankChanged =
-        bankName !== existing.bankName || bankCode !== existing.bankCode;
+        bankName !== existing.bankName ||
+        bankCode !== existing.bankCode ||
+        paystackBankCode !== existing.paystackBankCode ||
+        flutterwaveBankCode !== existing.flutterwaveBankCode;
       const requiresReview =
         accountNumberChanged || accountNameChanged || bankChanged;
 
@@ -189,6 +213,8 @@ export class BankAccountsService {
         data: {
           bankName,
           bankCode,
+          paystackBankCode,
+          flutterwaveBankCode,
           ...(dto.accountNumber !== undefined
             ? {
                 accountNumberEncrypted: encryptAccountNumber(accountNumber),
@@ -378,10 +404,36 @@ export class BankAccountsService {
         change,
         bankName: row.bankName,
         bankCode: row.bankCode,
+        paystackBankCode: row.paystackBankCode,
+        flutterwaveBankCode: row.flutterwaveBankCode,
         accountNumberMasked: row.accountNumberMasked,
         isPrimary: row.isPrimary,
       },
     });
+  }
+
+  /**
+   * Provider bank codes are payment-routing data, not something an employee
+   * should supply about their own account. Only an org-scoped payroll admin may
+   * set or clear them; omitted fields are left alone.
+   */
+  private assertCanSetProviderCodes(dto: {
+    paystackBankCode?: string;
+    flutterwaveBankCode?: string;
+  }): void {
+    const supplied =
+      dto.paystackBankCode !== undefined ||
+      dto.flutterwaveBankCode !== undefined;
+    if (supplied && !this.isOrganisationScope()) {
+      throw new ForbiddenException(
+        'Only payroll administrators can set provider bank codes',
+      );
+    }
+  }
+
+  private normaliseProviderCode(value: string | undefined): string | null {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
   }
 
   private isOrganisationScope(): boolean {

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { requestContext } from '../../common/context/request-context';
+import { PayoutsService } from '../payments/payouts/payouts.service';
 import { LeaveBalancesService } from '../time-leave/leave-balances.service';
 import { LeaveRequestsService } from '../time-leave/leave-requests.service';
 import { SystemPrismaService } from './system-prisma.service';
@@ -10,6 +11,8 @@ import { SystemPrismaService } from './system-prisma.service';
 const ESCALATION_CRON = '*/15 * * * *';
 /** 02:00 on the first day of each month — accrual is idempotent per year. */
 const ACCRUAL_CRON = '0 2 1 * *';
+/** 10 minutes, offset from the leave escalation job. */
+const PAYOUT_RECONCILIATION_CRON = '*/10 * * * *';
 
 /**
  * In-process background jobs (no external queue for the single-instance demo).
@@ -32,6 +35,7 @@ export class SchedulerService {
     private readonly system: SystemPrismaService,
     private readonly leaveRequests: LeaveRequestsService,
     private readonly leaveBalances: LeaveBalancesService,
+    private readonly payouts: PayoutsService,
     private readonly config: ConfigService,
   ) {
     this.enabled =
@@ -57,6 +61,18 @@ export class SchedulerService {
     if (!this.enabled) return;
     await this.forEachOrganisation('leave-accrual', () =>
       this.leaveBalances.runAccrual({}),
+    );
+  }
+
+  /**
+   * Poll providers for payouts whose webhook never arrived. Only stale
+   * QUEUED/PROCESSING transfers are checked; terminal ones are left untouched.
+   */
+  @Cron(PAYOUT_RECONCILIATION_CRON, { name: 'payout-reconciliation' })
+  async runPayoutReconciliation(): Promise<void> {
+    if (!this.enabled) return;
+    await this.forEachOrganisation('payout-reconciliation', () =>
+      this.payouts.reconcileStalePayouts(),
     );
   }
 

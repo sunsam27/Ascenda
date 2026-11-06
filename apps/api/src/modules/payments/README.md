@@ -2,13 +2,120 @@
 
 **Bounded context:** payments
 
-## PRD Requirements
-TODO: Link to PRD sections for this module (e.g. ORG-01, PPL-01 )
+Worker payments and salary payouts (PRD PAY-07, PAY-12) plus the provider
+payout account used to move money in-platform.
 
 ## Interfaces
-Modules must communicate through explicit interfaces/events  never by accessing another module's tables directly.
+
+Modules communicate through explicit interfaces/events — never by accessing
+another module's tables directly.
+
+- `PaymentsService` — payment/batch lifecycle, exports.
+- `PayoutsService` — provider account, transfers, webhooks, retry and
+  reconciliation.
+- `PayoutGateway` (`payouts/payout-provider.ts`) — provider adapter contract.
+  Implementations: `paystack-payout.provider.ts`, `flutterwave-payout.provider.ts`.
+
+## Payout flow
+
+1. A processed payroll run creates `DRAFT` payment batches and `PENDING`
+   payments.
+2. An approver approves the batch (step-up, `payments:approve`), which marks its
+   payments `APPROVED`.
+3. "Pay in-platform" (`POST /payments/batches/:id/payout`, step-up,
+   `payments:approve`) creates one `Payout` per payment (`QUEUED`) and calls the
+   provider synchronously. Results are persisted as `PROCESSING`, `PAID`,
+   `FAILED` or `REVERSED`, and the batch rolls up to `PAID`,
+   `PARTIALLY_PAID` or `FAILED`.
+4. Provider webhooks (`POST /payments/webhooks/{provider}/{organisationId}`)
+   update transfers asynchronously. Signatures are verified against the
+   connected account's credentials before anything is written.
+
+Amounts are always integer minor units. Account numbers are encrypted at rest
+and only decrypted inside the payout path; logs and summaries are masked.
+
+## Retry failed transfers
+
+`POST /payments/batches/:id/payout/retry` (step-up, `payments:approve`)
+
+- Only `FAILED` or `PARTIALLY_PAID` batches are eligible.
+- Only `FAILED` payouts are retried. `PAID` and `REVERSED` transfers are never
+  resent.
+- Each retry reuses the payout row (`Payout.paymentId` is unique), increments
+  `attemptCount`, and issues a fresh provider reference
+  (`<payment reference>-R<attempt>`).
+- The batch returns to `PROCESSING` and rolls up again as results arrive.
+- The retry is audited as `PAYOUT_BATCH_INITIATED` with `retry: true`, and each
+  status change is audited as `PAYOUT_STATUS_CHANGED`.
+
+Reversed transfers must be handled manually: money may already have left the
+provider wallet, so the system will not automatically re-send them.
+
+## Reconciliation
+
+Webhooks are best-effort. `PayoutsService.reconcileStalePayouts()` polls the
+provider for payouts that have been `QUEUED`/`PROCESSING` for at least 10
+minutes and have not been checked in the last 10 minutes. The scheduler runs it
+every 10 minutes when `SCHEDULER_ENABLED=true`:
+
+```
+SCHEDULER_ENABLED=true
+```
+
+Reconciliation uses the same persistence and auditing path as webhooks
+(`source: RECONCILIATION`). A failed provider lookup is logged and retried on the
+next run and never marks a payout failed by itself — with one exception: a
+definite `404 Not Found` long after the attempt means the provider never received
+the transfer, so the payout is marked `FAILED` and becomes retryable.
+
+Ambiguous initiation failures (timeouts, 5xx/429, malformed provider responses)
+are deliberately left `PROCESSING` rather than `FAILED`, so a retry cannot send
+the same salary twice. Explicit 4xx rejections and provider-reported failures are
+recorded as `FAILED`. Force a manual check with:
+
+```bash
+# inside an authenticated request/org context
+payoutsService.reconcileStalePayouts();
+```
+
+## Configuration
+
+| Variable | Purpose |
+| --- | --- |
+| `PAYMENTS_ENABLED` | Gates subscription checkout in billing (default `false`); payout endpoints are separate. |
+| `BANK_ENCRYPTION_KEY` | 32-byte key used to encrypt worker bank details and payout credentials. Production must set it. |
+| `API_PUBLIC_URL` | Public HTTPS base used to render webhook URLs. |
+| `API_PREFIX` | API path prefix (default `api/v1`). |
+| `SCHEDULER_ENABLED` | Enables reconciliation and other background jobs. |
+
+Connect the payout account with `PUT /payments/payout-account` (step-up,
+`settings:update`). Paystack webhook signatures use the account secret key;
+Flutterwave requires the `verif-hash` secret to be supplied when connecting.
+
+## Operational notes
+
+See [the payout operations runbook](./PAYOUT-RUNBOOK.md) for deployment,
+pre-flight checks, incident triage and acceptance testing.
+
+- Paystack transfer OTP must be disabled in the dashboard, or automated
+  transfers will fail with a clear OTP error.
+- Separation of duties is enforced on approval: the batch creator cannot approve
+  their own batch unless they are an OWNER (same override as payroll runs). The
+  self-approval override is recorded on the approval audit entry.
+- The provider balance is fetched live immediately before every initiation and
+  retry, then persisted on the payout account. If the live lookup fails the run
+  aborts rather than authorising against a stale snapshot.
+- Amounts are stored with a two-decimal convention. Zero-decimal currencies
+  (XOF, XAF, UGX, RWF, MWK, …) are rejected at initiation/retry when a payment
+  is not a whole major unit, so a provider is never sent an invalid fraction.
+- Providers publish different bank code tables. `BankAccount.bankCode` holds the
+  generic CBN/NIBSS code, while `paystackBankCode` and `flutterwaveBankCode` are
+  optional per-provider overrides. Payout preparation prefers the active
+  provider's override and falls back to `bankCode`. Payroll admins can set the
+  overrides from the worker's bank-account panel; employees cannot.
 
 ## Notes
-- All service methods must accept and filter by \organisationId\
-- Add a tenant-isolation test for every new endpoint
-- Sensitive fields must be classified and encrypted/masked
+
+- All service methods accept and filter by `organisationId`.
+- Add a tenant-isolation test for every new endpoint.
+- Sensitive fields must be classified and encrypted/masked.

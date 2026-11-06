@@ -5,8 +5,10 @@ import axios from 'axios';
 import {
   Check,
   Download,
+  ExternalLink,
   Loader2,
   PackagePlus,
+  Plus,
   RefreshCw,
   Wallet,
   X,
@@ -101,11 +103,15 @@ export default function PaymentsPanel({
   canApprove,
   canExport,
   canConfigurePayout = false,
+  currentUserId = '',
+  isOwner = false,
 }: {
   canManage: boolean;
   canApprove: boolean;
   canExport: boolean;
   canConfigurePayout?: boolean;
+  currentUserId?: string;
+  isOwner?: boolean;
 }) {
   const [state, setState] = useState<LoadState>('loading');
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -116,6 +122,7 @@ export default function PaymentsPanel({
   const [payoutOptions, setPayoutOptions] = useState<PayoutOption[]>([]);
   const [payoutFormOpen, setPayoutFormOpen] = useState(false);
   const [payoutBusy, setPayoutBusy] = useState(false);
+  const [fundingOpen, setFundingOpen] = useState(false);
   const [payoutView, setPayoutView] = useState<PayoutBatchResult | null>(null);
   const [payoutForm, setPayoutForm] = useState({
     provider: PayoutProvider.PAYSTACK,
@@ -316,6 +323,7 @@ export default function PaymentsPanel({
   }
 
   function openPayoutForm() {
+    setFundingOpen(false);
     const provider = payoutAccount?.provider ?? PayoutProvider.PAYSTACK;
     const currencies =
       payoutOptions.find((option) => option.provider === provider)
@@ -384,6 +392,7 @@ export default function PaymentsPanel({
         headers: { 'x-step-up-token': token },
       });
       setPayoutAccount(null);
+      setFundingOpen(false);
       setPayoutView(null);
       setNotice('Payout account disconnected.');
       await load();
@@ -408,6 +417,25 @@ export default function PaymentsPanel({
       await load();
     } catch (err) {
       setError(messageFrom(err, 'Could not start the payout.'));
+    } finally {
+      setBatchBusy('');
+    }
+  }
+
+  async function retryPayout(batch: PaymentBatch, token: string) {
+    setBatchBusy(batch.id);
+    setError('');
+    try {
+      const res = await api.post<PayoutBatchResult>(
+        `/payments/batches/${batch.id}/payout/retry`,
+        undefined,
+        { headers: { 'x-step-up-token': token } },
+      );
+      setPayoutView(res.data);
+      setNotice(res.data.message);
+      await load();
+    } catch (err) {
+      setError(messageFrom(err, 'Could not retry the failed payouts.'));
     } finally {
       setBatchBusy('');
     }
@@ -586,8 +614,8 @@ export default function PaymentsPanel({
             <div>
               <h3 className={styles.sectionTitle}>Payout account</h3>
               <p className={styles.muted}>
-                Pay workers from your organisation&apos;s own Paystack or
-                Flutterwave balance. Ascenda never holds the funds.
+                Pay workers from your connected account. Ascenda never holds
+                the funds.
               </p>
             </div>
             {canConfigurePayout && !payoutFormOpen && (
@@ -604,30 +632,22 @@ export default function PaymentsPanel({
           </div>
 
           {payoutAccount ? (
-            <div className={`glass ${styles.panelItem}`}>
+            <div className={`glass ${styles.payoutAccountCard}`}>
               <div className={styles.panelItemBody}>
                 <span className={styles.panelName}>
-                  {providerLabel(payoutAccount.provider)} ·{' '}
-                  {payoutAccount.currency} · {payoutAccount.mode.toLowerCase()}
+                  {payoutAccount.accountName || 'Payment account'} ·{' '}
+                  {payoutAccount.currency}
+                  {payoutAccount.mode === PayoutAccountMode.TEST && ' · Test mode'}
                 </span>
                 <span className={styles.panelMeta}>
-                  Key ••••{payoutAccount.keyLast4}
-                  {payoutAccount.accountName
-                    ? ` · ${payoutAccount.accountName}`
-                    : ''}
                   {payoutAccount.balanceMinorUnits !== undefined
-                    ? ` · Available ${formatMinorUnits(
+                    ? `Available ${formatMinorUnits(
                         payoutAccount.balanceMinorUnits,
                         payoutAccount.balanceCurrency ??
                           payoutAccount.currency,
                       )}`
-                    : ' · Balance not checked'}
+                    : 'Balance not checked'}
                 </span>
-                {payoutAccount.provider === PayoutProvider.FLUTTERWAVE && (
-                  <span className={styles.panelMeta}>
-                    Webhook: {payoutAccount.webhookUrl}
-                  </span>
-                )}
                 {payoutAccount.status !== PayoutAccountStatus.ACTIVE && (
                   <span className={styles.panelMeta}>
                     Disconnected. Replace the account to pay again.
@@ -635,6 +655,20 @@ export default function PaymentsPanel({
                 )}
               </div>
               <div className={styles.panelActions}>
+                {(canConfigurePayout || canApprove) &&
+                  payoutAccount.status === PayoutAccountStatus.ACTIVE && (
+                    <button
+                      type="button"
+                      className={`${styles.btn} ${styles.btnPrimary}`}
+                      onClick={() => setFundingOpen((open) => !open)}
+                      disabled={payoutBusy}
+                      aria-expanded={fundingOpen}
+                      aria-controls="payout-funding"
+                    >
+                      <Plus size={14} strokeWidth={2.2} />
+                      {payoutAccount.mode === PayoutAccountMode.TEST ? 'Add test funds' : 'Add funds'}
+                    </button>
+                  )}
                 <button
                   type="button"
                   className={styles.btn}
@@ -651,7 +685,7 @@ export default function PaymentsPanel({
                       setPendingAction({
                         label: 'Disconnect payout account',
                         description:
-                          'This stops new provider payouts. In-flight payouts must finish first. This is audited.',
+                          'This stops new payouts. In-flight payments must finish first. This is audited.',
                         run: disconnectPayoutAccount,
                       })
                     }
@@ -661,13 +695,94 @@ export default function PaymentsPanel({
                   </button>
                 )}
               </div>
+              {fundingOpen && (canConfigurePayout || canApprove) &&
+                payoutAccount.status === PayoutAccountStatus.ACTIVE && (
+                  <section className={styles.fundingPanel} id="payout-funding" aria-labelledby="payout-funding-title">
+                    <div className={styles.sectionHeader}>
+                      <h4 className={styles.sectionTitle} id="payout-funding-title">
+                        {payoutAccount.mode === PayoutAccountMode.TEST ? 'Add test funds' : 'Fund your payment account'}
+                      </h4>
+                      <button
+                        type="button"
+                        className={styles.iconButton}
+                        onClick={() => setFundingOpen(false)}
+                        aria-label="Close funding instructions"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <p className={styles.muted}>
+                      Funding is completed securely in {providerLabel(payoutAccount.provider)}.
+                      Ascenda reads the confirmed balance; it does not collect or hold your deposit.
+                    </p>
+                    {payoutAccount.mode === PayoutAccountMode.TEST ? (
+                      <>
+                        <p className={styles.fundingWarning}>
+                          Test mode — use simulated funds only. Do not send real money.
+                        </p>
+                        <ol className={styles.fundingSteps}>
+                          <li>Open the dashboard for the account connected here and select <strong>Test mode</strong>.</li>
+                          <li>Find the <strong>{payoutAccount.currency}</strong> balance and use its test-funding option, if available.</li>
+                          <li>If there is no test-funding option, ask {providerLabel(payoutAccount.provider)} support to provision a test payout balance.</li>
+                          <li>Return here and refresh the balance before starting a test payout.</li>
+                        </ol>
+                      </>
+                    ) : (
+                      <>
+                        <p className={styles.fundingWarning}>
+                          Live mode — deposits and payouts use real money.
+                        </p>
+                        <ol className={styles.fundingSteps}>
+                          <li>Open the dashboard for the account connected here and confirm <strong>Live mode</strong>.</li>
+                          <li>Select the <strong>{payoutAccount.currency}</strong> balance and follow the funding instructions shown there.</li>
+                          <li>Verify the recipient and payment reference directly in the dashboard before sending funds. Allow a buffer for payout fees.</li>
+                          <li>Wait for the deposit to be credited, then refresh the balance here.</li>
+                        </ol>
+                      </>
+                    )}
+                    <div className={styles.fundingActions}>
+                      <a
+                        className={`${styles.btn} ${styles.btnPrimary}`}
+                        href={payoutAccount.provider === PayoutProvider.FLUTTERWAVE
+                          ? 'https://app.flutterwave.com/dashboard'
+                          : 'https://dashboard.paystack.com'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Open {providerLabel(payoutAccount.provider)} dashboard
+                        <ExternalLink size={14} aria-hidden="true" />
+                        <span className="sr-only"> (opens in a new tab)</span>
+                      </a>
+                      <button
+                        type="button"
+                        className={styles.btn}
+                        onClick={() => void refreshPayoutBalance()}
+                        disabled={payoutBusy}
+                      >
+                        {payoutBusy ? <Loader2 className={styles.spin} size={14} /> : <RefreshCw size={14} />}
+                        Check updated balance
+                      </button>
+                    </div>
+                  </section>
+                )}
+              {canConfigurePayout && (
+                <details className={styles.connectionDetails}>
+                  <summary>Connection details</summary>
+                  <dl className={styles.connectionFields}>
+                    <div><dt>Provider</dt><dd>{providerLabel(payoutAccount.provider)}</dd></div>
+                    <div><dt>Mode</dt><dd>{payoutAccount.mode === PayoutAccountMode.TEST ? 'Test' : 'Live'}</dd></div>
+                    <div><dt>Key</dt><dd>••••{payoutAccount.keyLast4}</dd></div>
+                    <div><dt>Webhook URL</dt><dd>{payoutAccount.webhookUrl}</dd></div>
+                  </dl>
+                </details>
+              )}
             </div>
           ) : (
             <div className={`glass ${styles.message}`}>
               <p className={styles.messageTitle}>No payout account</p>
               <p className={styles.muted}>
                 {canConfigurePayout
-                  ? 'Connect a provider test key first, then switch to live when you are ready.'
+                  ? 'Connect a payment account to get started. Test mode lets you check the setup before going live.'
                   : 'Ask the workspace owner to connect a payout account. You can still export a bank file.'}
               </p>
             </div>
@@ -868,8 +983,8 @@ export default function PaymentsPanel({
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>Reference</th>
-                    <th>Label</th>
+                    <th>Batch</th>
+                    <th>Batch reference</th>
                     <th>Status</th>
                     <th className={styles.num}>Payments</th>
                     <th className={styles.num}>Total</th>
@@ -881,8 +996,8 @@ export default function PaymentsPanel({
                 <tbody>
                   {batches.map((batch) => (
                     <tr key={batch.id}>
-                      <td>{batch.reference}</td>
-                      <td>{batch.label}</td>
+                      <td><strong>{batch.label || 'Payment batch'}</strong></td>
+                      <td className={styles.panelMeta}>{batch.reference}</td>
                       <td>
                         <span
                           className={`${styles.badge} ${
@@ -900,21 +1015,30 @@ export default function PaymentsPanel({
                       </td>
                       <td className={styles.tableRowActions}>
                         {batch.status === PaymentBatchStatus.DRAFT && canApprove && (
-                          <button
-                            type="button"
-                            className={styles.btn}
-                            disabled={batchBusy === batch.id}
-                            onClick={() =>
-                              setPendingAction({
-                                label: `Approve ${batch.reference}`,
-                                description:
-                                  'Approving a payment batch releases funds for export. This is audited.',
-                                run: (token) => approveBatch(batch, token),
-                              })
-                            }
-                          >
-                            <Check size={14} strokeWidth={2.2} /> Approve
-                          </button>
+                          batch.createdBy === currentUserId && !isOwner ? (
+                            <span
+                              className={styles.muted}
+                              title="Separation of duties: another approver must approve this batch."
+                            >
+                              Needs another approver
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className={styles.btn}
+                              disabled={batchBusy === batch.id}
+                              onClick={() =>
+                                setPendingAction({
+                                  label: `Approve ${batch.reference}`,
+                                  description:
+                                    'Approving a payment batch releases funds for export. This is audited.',
+                                  run: (token) => approveBatch(batch, token),
+                                })
+                              }
+                            >
+                              <Check size={14} strokeWidth={2.2} /> Approve
+                            </button>
+                          )
                         )}
                         {batch.status === PaymentBatchStatus.APPROVED && canExport && (
                           <button
@@ -943,15 +1067,34 @@ export default function PaymentsPanel({
                               onClick={() =>
                                 setPendingAction({
                                   label: `Pay ${batch.reference} in-platform`,
-                                  description: `Send ${batch.paymentCount} transfers from your ${providerLabel(
-                                    payoutAccount!.provider,
-                                  )} balance. This moves real money and is audited.`,
+                                  description: `Send ${batch.paymentCount} transfers from your connected payment account. ${payoutAccount!.mode === PayoutAccountMode.TEST ? 'This is a test-mode payout.' : 'This moves real money.'} This action is audited.`,
                                   run: (token) => initiatePayout(batch, token),
                                 })
                               }
                             >
                               <Wallet size={14} strokeWidth={2.2} /> Pay
                               in-platform
+                            </button>
+                          )}
+                        {(batch.status === PaymentBatchStatus.FAILED ||
+                          batch.status === PaymentBatchStatus.PARTIALLY_PAID) &&
+                          canApprove &&
+                          canPayWithProvider(batch) && (
+                            <button
+                              type="button"
+                              className={`${styles.btn} ${styles.btnPrimary}`}
+                              disabled={batchBusy === batch.id}
+                              onClick={() =>
+                                setPendingAction({
+                                  label: `Retry failed payouts in ${batch.reference}`,
+                                  description:
+                                    'Only failed transfers are retried. Paid and reversed transfers are never resent. This moves real money and is audited.',
+                                  run: (token) => retryPayout(batch, token),
+                                })
+                              }
+                            >
+                              <RefreshCw size={14} strokeWidth={2.2} /> Retry
+                              failed
                             </button>
                           )}
                         {batch.status === PaymentBatchStatus.APPROVED && canApprove && (
@@ -1017,8 +1160,9 @@ export default function PaymentsPanel({
               <div className={styles.groupHead}>
                 <div>
                   <h3 className={styles.sectionTitle}>
-                    Payouts · {payoutView.batch.reference}
+                    Payouts · {payoutView.batch.label || 'Payment batch'}
                   </h3>
+                  <p className={styles.panelMeta}>{payoutView.batch.reference}</p>
                   <p className={styles.muted}>{payoutView.message}</p>
                 </div>
                 <button
@@ -1033,8 +1177,8 @@ export default function PaymentsPanel({
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th>Reference</th>
-                      <th>Recipient</th>
+                      <th>Worker</th>
+                      <th>Payment reference</th>
                       <th className={styles.num}>Amount</th>
                       <th>Status</th>
                       <th>Failure reason</th>
@@ -1043,12 +1187,21 @@ export default function PaymentsPanel({
                   <tbody>
                     {payoutView.payouts.map((payout) => (
                       <tr key={payout.id}>
-                        <td>{payout.reference}</td>
                         <td>
-                          {payout.recipientName ??
-                            payout.accountNumberMasked ??
-                            payout.workerId.slice(0, 8)}
+                          <span className={styles.workerIdentity}>
+                            <strong>{payout.workerName || 'Name unavailable'}</strong>
+                            {payout.employeeNumber && (
+                              <span className={styles.panelMeta}>{payout.employeeNumber}</span>
+                            )}
+                            {payout.recipientName && payout.recipientName !== payout.workerName && (
+                              <span className={styles.panelMeta}>Account: {payout.recipientName}</span>
+                            )}
+                            {payout.accountNumberMasked && (
+                              <span className={styles.panelMeta}>{payout.bankName} {payout.accountNumberMasked}</span>
+                            )}
+                          </span>
                         </td>
+                        <td className={styles.panelMeta}>{payout.reference}</td>
                         <td className={`${styles.num} ${styles.numStrong}`}>
                           {formatMinorUnits(
                             payout.amountMinorUnits,
@@ -1120,8 +1273,8 @@ export default function PaymentsPanel({
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>Reference</th>
                     <th>Worker</th>
+                    <th>Payment reference</th>
                     <th className={styles.num}>Amount</th>
                     <th>Status</th>
                     {canManage && (
@@ -1134,8 +1287,15 @@ export default function PaymentsPanel({
                 <tbody>
                   {payments.map((payment) => (
                     <tr key={payment.id}>
-                      <td>{payment.reference}</td>
-                      <td>{payment.workerId.slice(0, 8)}</td>
+                      <td>
+                        <span className={styles.workerIdentity}>
+                          <strong>{payment.workerName || 'Name unavailable'}</strong>
+                          {payment.employeeNumber && (
+                            <span className={styles.panelMeta}>{payment.employeeNumber}</span>
+                          )}
+                        </span>
+                      </td>
+                      <td className={styles.panelMeta}>{payment.reference}</td>
                       <td className={`${styles.num} ${styles.numStrong}`}>
                         {formatMinorUnits(
                           payment.amountMinorUnits,

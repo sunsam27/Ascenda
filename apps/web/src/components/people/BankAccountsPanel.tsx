@@ -42,6 +42,12 @@ function emptyDraft(): Draft {
   };
 }
 
+interface RoutingDraft {
+  bankCode: string;
+  paystackBankCode: string;
+  flutterwaveBankCode: string;
+}
+
 /**
  * The bank-account editor for a single worker. Used by the org's worker editor
  * (any worker) and by the employee's own dashboard (their own record only). The
@@ -53,6 +59,7 @@ export default function BankAccountsPanel({
   compact = false,
   flush = false,
   autoOpenAdd = false,
+  canConfigureRouting = false,
   onAccountsChange,
 }: {
   workerId: string | undefined;
@@ -64,6 +71,8 @@ export default function BankAccountsPanel({
   flush?: boolean;
   /** Start with the add form already open (used by the onboarding modal). */
   autoOpenAdd?: boolean;
+  /** Enables the collapsed admin-only routing correction tool. */
+  canConfigureRouting?: boolean;
   /** Notifies the parent of the live account count (0 → none on file). */
   onAccountsChange?: (count: number) => void;
 }) {
@@ -78,6 +87,13 @@ export default function BankAccountsPanel({
   const [detected, setDetected] = useState<DetectedBank | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [manualBank, setManualBank] = useState(false);
+  const [routingId, setRoutingId] = useState<string | null>(null);
+  const [routingDraft, setRoutingDraft] = useState<RoutingDraft>({
+    bankCode: '',
+    paystackBankCode: '',
+    flutterwaveBankCode: '',
+  });
+  const [routingBusy, setRoutingBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!workerId) return;
@@ -202,6 +218,39 @@ export default function BankAccountsPanel({
       setError(messageFrom(err, 'Could not save the bank account. Try again.'));
     } finally {
       setBusy(false);
+    }
+  }
+
+  function editRouting(account: BankAccount) {
+    setRoutingId(account.id);
+    setRoutingDraft({
+      bankCode: account.bankCode ?? '',
+      paystackBankCode: account.paystackBankCode ?? '',
+      flutterwaveBankCode: account.flutterwaveBankCode ?? '',
+    });
+    setError('');
+  }
+
+  async function saveRouting(account: BankAccount) {
+    if (!workerId) return;
+    if (!routingDraft.bankCode.trim()) {
+      setError('Enter the generic bank code before saving.');
+      return;
+    }
+    setRoutingBusy(true);
+    setError('');
+    try {
+      await api.patch(`/workers/${workerId}/bank-accounts/${account.id}`, {
+        bankCode: routingDraft.bankCode.trim(),
+        paystackBankCode: routingDraft.paystackBankCode.trim(),
+        flutterwaveBankCode: routingDraft.flutterwaveBankCode.trim(),
+      });
+      setRoutingId(null);
+      await load();
+    } catch (err) {
+      setError(messageFrom(err, 'Could not update the bank codes.'));
+    } finally {
+      setRoutingBusy(false);
     }
   }
 
@@ -345,6 +394,105 @@ export default function BankAccountsPanel({
                   </button>
                 )}
               </span>
+              {canManage && canConfigureRouting && (
+                <div className={bank.routingToggle}>
+                  <button
+                    type="button"
+                    className={bank.changeLink}
+                    onClick={() => routingId === account.id ? setRoutingId(null) : editRouting(account)}
+                    disabled={routingBusy}
+                    aria-expanded={routingId === account.id}
+                    aria-controls={`routing-${account.id}`}
+                  >
+                    Advanced payment routing
+                  </button>
+                </div>
+              )}
+              {canManage && canConfigureRouting && routingId === account.id && (
+                <div className={bank.routingForm} id={`routing-${account.id}`}>
+                  <span className={bank.routingTitle}>
+                    Routing corrections
+                  </span>
+                  <p className={bank.hint}>
+                    Only change these codes to resolve a routing issue. Changes
+                    require payroll review before the account can be paid.
+                  </p>
+                  <div className={bank.routingGrid}>
+                    <label className={styles.field}>
+                      <span className={styles.label}>Generic (CBN)</span>
+                      <input
+                        className={styles.input}
+                        value={routingDraft.bankCode}
+                        maxLength={20}
+                        onChange={(e) => {
+                          const value = e.currentTarget.value.trim();
+                          setRoutingDraft((prev) => ({
+                            ...prev,
+                            bankCode: value,
+                          }));
+                        }}
+                      />
+                    </label>
+                    <label className={styles.field}>
+                      <span className={styles.label}>Paystack</span>
+                      <input
+                        className={styles.input}
+                        placeholder="Optional override"
+                        value={routingDraft.paystackBankCode}
+                        maxLength={20}
+                        onChange={(e) => {
+                          const value = e.currentTarget.value.trim();
+                          setRoutingDraft((prev) => ({
+                            ...prev,
+                            paystackBankCode: value,
+                          }));
+                        }}
+                      />
+                    </label>
+                    <label className={styles.field}>
+                      <span className={styles.label}>Flutterwave</span>
+                      <input
+                        className={styles.input}
+                        placeholder="Optional override"
+                        value={routingDraft.flutterwaveBankCode}
+                        maxLength={20}
+                        onChange={(e) => {
+                          const value = e.currentTarget.value.trim();
+                          setRoutingDraft((prev) => ({
+                            ...prev,
+                            flutterwaveBankCode: value,
+                          }));
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <span className={bank.hint}>
+                    Use the exact code from each provider&apos;s bank list.
+                    Blank falls back to the generic code.
+                  </span>
+                  <span className={bank.routingActions}>
+                    <button
+                      type="button"
+                      className={`${styles.btn} ${styles.btnGhost}`}
+                      onClick={() => setRoutingId(null)}
+                      disabled={routingBusy}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className={`${styles.btn} ${styles.btnPrimary}`}
+                      onClick={() => void saveRouting(account)}
+                      disabled={routingBusy}
+                    >
+                      {routingBusy && (
+                        <Loader2 className={styles.spin} size={15} />
+                      )}
+                      Save codes
+                    </button>
+                  </span>
+                </div>
+              )}
             </li>
           ))}
         </ul>

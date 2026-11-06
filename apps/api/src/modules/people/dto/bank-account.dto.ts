@@ -36,6 +36,18 @@ export class CreateBankAccountDto {
   @MaxLength(20)
   bankCode?: string;
 
+  /** Org-only: code from Paystack's bank table, when it differs from `bankCode`. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  paystackBankCode?: string;
+
+  /** Org-only: code from Flutterwave's bank table, when it differs from `bankCode`. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  flutterwaveBankCode?: string;
+
   @IsOptional()
   @IsBoolean()
   isPrimary?: boolean;
@@ -64,6 +76,18 @@ export class UpdateBankAccountDto {
   @IsString()
   @MaxLength(20)
   bankCode?: string;
+
+  /** Org-only: code from Paystack's bank table, when it differs from `bankCode`. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  paystackBankCode?: string;
+
+  /** Org-only: code from Flutterwave's bank table, when it differs from `bankCode`. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  flutterwaveBankCode?: string;
 
   @IsOptional()
   @IsBoolean()

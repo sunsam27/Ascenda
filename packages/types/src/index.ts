@@ -691,7 +691,11 @@ export interface WorkerInviteResult {
 export interface BankAccount extends TenantEntity {
   workerId: string;
   bankName: string;
+  /** Generic CBN/NIBSS institution code, used when a provider code is unset. */
   bankCode: string;
+  /** Provider-specific code overrides (providers use different bank tables). */
+  paystackBankCode?: string;
+  flutterwaveBankCode?: string;
   /** Display-only masked account number, e.g. "****1234". */
   accountNumberMasked: string;
   accountName: string;
@@ -716,6 +720,9 @@ export interface CreateBankAccountDto {
   /** Optional — the server auto-detects from the account number when omitted. */
   bankName?: string;
   bankCode?: string;
+  /** Org-only overrides for provider bank tables. */
+  paystackBankCode?: string;
+  flutterwaveBankCode?: string;
   isPrimary?: boolean;
 }
 
@@ -724,6 +731,9 @@ export interface UpdateBankAccountDto {
   accountName?: string;
   bankName?: string;
   bankCode?: string;
+  /** Org-only overrides for provider bank tables. */
+  paystackBankCode?: string;
+  flutterwaveBankCode?: string;
   isPrimary?: boolean;
   /** Org-only: mark the account verified after manual review. */
   isVerified?: boolean;
@@ -834,7 +844,11 @@ export interface CompensationRecord extends TenantEntity {
 export interface BankAccount extends TenantEntity {
   workerId: string;
   bankName: string;
+  /** Generic CBN/NIBSS institution code, used when a provider code is unset. */
   bankCode: string;
+  /** Provider-specific code overrides (providers use different bank tables). */
+  paystackBankCode?: string;
+  flutterwaveBankCode?: string;
   /** Masked display value e.g. "****1234" */
   accountNumberMasked: string;
   accountName: string;
@@ -1455,6 +1469,8 @@ export interface PayoutSummary {
   paymentBatchId: string;
   paymentId: string;
   workerId: string;
+  workerName?: string;
+  employeeNumber?: string;
   provider: PayoutProvider;
   status: PayoutStatus;
   amountMinorUnits: number;
@@ -1466,6 +1482,9 @@ export interface PayoutSummary {
   bankCode?: string;
   accountNumberMasked?: string;
   failureReason?: string;
+  /** Transfer attempts made so far (first attempt = 1). */
+  attemptCount: number;
+  lastAttemptAt?: string;
   requestedAt: string;
   completedAt?: string;
 }
@@ -1496,6 +1515,8 @@ export interface Payment extends TenantEntity {
   payrollRunId?: string;
   paymentBatchId?: string;
   workerId: string;
+  workerName?: string;
+  employeeNumber?: string;
   /** Amount in minor units */
   amountMinorUnits: number;
   currency: string;

@@ -28,6 +28,40 @@ export const PAYOUT_PROVIDER_LABEL: Record<PayoutProvider, string> = {
   [PayoutProvider.FLUTTERWAVE]: 'Flutterwave',
 };
 
+/**
+ * ISO 4217 currencies with no minor unit. Amounts are stored here with the
+ * platform-wide two-decimal convention, but a whole major unit is the smallest
+ * amount the provider will accept, so any value that is not a multiple of 100
+ * minor units would send an invalid fraction.
+ */
+const ZERO_DECIMAL_CURRENCIES = new Set([
+  'BIF',
+  'CLP',
+  'DJF',
+  'GNF',
+  'ISK',
+  'JPY',
+  'KMF',
+  'KRW',
+  'MWK',
+  'PYG',
+  'RWF',
+  'UGX',
+  'VND',
+  'VUV',
+  'XAF',
+  'XOF',
+  'XPF',
+]);
+
+export function hasFractionalMajorUnits(
+  amountMinorUnits: number,
+  currency: string,
+): boolean {
+  if (!ZERO_DECIMAL_CURRENCIES.has(currency.trim().toUpperCase())) return false;
+  return amountMinorUnits % 100 !== 0;
+}
+
 export function providerSupportsCurrency(
   provider: PayoutProvider,
   currency: string,

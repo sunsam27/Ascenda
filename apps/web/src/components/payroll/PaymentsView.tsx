@@ -45,6 +45,8 @@ export default function PaymentsView() {
           canApprove={PAYMENT_APPROVERS.has(role)}
           canExport={PAYMENT_EXPORTERS.has(role)}
           canConfigurePayout={PAYOUT_CONFIGURERS.has(role)}
+          currentUserId={user?.sub}
+          isOwner={role === 'OWNER'}
         />
       ) : (
         <div className={`glass ${styles.message}`}>

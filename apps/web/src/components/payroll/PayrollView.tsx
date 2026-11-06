@@ -136,6 +136,8 @@ export default function PayrollView() {
           canApprove={canApprove}
           canExport={canExportPayments}
           canConfigurePayout={canConfigurePayout}
+          currentUserId={user?.sub}
+          isOwner={role === 'OWNER'}
         />
       ) : activeTab === 'claims' ? (
         <ClaimsPanel

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -33,6 +34,9 @@ import {
   UpdatePaymentStatusDto,
 } from './dto/payment.dto';
 import { buildPaymentsCsv, type PaymentExportRow } from './domain/payment-export';
+import { paymentBatchSelfApprovalError } from './domain/batch-approval';
+
+import { paymentWorkerIdentity, paymentWorkerSelect, type PaymentWorker } from './domain/payment-worker';
 
 type PaymentRow = Prisma.PaymentGetPayload<Record<string, never>>;
 type PaymentBatchRow = Prisma.PaymentBatchGetPayload<Record<string, never>>;
@@ -43,13 +47,14 @@ export interface PaymentExportFile {
   content: string;
 }
 
-export function toPayment(row: PaymentRow): Payment {
+export function toPayment(row: PaymentRow & { worker?: PaymentWorker | null }): Payment {
   return {
     id: row.id,
     organisationId: row.organisationId,
     payrollRunId: row.payrollRunId ?? undefined,
     paymentBatchId: row.paymentBatchId ?? undefined,
     workerId: row.workerId,
+    ...paymentWorkerIdentity(row.worker),
     amountMinorUnits: row.amountMinorUnits,
     currency: row.currency,
     status: row.status as PaymentStatus,
@@ -171,6 +176,7 @@ export class PaymentsService {
       const [rows, total] = await Promise.all([
         tx.payment.findMany({
           where,
+          include: { worker: { select: paymentWorkerSelect } },
           orderBy: { createdAt: 'desc' },
           skip: (page - 1) * pageSize,
           take: pageSize,
@@ -187,7 +193,10 @@ export class PaymentsService {
   async get(id: string): Promise<Payment> {
     this.requireContext();
     return this.prisma.withRequestContext(async (tx) => {
-      const row = await tx.payment.findFirst({ where: { id } });
+      const row = await tx.payment.findFirst({
+        where: { id },
+        include: { worker: { select: paymentWorkerSelect } },
+      });
       if (!row) throw new NotFoundException('Payment not found');
       return toPayment(row);
     });
@@ -391,6 +400,28 @@ export class PaymentsService {
       if (!row) throw new NotFoundException('Payment batch not found');
       this.assertBatchTransition(row.status as BatchStatus, PaymentBatchStatus.APPROVED);
 
+      // Separation of duties: the preparer cannot approve their own batch
+      // unless they are an OWNER (same rule as payroll runs).
+      let selfApproved = false;
+      if (row.createdBy === userId) {
+        const membership = await tx.membership.findFirst({
+          where: { organisationId, userId },
+          select: { role: true },
+        });
+        if (!membership) {
+          throw new UnauthorizedException(
+            'No membership for this organisation',
+          );
+        }
+        const blocked = paymentBatchSelfApprovalError({
+          createdById: row.createdBy,
+          actorId: userId,
+          actorRole: membership.role,
+        });
+        if (blocked) throw new ForbiddenException(blocked);
+        selfApproved = true;
+      }
+
       const updated = await tx.paymentBatch.update({
         where: { id: row.id },
         data: {
@@ -416,6 +447,7 @@ export class PaymentsService {
           paymentCount: row.paymentCount,
           totalMinorUnits: row.totalMinorUnits,
           currency: row.currency,
+          selfApproved,
         },
       });
       return updated;
@@ -625,6 +657,7 @@ export class PaymentsService {
 
       const updated = await tx.payment.update({
         where: { id: row.id },
+        include: { worker: { select: paymentWorkerSelect } },
         data: {
           status: target,
           ...(target === Status.COMPLETED || target === Status.PAID

@@ -14,6 +14,7 @@ import {
 } from '@ascenda/types';
 import { api } from '@/lib/api';
 import { useOrganisation } from '@/lib/useOrganisation';
+import { useCurrentUser } from '@/lib/useCurrentUser';
 import CompensationPanel from './CompensationPanel';
 import BankAccountsPanel from './BankAccountsPanel';
 import styles from './people.module.css';
@@ -144,6 +145,8 @@ export default function WorkerEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { organisation } = useOrganisation();
+  const { user } = useCurrentUser();
+  const canConfigureRouting = user?.role === 'OWNER' || user?.role === 'PAYROLL_ADMINISTRATOR';
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -439,7 +442,11 @@ export default function WorkerEditor({
 
                 <p className={styles.sectionLabel}>Bank details</p>
                 <div className={styles.fieldFull}>
-                  <BankAccountsPanel workerId={worker.id} canManage />
+                  <BankAccountsPanel
+                    workerId={worker.id}
+                    canManage
+                    canConfigureRouting={canConfigureRouting}
+                  />
                 </div>
               </>
             )}

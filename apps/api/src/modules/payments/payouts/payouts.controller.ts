@@ -116,4 +116,19 @@ export class PayoutsController {
   initiate(@Param('id', ParseUUIDPipe) id: string) {
     return this.payouts.initiateBatch(id);
   }
+
+  @Post('batches/:id/payout/retry')
+  @UseGuards(StepUpGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Retry only the failed transfers in a terminal batch',
+  })
+  @RequirePermission({
+    resource: 'payments',
+    action: 'approve',
+    scope: PermissionScope.ORGANISATION,
+  })
+  retry(@Param('id', ParseUUIDPipe) id: string) {
+    return this.payouts.retryBatchPayouts(id);
+  }
 }
