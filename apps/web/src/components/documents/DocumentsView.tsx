@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import {
@@ -17,11 +17,12 @@ import {
   DocumentType,
   type DocumentSummary,
   type PaginationMeta,
-  type WorkerSummary,
 } from '@ascenda/types';
 import { api } from '@/lib/api';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import styles from './documents.module.css';
+import { AnnouncementsPanel, DocumentActions } from './DocumentWorkflows';
+import DocumentWorkerPicker from './DocumentWorkerPicker';
 
 type LoadState = 'loading' | 'ready' | 'forbidden' | 'error';
 
@@ -37,6 +38,8 @@ const TYPE_LABEL: Record<DocumentType, string> = {
   [DocumentType.CERTIFICATION]: 'Certification',
   [DocumentType.RECEIPT]: 'Receipt',
   [DocumentType.OTHER]: 'Other',
+  [DocumentType.PERFORMANCE]: 'Performance',
+  [DocumentType.TRAINING]: 'Training',
 };
 
 const TYPE_ORDER: DocumentType[] = [
@@ -48,6 +51,8 @@ const TYPE_ORDER: DocumentType[] = [
   DocumentType.POLICY,
   DocumentType.RECEIPT,
   DocumentType.OTHER,
+  DocumentType.PERFORMANCE,
+  DocumentType.TRAINING,
 ];
 
 function formatBytes(bytes: number): string {
@@ -103,6 +108,8 @@ export default function DocumentsView() {
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  const [tab, setTab] = useState<'documents' | 'announcements'>('documents');
+  const loadSequence = useRef(0);
 
   // Only organisation-scope roles may upload or delete; self-service roles get
   // a read-only view of their own documents.
@@ -118,6 +125,7 @@ export default function DocumentsView() {
   }, [search]);
 
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
     setState((prev) => (prev === 'ready' ? 'ready' : 'loading'));
     try {
       const { data } = await api.get<{
@@ -131,10 +139,12 @@ export default function DocumentsView() {
           ...(typeFilter !== 'all' ? { type: typeFilter } : {}),
         },
       });
+      if (sequence !== loadSequence.current) return;
       setDocuments(data.data);
       setMeta(data.meta);
       setState('ready');
     } catch (err) {
+      if (sequence !== loadSequence.current) return;
       setState(
         axios.isAxiosError(err) && err.response?.status === 403
           ? 'forbidden'
@@ -158,7 +168,8 @@ export default function DocumentsView() {
       await api.delete(`/documents/${doc.id}`);
       setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
       setMeta((prev) => (prev ? { ...prev, total: prev.total - 1 } : prev));
-      void load();
+      if (documents.length === 1 && page > 1) setPage(page - 1);
+      else void load();
     } catch (err) {
       setActionError(messageFrom(err, 'Could not delete the document.'));
     } finally {
@@ -199,6 +210,7 @@ export default function DocumentsView() {
         <div className={`glass ${styles.message}`} role="alert">
           <p className={styles.messageTitle}>Something went wrong</p>
           <p className={styles.muted}>We could not load the documents.</p>
+          <button className={styles.btn} type="button" onClick={() => void load()}>Retry</button>
         </div>
       </div>
     );
@@ -212,6 +224,12 @@ export default function DocumentsView() {
   return (
     <div className={`${styles.page} cascade`}>
       <PageHeader />
+
+      <div className={styles.pagerButtons} aria-label="Document sections">
+        <button className={`${styles.btn} ${tab === 'documents' ? styles.btnPrimary : styles.btnGhost}`} aria-pressed={tab === 'documents'} onClick={() => setTab('documents')}>Documents & policies</button>
+        <button className={`${styles.btn} ${tab === 'announcements' ? styles.btnPrimary : styles.btnGhost}`} aria-pressed={tab === 'announcements'} onClick={() => setTab('announcements')}>Announcements</button>
+      </div>
+      {tab === 'announcements' ? <AnnouncementsPanel canManage={canManage} /> : <>
 
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>
@@ -287,6 +305,7 @@ export default function DocumentsView() {
                 <th className={styles.th}>Worker</th>
                 <th className={styles.th}>Size</th>
                 <th className={styles.th}>Uploaded</th>
+                <th className={styles.th}>Expiry</th>
                 <th className={styles.th}>
                   <span className="sr-only">Actions</span>
                 </th>
@@ -308,10 +327,14 @@ export default function DocumentsView() {
                       {TYPE_LABEL[doc.type] ?? doc.type}
                     </span>
                   </td>
-                  <td className={styles.td}>{doc.workerName ?? '—'}</td>
+                  <td className={styles.td}>{doc.workerName ?? (doc.policyPublishedAt ? 'Published policy' : 'Not linked')}</td>
                   <td className={styles.td}>{formatBytes(doc.sizeBytes)}</td>
                   <td className={styles.td}>{formatDate(doc.createdAt)}</td>
+                  <td className={styles.td}>{doc.expiresAt ? <span className={new Date(doc.expiresAt) <= new Date() ? styles.expired : undefined}>
+                    {formatDate(doc.expiresAt)}{new Date(doc.expiresAt) <= new Date() ? ' · Expired' : ''}
+                  </span> : '—'}</td>
                   <td className={`${styles.td} ${styles.colActions}`}>
+                    <DocumentActions doc={doc} canManage={canManage} onChanged={() => void load()} />
                     <a
                       className={styles.iconButton}
                       href={doc.downloadUrl}
@@ -320,7 +343,7 @@ export default function DocumentsView() {
                     >
                       <Download size={15} strokeWidth={2} />
                     </a>
-                    {canManage && (
+                    {canManage && !doc.policyPublishedAt && (
                       <button
                         type="button"
                         className={styles.iconButton}
@@ -375,11 +398,12 @@ export default function DocumentsView() {
           onClose={() => setUploading(false)}
           onUploaded={() => {
             setUploading(false);
-            setPage(1);
-            void load();
+            if (page !== 1) setPage(1);
+            else void load();
           }}
         />
       )}
+      </>}
     </div>
   );
 }
@@ -390,7 +414,7 @@ function PageHeader() {
       <div className={styles.pageHeading}>
         <h1 className={styles.pageTitle}>Documents</h1>
         <p className={styles.pageSubtitle}>
-          Worker contracts, IDs, certificates and policies
+          Worker files, policy acknowledgements and announcements
         </p>
       </div>
     </div>
@@ -408,15 +432,28 @@ function UploadDialog({
   const [name, setName] = useState('');
   const [type, setType] = useState<DocumentType>(DocumentType.CONTRACT);
   const [workerId, setWorkerId] = useState('');
-  const [workers, setWorkers] = useState<WorkerSummary[]>([]);
+  const [expiresAt, setExpiresAt] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-
+  const drawer = useRef<HTMLDivElement>(null);
+  const busyRef = useRef(false);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    void api
-      .get<{ data: WorkerSummary[] }>('/workers', { params: { pageSize: 100 } })
-      .then((res) => setWorkers(res.data.data))
-      .catch(() => setWorkers([]));
+    const previous = document.activeElement as HTMLElement | null;
+    drawer.current?.focus();
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busyRef.current) { event.preventDefault(); closeRef.current(); }
+      if (event.key !== 'Tab') return;
+      const items = [...(drawer.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),select:not([disabled])') ?? [])]
+        .filter((el) => el.getClientRects().length > 0);
+      const first = items[0]; const last = items[items.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === drawer.current)) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === drawer.current)) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', keydown);
+    return () => { document.removeEventListener('keydown', keydown); previous?.focus(); };
   }, []);
 
   function handleFile(selected: File | null) {
@@ -427,6 +464,7 @@ function UploadDialog({
   }
 
   async function submit() {
+    if (busyRef.current) return;
     if (!file) {
       setError('Choose a file to upload.');
       return;
@@ -435,6 +473,8 @@ function UploadDialog({
       setError('Files must be 8 MB or smaller.');
       return;
     }
+    if (file.size === 0) { setError('The selected file is empty.'); return; }
+    busyRef.current = true;
     setBusy(true);
     setError('');
     try {
@@ -445,11 +485,13 @@ function UploadDialog({
         workerId: workerId || undefined,
         mimeType: file.type || 'application/octet-stream',
         content,
+        ...(expiresAt ? { expiresAt: `${expiresAt}T23:59:59.999Z` } : {}),
       });
       onUploaded();
     } catch (err) {
       setError(messageFrom(err, 'Could not upload the document.'));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -459,11 +501,13 @@ function UploadDialog({
       className={styles.overlay}
       role="presentation"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (!busy && e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className={styles.drawer}
+        ref={drawer}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label="Upload document"
@@ -474,6 +518,7 @@ function UploadDialog({
             type="button"
             className={styles.iconButton}
             onClick={onClose}
+            disabled={busy}
             aria-label="Close"
           >
             <X size={16} strokeWidth={2} />
@@ -495,9 +540,12 @@ function UploadDialog({
             <input
               className={styles.fileInput}
               type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.txt"
+              disabled={busy}
               onChange={(e) => handleFile(e.currentTarget.files?.[0] ?? null)}
             />
           </label>
+          <p className={styles.muted}>PDF, PNG, JPEG or plain text · up to 8 MB. Files are checked before storage. Images have embedded metadata removed.</p>
 
           <div className={styles.grid}>
             <label className={`${styles.field} ${styles.fieldFull}`}>
@@ -525,23 +573,11 @@ function UploadDialog({
               </select>
             </label>
 
-            <label className={styles.field}>
-              <span className={styles.label}>Worker (optional)</span>
-              <select
-                className={styles.input}
-                value={workerId}
-                onChange={(e) => setWorkerId(e.currentTarget.value)}
-              >
-                <option value="">Not linked</option>
-                {workers.map((worker) => (
-                  <option key={worker.id} value={worker.id}>
-                    {worker.preferredName?.trim() ||
-                      `${worker.firstName} ${worker.lastName}`}
-                  </option>
-                ))}
-              </select>
+            <label className={styles.field}><span className={styles.label}>Expiry date (optional)</span>
+              <input className={styles.input} type="date" disabled={busy} value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
             </label>
           </div>
+          <DocumentWorkerPicker value={workerId} onChange={setWorkerId} disabled={busy} />
         </div>
 
         <div className={styles.drawerActions}>

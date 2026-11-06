@@ -270,6 +270,8 @@ enum DocumentType {
   CERTIFICATION
   RECEIPT
   OTHER
+  PERFORMANCE
+  TRAINING
 }
 
 /// ONB-01: a checklist is created for every worker and tracks the tasks that
@@ -391,6 +393,11 @@ enum AuditAction {
   SUPPORT_ACCESS
   DOCUMENT_UPLOADED
   DOCUMENT_ACCESSED
+  DOCUMENT_UPDATED
+  DOCUMENT_DELETED
+  POLICY_PUBLISHED
+  POLICY_ACKNOWLEDGED
+  ANNOUNCEMENT_PUBLISHED
   ACCESS_REQUEST_APPROVED
   ACCESS_REQUEST_REJECTED
   INVITATION_SENT
@@ -425,6 +432,10 @@ enum AttendanceStatus {
 /// In-app notification kinds. Currently emitted for leave-workflow events
 /// (submit / approve / reject / escalate / delegate / cancel) and accrual runs.
 enum NotificationType {
+  DOCUMENT_EXPIRING
+  POLICY_AVAILABLE
+  POLICY_REMINDER
+  ANNOUNCEMENT_AVAILABLE
   LEAVE_REQUEST_SUBMITTED
   LEAVE_REQUEST_APPROVED
   LEAVE_REQUEST_REJECTED
@@ -466,6 +477,8 @@ model User {
   memberships      Membership[]
   auditLogsAsActor AuditLog[]     @relation("AuditActor")
   notifications    Notification[] @relation("NotificationRecipient")
+  policyRecipients PolicyRecipient[]
+  announcementRecipients AnnouncementRecipient[]
 
   @@map("users")
 }
@@ -535,6 +548,9 @@ model Organisation {
   payslips            Payslip[]
   expenseClaims       ExpenseClaim[]
   documents           Document[]
+  policyRecipients PolicyRecipient[]
+  announcements Announcement[]
+  announcementRecipients AnnouncementRecipient[]
   auditLogs           AuditLog[]
   statutoryRulePacks  StatutoryRulePack[]
   yearEndStatements   YearEndStatement[]
@@ -1443,16 +1459,70 @@ model Document {
   mimeType       String
   sizeBytes      Int
   uploadedBy     String
+  expiresAt      DateTime?
+  expiryRemindedAt DateTime?
+  deletedAt      DateTime?
+  policyPublishedAt DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
   organisation  Organisation?  @relation(fields: [organisationId], references: [id])
   worker        Worker?        @relation(fields: [workerId], references: [id])
   expenseClaims ExpenseClaim[] @relation("ExpenseClaimReceipt")
+  policyRecipients PolicyRecipient[]
 
   @@index([organisationId])
   @@index([workerId, type])
   @@map("documents")
+}
+
+/// Publication snapshots the intended readers; acknowledgements belong to this
+/// immutable document version, not to a mutable policy filename.
+model PolicyRecipient {
+  id String @id @default(uuid())
+  organisationId String
+  documentId String
+  userId String
+  acknowledgedAt DateTime?
+  remindedAt DateTime?
+  notifiedAt DateTime?
+  createdAt DateTime @default(now())
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  @@unique([documentId, userId])
+  @@index([organisationId, userId])
+  @@map("policy_recipients")
+}
+
+model Announcement {
+  id String @id @default(uuid())
+  organisationId String
+  title String
+  body String
+  /// Validated audience filters, never raw recipient credentials.
+  audience Json
+  createdBy String
+  createdAt DateTime @default(now())
+  recipients AnnouncementRecipient[]
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  @@index([organisationId, createdAt])
+  @@map("announcements")
+}
+
+model AnnouncementRecipient {
+  id String @id @default(uuid())
+  organisationId String
+  announcementId String
+  userId String
+  notifiedAt DateTime?
+  createdAt DateTime @default(now())
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  @@unique([announcementId, userId])
+  @@index([organisationId, userId])
+  @@map("announcement_recipients")
 }
 
 // ─── Audit Log ───────────────────────────────────────────────────────────────

@@ -68,7 +68,7 @@ DECLARE
     'payment_batches', 'payout_accounts', 'payouts', 'payout_webhook_events',
     'payroll_run_approvals', 'payroll_config', 'payslips', 'expense_claims',
     'year_end_statements',
-    'approval_workflows', 'documents', 'audit_log', 'subscriptions',
+    'approval_workflows', 'documents', 'policy_recipients', 'announcements', 'announcement_recipients', 'audit_log', 'subscriptions',
     'notifications', 'onboarding_checklists', 'onboarding_tasks',
     'offboarding_cases', 'offboarding_tasks'
   ];

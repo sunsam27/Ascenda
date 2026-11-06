@@ -1,5 +1,5 @@
 import {
-  IsBase64,
+  IsDateString,
   IsEnum,
   IsOptional,
   IsString,
@@ -28,6 +28,10 @@ export class CreateDocumentDto {
 
   /** Base64-encoded file bytes (no `data:` prefix). ~8 MB max. */
   @IsString()
-  @IsBase64()
+  @MaxLength(4 * Math.ceil((8 * 1024 * 1024) / 3))
   content!: string;
+
+  @IsOptional()
+  @IsDateString()
+  expiresAt?: string;
 }

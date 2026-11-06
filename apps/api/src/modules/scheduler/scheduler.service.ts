@@ -6,6 +6,7 @@ import { PayoutsService } from '../payments/payouts/payouts.service';
 import { LeaveBalancesService } from '../time-leave/leave-balances.service';
 import { LeaveRequestsService } from '../time-leave/leave-requests.service';
 import { SystemPrismaService } from './system-prisma.service';
+import { DocumentWorkflowsService } from '../documents/document-workflows.service';
 
 /** 15 minutes, on the quarter hour. */
 const ESCALATION_CRON = '*/15 * * * *';
@@ -37,6 +38,7 @@ export class SchedulerService {
     private readonly leaveBalances: LeaveBalancesService,
     private readonly payouts: PayoutsService,
     private readonly config: ConfigService,
+    private readonly documents: DocumentWorkflowsService,
   ) {
     this.enabled =
       `${this.config.get<string>('SCHEDULER_ENABLED') ?? ''}`.toLowerCase() ===
@@ -74,6 +76,12 @@ export class SchedulerService {
     await this.forEachOrganisation('payout-reconciliation', () =>
       this.payouts.reconcileStalePayouts(),
     );
+  }
+
+  @Cron('7 * * * *', { name: 'document-maintenance' })
+  async runDocumentMaintenance(): Promise<void> {
+    if (!this.enabled) return;
+    await this.forEachOrganisation('document-maintenance', () => this.documents.maintenance());
   }
 
   private async forEachOrganisation(

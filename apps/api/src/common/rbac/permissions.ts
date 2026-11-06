@@ -69,6 +69,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
   ],
 
   [SystemRole.HR_ADMINISTRATOR]: [
+    ...perm('documents', CRUD, PermissionScope.ORGANISATION),
     ...perm('workers', CRUD, PermissionScope.ORGANISATION),
     ...perm('departments', CRUD, PermissionScope.ORGANISATION),
     ...perm('locations', CRUD, PermissionScope.ORGANISATION),
@@ -83,6 +84,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
   ],
 
   [SystemRole.PAYROLL_ADMINISTRATOR]: [
+    ...perm('documents', READ, PermissionScope.SELF),
     ...perm('payroll', ['read', 'create', 'update'], PermissionScope.ORGANISATION),
     ...perm('payments', ['read', 'create', 'update'], PermissionScope.ORGANISATION),
     ...perm('payslips', READ, PermissionScope.ORGANISATION),
@@ -105,6 +107,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
   ],
 
   [SystemRole.FINANCE_APPROVER]: [
+    ...perm('documents', READ, PermissionScope.SELF),
     ...perm('payroll', ['read', 'approve', 'export'], PermissionScope.ORGANISATION),
     ...perm('payments', ['read', 'approve', 'export'], PermissionScope.ORGANISATION),
     ...perm('payslips', READ, PermissionScope.ORGANISATION),
@@ -118,6 +121,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
   ],
 
   [SystemRole.MANAGER]: [
+    ...perm('documents', READ, PermissionScope.SELF),
     ...perm('workers', READ, PermissionScope.TEAM),
     ...perm('leave', ['read', 'approve'], PermissionScope.TEAM),
     // A manager may also request leave for *themselves* (SELF), which still
@@ -165,6 +169,7 @@ const PERMISSIONS_BY_ROLE: Record<SystemRole, Permission[]> = {
   ],
 
   [SystemRole.VIEWER]: [
+    ...perm('documents', READ, PermissionScope.SELF),
     ...perm('organisations', READ, PermissionScope.ORGANISATION),
     ...perm('workers', READ, PermissionScope.ORGANISATION),
     ...perm('departments', READ, PermissionScope.ORGANISATION),

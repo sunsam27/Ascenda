@@ -31,6 +31,11 @@ interface DocRow {
     lastName: string;
     preferredName: string | null;
   } | null;
+  expiresAt: Date | null;
+  expiryRemindedAt: Date | null;
+  deletedAt: Date | null;
+  policyPublishedAt: Date | null;
+  policyRecipients: { userId: string; acknowledgedAt: Date | null }[];
 }
 
 function makeRow(overrides: Partial<DocRow> = {}): DocRow {
@@ -51,6 +56,7 @@ function makeRow(overrides: Partial<DocRow> = {}): DocRow {
       lastName: 'Obi',
       preferredName: null,
     },
+    expiresAt: null, expiryRemindedAt: null, deletedAt: null, policyPublishedAt: null, policyRecipients: [],
     ...overrides,
   };
 }
@@ -62,12 +68,25 @@ function matches(row: DocRow, where: unknown): boolean {
       if (!(cond as unknown[]).every((w) => matches(row, w))) return false;
       continue;
     }
+    if (key === 'OR') {
+      if (!(cond as unknown[]).some((w) => matches(row, w))) return false;
+      continue;
+    }
+    if (key === 'policyRecipients') {
+      const userId = (cond as { some: { userId: string } }).some.userId;
+      if (!row.policyRecipients.some((r) => r.userId === userId)) return false;
+      continue;
+    }
     const value = (row as unknown as Record<string, unknown>)[key];
     if (cond === null || typeof cond !== 'object') {
       if (value !== cond) return false;
       continue;
     }
     const contains = (cond as Record<string, unknown>)['contains'];
+    const not = (cond as Record<string, unknown>)['not'];
+    if (not !== undefined && value === not) return false;
+    const notIn = (cond as Record<string, unknown>)['notIn'];
+    if (Array.isArray(notIn) && notIn.includes(value)) return false;
     if (typeof contains === 'string') {
       if (!String(value).toLowerCase().includes(contains.toLowerCase())) {
         return false;
@@ -104,6 +123,15 @@ function buildFixture(seed: DocRow[], workerUserId = 'u-self') {
       const [removed] = rows.splice(index, 1);
       return removed;
     },
+    update: async (args: { where: { id: string }; data: Partial<DocRow> }) => {
+      const row = rows.find((r) => r.id === args.where.id)!;
+      return Object.assign(row, args.data);
+    },
+    updateMany: async (args: { where: { id: string }; data: Partial<DocRow> }) => {
+      const row = rows.find((r) => r.id === args.where.id);
+      if (!row) return { count: 0 };
+      Object.assign(row, args.data); return { count: 1 };
+    },
   };
 
   const tx = {
@@ -117,6 +145,7 @@ function buildFixture(seed: DocRow[], workerUserId = 'u-self') {
       },
     },
     document,
+    expenseClaim: { count: async () => 0 },
   };
 
   const prisma = {
@@ -124,6 +153,7 @@ function buildFixture(seed: DocRow[], workerUserId = 'u-self') {
   } as never;
 
   const storage = {
+    signedDownload: async () => undefined,
     put: async (buffer: Buffer, prefix?: string) => {
       const key = `${prefix ?? ''}/key-${++keySeq}`;
       stored.set(key, buffer);
@@ -142,16 +172,21 @@ function buildFixture(seed: DocRow[], workerUserId = 'u-self') {
   } as never;
 
   return {
-    service: new DocumentsService(prisma, storage, audit),
+    service: new DocumentsService(prisma, storage, audit, { prepare: async (buffer: Buffer, mimeType: string) => ({ buffer, mimeType }) } as never),
     rows,
     stored,
     auditCalls,
+    tx,
+    storage,
     asRole: <T>(role: string, userId: string, fn: () => Promise<T>) =>
       requestContext.run({ organisationId: 'org1', userId, role }, fn),
   };
 }
 
 describe('decodeBase64Content', () => {
+  it('rejects malformed or non-canonical base64', () => {
+    for (const value of ['!!!!', 'a===', 'aGVsbG8', 'AB==']) expect(() => decodeBase64Content(value)).toThrow(BadRequestException);
+  });
   it('decodes a plain base64 string and a data URL prefix', () => {
     const plain = Buffer.from('hello').toString('base64');
     expect(decodeBase64Content(plain).toString()).toBe('hello');
@@ -215,7 +250,7 @@ describe('DocumentsService scope', () => {
 
   it('returns nothing for a role without document access', async () => {
     const { service, asRole } = buildFixture([personal, other]);
-    const result = await asRole('MANAGER', 'u1', () => service.list(query()));
+    const result = await asRole('unknown-role', 'u1', () => service.list(query()));
     expect(result.data).toHaveLength(0);
   });
 
@@ -239,6 +274,36 @@ describe('DocumentsService scope', () => {
     await expect(
       asRole('EMPLOYEE_SELF', 'u-self', () => service.get('other')),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('permits HR document management without disclosing uploaded payslips', async () => {
+    const { service, asRole } = buildFixture([personal, makeRow({ id: 'payslip', type: DocumentType.PAYSLIP })]);
+    expect((await asRole('HR_ADMINISTRATOR', 'hr', () => service.list(query()))).data).toHaveLength(1);
+    await expect(asRole('HR_ADMINISTRATOR', 'hr', () => service.get('payslip'))).rejects.toThrow(NotFoundException);
+  });
+
+  it('hides restricted categories from general auditors', async () => {
+    const { service, asRole } = buildFixture([personal,
+      makeRow({ id: 'id-doc', type: DocumentType.ID_DOCUMENT }), makeRow({ id: 'payslip', type: DocumentType.PAYSLIP })]);
+    expect((await asRole('AUDITOR', 'audit', () => service.list(query()))).data.map((d) => d.id)).toEqual(['own']);
+  });
+
+  it('allows assigned policies without exposing other unlinked files', async () => {
+    const { service, asRole } = buildFixture([
+      makeRow({ id: 'policy', workerId: null, type: DocumentType.POLICY, policyPublishedAt: new Date(),
+        policyRecipients: [{ userId: 'u-self', acknowledgedAt: null }] }),
+      makeRow({ id: 'private', workerId: null }),
+    ]);
+    const result = await asRole('EMPLOYEE_SELF', 'u-self', () => service.list(query()));
+    expect(result.data.map((d) => d.id)).toEqual(['policy']);
+    expect(result.data[0]?.acknowledgementRequired).toBe(true);
+  });
+
+  it('does not return deleted tombstones or download another worker file', async () => {
+    const { service, asRole } = buildFixture([makeRow({ deletedAt: new Date() }), other]);
+    expect((await asRole('OWNER', 'owner', () => service.list(query()))).data).toHaveLength(1);
+    await expect(asRole('OWNER', 'owner', () => service.get('doc1'))).rejects.toThrow(NotFoundException);
+    await expect(asRole('EMPLOYEE_SELF', 'u-self', () => service.download('other'))).rejects.toThrow(NotFoundException);
   });
 });
 
@@ -270,6 +335,7 @@ describe('DocumentsService.create', () => {
       } as never,
       { put: async () => ({ key: 'k' }) } as never,
       { record: async () => undefined } as never,
+      { prepare: async (buffer: Buffer, mimeType: string) => ({ buffer, mimeType }) } as never,
     );
     await expect(
       requestContext.run({ organisationId: 'org1', userId: 'u1', role: 'OWNER' }, () =>
@@ -286,21 +352,34 @@ describe('DocumentsService.create', () => {
 });
 
 describe('DocumentsService.download / remove', () => {
+  it('retains published policies and refuses permanent deletion', async () => {
+    const { service, asRole, stored } = buildFixture([makeRow({ policyPublishedAt: new Date() })]);
+    await expect(asRole('OWNER', 'owner', () => service.remove('doc1'))).rejects.toThrow(/Published policies/);
+  });
   it('streams bytes and audits access', async () => {
     const { service, asRole, auditCalls, stored } = buildFixture([makeRow()]);
     stored.set('org1/abc', Buffer.from('bytes'));
 
     const result = await asRole('OWNER', 'u1', () => service.download('doc1'));
-    expect(result.buffer.toString()).toBe('bytes');
+    expect(result.buffer?.toString()).toBe('bytes');
     expect(auditCalls[0]?.action).toBe(AuditAction.DOCUMENT_ACCESSED);
   });
 
   it('deletes the row and its stored blob', async () => {
-    const { service, asRole, rows, stored } = buildFixture([makeRow()]);
+    const { service, asRole, rows, stored, auditCalls } = buildFixture([makeRow()]);
     stored.set('org1/abc', Buffer.from('bytes'));
 
     await asRole('OWNER', 'u1', () => service.remove('doc1'));
     expect(rows).toHaveLength(0);
     expect(stored.has('org1/abc')).toBe(false);
+    expect(auditCalls.some((entry) => entry.action === AuditAction.DOCUMENT_DELETED)).toBe(true);
+  });
+
+  it('keeps a failed blob cleanup hidden until a scheduler retry', async () => {
+    const f = buildFixture([makeRow()]);
+    (f.storage as { delete: (key: string) => Promise<void> }).delete = async () => { throw new Error('storage offline'); };
+    await f.asRole('OWNER', 'owner', () => f.service.remove('doc1'));
+    expect(f.rows[0]?.deletedAt).toBeInstanceOf(Date);
+    await expect(f.asRole('OWNER', 'owner', () => f.service.get('doc1'))).rejects.toThrow(NotFoundException);
   });
 });

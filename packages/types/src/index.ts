@@ -422,6 +422,8 @@ export enum ApprovalStatus {
 // ── Documents ─────────────────────────────────────────────────────────────────
 
 export enum DocumentType {
+  PERFORMANCE = 'PERFORMANCE',
+  TRAINING = 'TRAINING',
   CONTRACT = 'CONTRACT',
   ID_DOCUMENT = 'ID_DOCUMENT',
   PAYSLIP = 'PAYSLIP',
@@ -1649,6 +1651,10 @@ export interface Document extends TenantEntity {
 
 /** Directory row for the document store — metadata only, never a storage key. */
 export interface DocumentSummary extends TenantEntity {
+  expiresAt?: string;
+  policyPublishedAt?: string;
+  acknowledgementRequired?: boolean;
+  acknowledgedAt?: string;
   workerId?: string;
   workerName?: string;
   type: DocumentType;
@@ -1662,6 +1668,7 @@ export interface DocumentSummary extends TenantEntity {
 
 /** Upload a document. `content` is base64 (no `data:` prefix). */
 export interface CreateDocumentDto {
+  expiresAt?: string;
   name: string;
   type: DocumentType;
   workerId?: string | null;
@@ -1765,6 +1772,10 @@ export interface AuditLog extends TenantEntity {
 
 /** In-app notification kinds (delivered for leave-workflow events). */
 export enum NotificationType {
+  DOCUMENT_EXPIRING = 'DOCUMENT_EXPIRING',
+  POLICY_AVAILABLE = 'POLICY_AVAILABLE',
+  POLICY_REMINDER = 'POLICY_REMINDER',
+  ANNOUNCEMENT_AVAILABLE = 'ANNOUNCEMENT_AVAILABLE',
   LEAVE_REQUEST_SUBMITTED = 'LEAVE_REQUEST_SUBMITTED',
   LEAVE_REQUEST_APPROVED = 'LEAVE_REQUEST_APPROVED',
   LEAVE_REQUEST_REJECTED = 'LEAVE_REQUEST_REJECTED',

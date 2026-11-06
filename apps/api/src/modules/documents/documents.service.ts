@@ -1,6 +1,9 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
+  ConflictException,
+  ServiceUnavailableException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -17,6 +20,7 @@ import { getEffectiveScope } from '../../common/rbac/permissions';
 import { AuditService } from '../audit/audit.service';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { ListDocumentsQueryDto } from './dto/list-documents.dto';
+import { UploadSafetyService } from '../../common/storage/upload-safety.service';
 
 /** Upper bound on a single upload after base64 decoding. */
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // 8 MB
@@ -33,7 +37,14 @@ export function decodeBase64Content(
 ): Buffer {
   const comma = content.indexOf(',');
   const cleaned = comma >= 0 ? content.slice(comma + 1) : content;
+  if (cleaned.length > 4 * Math.ceil(maxBytes / 3)) {
+    throw new BadRequestException(`Files must be ${Math.floor(maxBytes / (1024 * 1024))} MB or smaller`);
+  }
+  if (cleaned.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(cleaned)) {
+    throw new BadRequestException('Invalid base64 file content');
+  }
   const buffer = Buffer.from(cleaned, 'base64');
+  if (buffer.toString('base64') !== cleaned) throw new BadRequestException('Invalid base64 file content');
   if (buffer.length === 0) {
     throw new BadRequestException('The uploaded file is empty');
   }
@@ -49,6 +60,7 @@ const DOCUMENT_INCLUDE = {
   worker: {
     select: { firstName: true, lastName: true, preferredName: true },
   },
+  policyRecipients: { select: { userId: true, acknowledgedAt: true } },
 } satisfies Prisma.DocumentInclude;
 
 type DocumentRow = Prisma.DocumentGetPayload<{
@@ -72,6 +84,10 @@ export function toDocumentSummary(row: DocumentRow): DocumentSummary {
     mimeType: row.mimeType,
     sizeBytes: row.sizeBytes,
     uploadedBy: row.uploadedBy,
+    expiresAt: row.expiresAt?.toISOString(),
+    policyPublishedAt: row.policyPublishedAt?.toISOString(),
+    acknowledgementRequired: row.policyRecipients?.some((r) => r.userId === getRequestContext()?.userId),
+    acknowledgedAt: row.policyRecipients?.find((r) => r.userId === getRequestContext()?.userId)?.acknowledgedAt?.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     downloadUrl: `/api/v1/documents/${row.id}/download`,
@@ -80,10 +96,12 @@ export function toDocumentSummary(row: DocumentRow): DocumentSummary {
 
 @Injectable()
 export class DocumentsService {
+  private readonly logger = new Logger(DocumentsService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly audit: AuditService,
+    private readonly safety: UploadSafetyService,
   ) {}
 
   async list(
@@ -93,7 +111,7 @@ export class DocumentsService {
     const pageSize = query.pageSize ?? 25;
 
     return this.prisma.withRequestContext(async (tx) => {
-      const where: Prisma.DocumentWhereInput = {};
+      const where: Prisma.DocumentWhereInput = { deletedAt: null };
       if (query.workerId) where.workerId = query.workerId;
       if (query.type) where.type = query.type;
 
@@ -135,21 +153,29 @@ export class DocumentsService {
 
   async create(dto: CreateDocumentDto): Promise<DocumentSummary> {
     const { organisationId, userId } = this.requireContext();
-    const buffer = decodeBase64Content(dto.content);
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException('Enter a document name');
+    this.assertCategoryWrite(dto.type);
+    const prepared = await this.safety.prepare(decodeBase64Content(dto.content), dto.mimeType, name);
+    const { buffer, mimeType } = prepared;
+    if (buffer.length > MAX_UPLOAD_BYTES) throw new BadRequestException('Processed file must be 8 MB or smaller');
+    let createdKey: string | undefined;
 
     const summary = await this.prisma.withRequestContext(async (tx) => {
       if (dto.workerId) await this.assertWorker(tx, dto.workerId);
 
       const { key } = await this.storage.put(buffer, organisationId);
+      createdKey = key;
       try {
         const row = await tx.document.create({
           data: {
             organisationId,
             workerId: dto.workerId ?? null,
             type: dto.type,
-            name: dto.name,
+            name,
             storageKey: key,
-            mimeType: dto.mimeType,
+            mimeType,
+            expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
             sizeBytes: buffer.length,
             uploadedBy: userId,
           },
@@ -158,9 +184,11 @@ export class DocumentsService {
         return toDocumentSummary(row);
       } catch (error) {
         // Don't leave an orphaned blob behind if the metadata write fails.
-        await this.storage.delete(key).catch(() => undefined);
         throw error;
       }
+    }).catch(async (error) => {
+      if (createdKey) await this.storage.delete(createdKey).catch(() => this.logger.error('Orphaned document upload requires storage cleanup'));
+      throw error;
     });
 
     await this.audit.record({
@@ -180,11 +208,19 @@ export class DocumentsService {
   /** Resolve a scoped document plus its bytes for streaming. */
   async download(
     id: string,
-  ): Promise<{ document: DocumentSummary; buffer: Buffer }> {
+  ): Promise<{ document: DocumentSummary; buffer?: Buffer; signedUrl?: string }> {
     const row = await this.prisma.withRequestContext((tx) =>
       this.findScoped(tx, id),
     );
-    const buffer = await this.storage.get(row.storageKey);
+    let signedUrl: string | undefined;
+    let buffer: Buffer | undefined;
+    try {
+      signedUrl = await this.storage.signedDownload(row.storageKey, row.name, row.mimeType);
+      buffer = signedUrl ? undefined : await this.storage.get(row.storageKey);
+    } catch {
+      this.logger.error(`Document ${id} storage read failed`);
+      throw new ServiceUnavailableException('This document file is temporarily unavailable. Contact your administrator if the problem continues.');
+    }
 
     await this.audit.record({
       action: AuditAction.DOCUMENT_ACCESSED,
@@ -193,17 +229,25 @@ export class DocumentsService {
       newValue: { name: row.name, workerId: row.workerId ?? null },
     });
 
-    return { document: toDocumentSummary(row), buffer };
+    return { document: toDocumentSummary(row), buffer, signedUrl };
   }
 
   async remove(id: string): Promise<{ id: string }> {
     const storageKey = await this.prisma.withRequestContext(async (tx) => {
       const row = await this.findScoped(tx, id);
-      await tx.document.delete({ where: { id } });
+      if (row.policyPublishedAt) throw new BadRequestException('Published policies are retained for acknowledgement history. Upload a new version instead.');
+      const used = await tx.expenseClaim.count({ where: { receiptDocumentId: id } });
+      if (used) throw new BadRequestException('This receipt is linked to an expense claim and cannot be deleted.');
+      const claimed = await tx.document.updateMany({ where: { id, deletedAt: null, policyPublishedAt: null }, data: { deletedAt: new Date() } });
+      if (claimed.count !== 1) throw new ConflictException('This document changed. Refresh and try again.');
       return row.storageKey;
     });
-    // Best-effort blob cleanup — metadata is already gone.
-    await this.storage.delete(storageKey).catch(() => undefined);
+    await this.audit.record({ action: AuditAction.DOCUMENT_DELETED, targetType: 'document', targetId: id });
+    // A tombstone stays inaccessible until cleanup succeeds. The scheduler retries failures.
+    try {
+      await this.storage.delete(storageKey);
+      await this.prisma.withRequestContext((tx) => tx.document.delete({ where: { id } }));
+    } catch { this.logger.error(`Document ${id} file cleanup pending; scheduled retry required`); }
     return { id };
   }
 
@@ -213,7 +257,7 @@ export class DocumentsService {
   ): Promise<DocumentRow> {
     const scopeWhere = await this.resolveScopeWhere(tx);
     const row = await tx.document.findFirst({
-      where: { AND: [{ id }, scopeWhere] },
+      where: { AND: [{ id, deletedAt: null }, scopeWhere] },
       include: DOCUMENT_INCLUDE,
     });
     if (!row) throw new NotFoundException('Document not found');
@@ -231,15 +275,22 @@ export class DocumentsService {
     const ctx = getRequestContext();
     const scope = getEffectiveScope(ctx?.role, 'documents', 'read');
 
-    if (scope === PermissionScope.ORGANISATION) return {};
+    if (scope === PermissionScope.ORGANISATION) {
+      if (ctx?.role === 'HR_ADMINISTRATOR') return { type: { not: 'PAYSLIP' } };
+      if (ctx?.role === 'AUDITOR' || ctx?.role === 'SUPPORT_READ_ONLY') {
+        return { type: { notIn: ['ID_DOCUMENT', 'PAYSLIP', 'PERFORMANCE'] } };
+      }
+      return {};
+    }
     if (scope === PermissionScope.SELF && ctx?.userId) {
       const worker = await tx.worker.findFirst({
         where: { userId: ctx.userId },
         select: { id: true },
       });
-      return worker
-        ? { workerId: worker.id }
-        : { ...NO_ACCESS_DOCUMENT_WHERE };
+      return { OR: [
+        worker ? { workerId: worker.id } : { ...NO_ACCESS_DOCUMENT_WHERE },
+        { type: 'POLICY', policyPublishedAt: { not: null }, policyRecipients: { some: { userId: ctx.userId } } },
+      ] };
     }
     return { ...NO_ACCESS_DOCUMENT_WHERE };
   }
@@ -261,5 +312,11 @@ export class DocumentsService {
       throw new UnauthorizedException('No active organisation for this request');
     }
     return { organisationId: ctx.organisationId, userId: ctx.userId };
+  }
+
+  private assertCategoryWrite(type: string): void {
+    if (type === 'PAYSLIP' && getRequestContext()?.role !== 'OWNER') {
+      throw new BadRequestException('Payslip documents are restricted to the owner. Use the payroll payslip workflow.');
+    }
   }
 }

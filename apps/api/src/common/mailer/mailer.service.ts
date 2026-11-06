@@ -125,7 +125,7 @@ export class MailerService implements OnModuleInit {
 
     if (!this.transporter) {
       this.logger.log(
-        `[dev email] Notification for ${email.to}: ${email.title} — ${email.body}`,
+        '[dev email] Notification not emailed: SMTP is not configured',
       );
       return false;
     }
@@ -299,7 +299,7 @@ function buildWorkspaceReady({
   return { subject, text, html };
 }
 
-function buildNotification({
+export function buildNotification({
   name,
   title,
   body,
@@ -308,6 +308,9 @@ function buildNotification({
 }: NotificationEmail): { subject: string; text: string; html: string } {
   const firstName = name.trim().split(/\s+/)[0] || 'there';
   const url = link ? `${appUrl ?? ''}${link}` : undefined;
+  const escape = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[character]!));
 
   const text = [
     `Hi ${firstName},`,
@@ -327,12 +330,12 @@ function buildNotification({
         <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;">
           <tr><td style="padding:28px 32px 8px;font-size:20px;font-weight:700;">Ascenda</td></tr>
           <tr><td style="padding:8px 32px;font-size:16px;line-height:1.5;">
-            <p style="margin:0 0 16px;">Hi ${firstName},</p>
-            <p style="margin:0 0 8px;font-weight:600;">${title}</p>
-            <p style="margin:0 0 24px;">${body}</p>
+            <p style="margin:0 0 16px;">Hi ${escape(firstName)},</p>
+            <p style="margin:0 0 8px;font-weight:600;">${escape(title)}</p>
+            <p style="margin:0 0 24px;">${escape(body).replace(/\r?\n/g, '<br>')}</p>
             ${
               url
-                ? `<p style="margin:0 0 8px;"><a href="${url}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;">Open Ascenda</a></p>`
+                ? `<p style="margin:0 0 8px;"><a href="${escape(url)}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;">Open Ascenda</a></p>`
                 : ''
             }
           </td></tr>
