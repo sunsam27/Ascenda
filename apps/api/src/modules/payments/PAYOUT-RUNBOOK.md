@@ -1,4 +1,12 @@
-# Payout operations runbook
+# Legacy payout recovery runbook
+
+New employers use [company payroll funding](./wallet/README.md), not merchant-owned
+provider accounts. Direct-bank connections and the old provider-connection/funding
+interface have been removed, along with public provider account setup/replacement/
+disconnection endpoints. The backend described here remains for existing payment
+records and in-flight reconciliation only. Do not delete retained credentials or
+disable webhooks while those transfers are unresolved. Employer funding is still
+awaiting its own approved adapter; removing the old setup does not activate it.
 
 ## Safety rules
 
@@ -13,7 +21,7 @@
   Keep a fee buffer and avoid concurrent runs against the same provider wallet,
   including transfers made outside Ascenda.
 
-## Deployment and first use
+## Preserve existing transfers during deployment
 
 1. Apply `packages/db/prisma/schema.prisma` using the reviewed database release
    procedure and regenerate the Prisma client. This release adds nullable
@@ -24,19 +32,16 @@
 3. Set `API_PUBLIC_URL` to the public HTTPS API origin, check `API_PREFIX`, and
    enable `SCHEDULER_ENABLED=true`. `PAYMENTS_ENABLED` gates billing checkout,
    not salary payouts.
-4. The owner connects a **test** account in Payroll → Payments. Currency must
-   match the organisation. Do not use production keys for automated tests.
-5. Configure the exact displayed webhook URL in the provider dashboard:
+4. Do not create new merchant-owned payout accounts. Keep the existing configured
+   webhook URLs for accounts with payment history:
    `POST /api/v1/payments/webhooks/paystack/:organisationId` or
    `POST /api/v1/payments/webhooks/flutterwave/:organisationId`.
    Paystack signs raw payloads using the connected secret key;
    Flutterwave requires the configured `verif-hash` secret.
-6. Disable Paystack transfer OTP before automated payouts. Complete provider
-   activation/transfer requirements before switching to live mode.
-7. Run the test lifecycle below, then a separately authorised small live pilot.
-   Confirm the provider transfer and recipient receipt before a full run.
+5. Do not rotate the encryption key or provider credentials without a reviewed
+   recovery plan. The old account setup API is no longer available.
 
-## Before each run
+## Before resolving an existing batch
 
 1. Review the processed payroll and batch total/currency; do not alter payroll
    calculations to work around a payout error.
@@ -47,21 +52,12 @@
    form only collects bank and account details.
    Overrides take precedence; blanks fall back to the generic bank code.
    Changing the account/bank clears stale overrides unless explicitly replaced.
-3. Have another authorised approver approve the batch. OWNER self-approval is
-   an audited override, not the normal process.
-4. Use **Add funds** (or **Add test funds** in test mode) on the balance card.
-   This opens guidance and a link to the connected provider's dashboard; it is
-   not an in-app deposit or a balance credit API. Only owners/finance approvers
-   see this action, and it is unavailable for disconnected accounts. Confirm the
-   account, currency and mode in the provider dashboard before funding. In test
-   mode, use simulated funding only; if the provider does not expose it, ask its
-   support team to provision a test payout balance. Never send real money to
-   solve a test-balance issue.
-   Top up the provider wallet and allow for fees. The balance button uses
-   `POST /payments/payout-account/balance`; initiation and retry also fetch live
-   balances and abort on lookup failure or insufficient funds.
-5. Choose **Pay in-platform**, complete step-up authentication, and inspect the
-   batch's payout results. Repeating initiation cannot resend a claimed batch.
+3. Verify provider evidence before resolving a failed transfer; never resend a
+   successful, reversed or unknown transfer through employer funding.
+4. Legacy balance/status/retry APIs remain permissioned for compatibility. They
+   are not advertised in the employer interface. Any intervention must follow
+   existing approval, step-up, auditing and incident procedures. Do not fund a
+   retired merchant route as a workaround for unconfigured employer funding.
 
 ## Incident triage
 
@@ -126,6 +122,7 @@ manual acceptance check with a production payroll batch.
 
 Pause operator initiation/retry and escalate; there is no payout cancel action.
 Do not disable reconciliation or webhooks for already submitted transfers.
-Account replacement/disconnection is blocked while transfers are in flight.
+Customer-facing account replacement/disconnection has been retired. Preserve the
+credentials needed for unresolved transfers and coordinate changes through support.
 For a suspected key compromise, coordinate provider-side containment and
 credential recovery with incident responders while tracking existing transfers.

@@ -471,8 +471,12 @@ export class PaymentsService {
   async payBatch(id: string): Promise<PaymentBatch> {
     const { organisationId, userId } = this.requireContext();
     const batch = await this.prisma.withRequestContext(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM payment_batches WHERE id = ${id} AND "organisationId" = ${organisationId} FOR UPDATE`;
       const row = await tx.paymentBatch.findFirst({ where: { id } });
       if (!row) throw new NotFoundException('Payment batch not found');
+      if (await tx.payrollWalletReservation.count({ where: { paymentBatchId: id } })) {
+        throw new ConflictException('Employer-funded payroll is settled only by verified payment-partner confirmation');
+      }
       this.assertBatchTransition(row.status as BatchStatus, PaymentBatchStatus.PAID);
 
       const now = new Date();
@@ -522,8 +526,12 @@ export class PaymentsService {
   ): Promise<PaymentBatch> {
     const { organisationId, userId } = this.requireContext();
     const batch = await this.prisma.withRequestContext(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM payment_batches WHERE id = ${id} AND "organisationId" = ${organisationId} FOR UPDATE`;
       const row = await tx.paymentBatch.findFirst({ where: { id } });
       if (!row) throw new NotFoundException('Payment batch not found');
+      if (await tx.payrollWalletReservation.count({ where: { paymentBatchId: id } })) {
+        throw new ConflictException('Employer-funded payroll cannot be cancelled or resent through another route');
+      }
       this.assertBatchTransition(
         row.status as BatchStatus,
         PaymentBatchStatus.CANCELLED,
@@ -729,6 +737,20 @@ export class PaymentsService {
     const ctx = getRequestContext();
     const exportedBy = ctx?.userEmail || ctx?.userId || 'unknown';
     const exportedAt = new Date().toISOString();
+
+    // Serialize exports against wallet reservations. An exported batch must not
+    // subsequently be sent again from the employer funding balance.
+    const batchIds = [...new Set(payments.map((payment) => payment.paymentBatchId).filter((id): id is string => Boolean(id)))].sort();
+    for (const batchId of batchIds) {
+      await tx.$queryRaw`SELECT id FROM payment_batches WHERE id = ${batchId} FOR UPDATE`;
+      if (await tx.payrollWalletReservation.count({ where: { paymentBatchId: batchId } })) {
+        throw new ConflictException('Do not export employer-funded payroll for a second payment. Use its funding activity for reconciliation.');
+      }
+    }
+    if (batchIds.length) await tx.paymentBatch.updateMany({
+      where: { id: { in: batchIds }, exportedAt: null },
+      data: { exportedAt: new Date(exportedAt), exportedBy: ctx?.userId },
+    });
 
     const workerIds = [...new Set(payments.map((p) => p.workerId))];
     const [workers, accounts, batches] = await Promise.all([

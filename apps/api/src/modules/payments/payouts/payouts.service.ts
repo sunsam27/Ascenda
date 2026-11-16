@@ -26,13 +26,9 @@ import { getRequestContext } from '../../../common/context/request-context';
 import { PrismaService } from '../../../common/prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { NotificationsService } from '../../notifications/notifications.service';
-import {
-  decryptAccountNumber,
-  encryptAccountNumber,
-} from '../../people/domain/bank-crypto';
+import { decryptAccountNumber } from '../../people/domain/bank-crypto';
 import { toPaymentBatch } from '../payments.service';
 import { paymentWorkerIdentity, paymentWorkerSelect, type PaymentWorker } from '../domain/payment-worker';
-import type { SavePayoutAccountDto } from '../dto/payment.dto';
 import { PayoutGatewayRegistry } from './payout-gateway.registry';
 import {
   PayoutProviderError,
@@ -42,7 +38,6 @@ import {
 } from './payout-provider';
 import {
   hasFractionalMajorUnits,
-  payoutOptions,
   providerSupportsCurrency,
 } from './payout-support';
 import {
@@ -157,10 +152,6 @@ export class PayoutsService {
     private readonly config: ConfigService,
   ) {}
 
-  getOptions(): ReturnType<typeof payoutOptions> {
-    return payoutOptions();
-  }
-
   async getAccount(): Promise<PayoutAccountSummary | null> {
     this.requireContext();
     return this.prisma.withRequestContext(async (tx) => {
@@ -171,149 +162,6 @@ export class PayoutsService {
       });
       return row ? this.toAccountSummary(row) : null;
     });
-  }
-
-  async saveAccount(dto: SavePayoutAccountDto): Promise<PayoutAccountSummary> {
-    const { organisationId, userId } = this.requireContext();
-    const provider = dto.provider;
-    const currency = dto.currency.trim().toUpperCase();
-    const country = dto.country.trim().toUpperCase();
-    const secretKey = dto.secretKey.trim();
-
-    if (!providerSupportsCurrency(provider, currency)) {
-      throw new BadRequestException(
-        `${provider} payouts are not supported for ${currency}.`,
-      );
-    }
-    this.assertKeyMatchesMode(provider, dto.mode, secretKey);
-
-    const snapshot = await this.prisma.withRequestContext(async (tx) => {
-      const [organisation, existing, activePayouts] = await Promise.all([
-        tx.organisation.findFirst({
-          where: { id: organisationId },
-          select: { currency: true },
-        }),
-        tx.payoutAccount.findUnique({ where: { organisationId } }),
-        tx.payout.count({
-          where: {
-            organisationId,
-            status: { in: [PayoutStatus.QUEUED, PayoutStatus.PROCESSING] },
-          },
-        }),
-      ]);
-      return { organisation, existing, activePayouts };
-    });
-
-    if (!snapshot.organisation) {
-      throw new NotFoundException('Organisation not found');
-    }
-    if (
-      snapshot.organisation.currency?.toUpperCase() !== currency &&
-      snapshot.organisation.currency
-    ) {
-      throw new BadRequestException(
-        `The payout account currency must match your organisation currency (${snapshot.organisation.currency.toUpperCase()}).`,
-      );
-    }
-    if (snapshot.activePayouts > 0) {
-      throw new ConflictException(
-        'Wait for in-flight payouts to finish before changing the payout account.',
-      );
-    }
-    if (
-      provider === PayoutProvider.FLUTTERWAVE &&
-      !dto.webhookSecret &&
-      !(
-        snapshot.existing?.provider === provider &&
-        snapshot.existing.webhookSecretEncrypted
-      )
-    ) {
-      throw new BadRequestException(
-        'Flutterwave webhook secret is required so payout confirmations can be verified.',
-      );
-    }
-
-    const gateway = this.gateways.get(provider);
-    let balance: Awaited<ReturnType<PayoutGateway['getBalance']>>;
-    try {
-      balance = await gateway.getBalance(secretKey, currency);
-    } catch (error) {
-      throw new BadRequestException(
-        `Could not verify this ${provider} key: ${this.errorMessage(error)}`,
-      );
-    }
-
-    const now = new Date();
-    const secretKeyEncrypted = encryptAccountNumber(secretKey);
-    const webhookSecretEncrypted = dto.webhookSecret
-      ? encryptAccountNumber(dto.webhookSecret.trim())
-      : snapshot.existing?.provider === provider
-        ? (snapshot.existing.webhookSecretEncrypted ?? null)
-        : null;
-
-    const saved = await this.prisma.withRequestContext((tx) =>
-      tx.payoutAccount.upsert({
-        where: { organisationId },
-        create: {
-          organisationId,
-          provider,
-          mode: dto.mode,
-          country,
-          currency,
-          accountName: dto.accountName?.trim() || null,
-          secretKeyEncrypted,
-          webhookSecretEncrypted,
-          keyLast4: secretKey.slice(-4),
-          status: PayoutAccountStatus.ACTIVE,
-          balanceMinorUnits: balance.availableMinorUnits,
-          balanceCurrency: balance.currency,
-          balanceCheckedAt: now,
-          createdBy: userId,
-          updatedBy: userId,
-        },
-        update: {
-          provider,
-          mode: dto.mode,
-          country,
-          currency,
-          accountName: dto.accountName?.trim() || null,
-          secretKeyEncrypted,
-          webhookSecretEncrypted,
-          keyLast4: secretKey.slice(-4),
-          status: PayoutAccountStatus.ACTIVE,
-          balanceMinorUnits: balance.availableMinorUnits,
-          balanceCurrency: balance.currency,
-          balanceCheckedAt: now,
-          updatedBy: userId,
-        },
-      }),
-    );
-
-    await this.audit.record({
-      action: AuditAction.PAYOUT_ACCOUNT_CHANGED,
-      targetType: 'payout_account',
-      targetId: saved.id,
-      previousValue: snapshot.existing
-        ? {
-            provider: snapshot.existing.provider,
-            mode: snapshot.existing.mode,
-            country: snapshot.existing.country,
-            currency: snapshot.existing.currency,
-            keyLast4: snapshot.existing.keyLast4,
-            status: snapshot.existing.status,
-          }
-        : null,
-      newValue: {
-        provider,
-        mode: dto.mode,
-        country,
-        currency,
-        keyLast4: secretKey.slice(-4),
-        status: PayoutAccountStatus.ACTIVE,
-      },
-    });
-
-    return this.toAccountSummary(saved);
   }
 
   async refreshBalance(): Promise<PayoutAccountSummary> {
@@ -409,49 +257,6 @@ export class PayoutsService {
     if (refreshed.count !== 1) {
       throw new ConflictException('The payout account changed. Refresh and try again.');
     }
-  }
-
-  async disconnectAccount(): Promise<void> {
-    const { organisationId, userId } = this.requireContext();
-    const account = await this.prisma.withRequestContext(async (tx) => {
-      const row = await tx.payoutAccount.findUnique({
-        where: { organisationId },
-      });
-      if (!row) throw new NotFoundException('No payout account is connected.');
-      const activePayouts = await tx.payout.count({
-        where: {
-          organisationId,
-          status: { in: [PayoutStatus.QUEUED, PayoutStatus.PROCESSING] },
-        },
-      });
-      if (activePayouts > 0) {
-        throw new ConflictException(
-          'Wait for in-flight payouts to finish before disconnecting.',
-        );
-      }
-      return row;
-    });
-
-    await this.prisma.withRequestContext((tx) =>
-      tx.payoutAccount.update({
-        where: { organisationId },
-        data: {
-          status: PayoutAccountStatus.DISABLED,
-          updatedBy: userId,
-        },
-      }),
-    );
-    await this.audit.record({
-      action: AuditAction.PAYOUT_ACCOUNT_CHANGED,
-      targetType: 'payout_account',
-      targetId: account.id,
-      previousValue: {
-        provider: account.provider,
-        status: account.status,
-        keyLast4: account.keyLast4,
-      },
-      newValue: { status: PayoutAccountStatus.DISABLED },
-    });
   }
 
   async getBatchPayouts(batchId: string): Promise<PayoutBatchResult> {
@@ -1723,37 +1528,6 @@ export class PayoutsService {
     if (status === PayoutStatus.FAILED) return 'FAILED';
     if (status === PayoutStatus.REVERSED) return 'REVERSED';
     return 'PROCESSING';
-  }
-
-  private assertKeyMatchesMode(
-    provider: PayoutProvider,
-    mode: PayoutAccountMode,
-    key: string,
-  ): void {
-    const looksTest =
-      key.startsWith('sk_test_') || key.startsWith('FLWSECK_TEST');
-    const looksLive =
-      key.startsWith('sk_live_') || key.startsWith('FLWSECK-');
-    const looksLikeProviderKey =
-      provider === PayoutProvider.PAYSTACK
-        ? key.startsWith('sk_test_') || key.startsWith('sk_live_')
-        : key.startsWith('FLWSECK_TEST') || key.startsWith('FLWSECK-');
-
-    if (!looksLikeProviderKey) {
-      throw new BadRequestException(
-        `This does not look like a ${provider} secret key.`,
-      );
-    }
-    if (mode === PayoutAccountMode.TEST && !looksTest) {
-      throw new BadRequestException(
-        'Use a test secret key when the payout account is in test mode.',
-      );
-    }
-    if (mode === PayoutAccountMode.LIVE && (!looksLive || looksTest)) {
-      throw new BadRequestException(
-        'Use a live secret key when the payout account is in live mode.',
-      );
-    }
   }
 
   private errorMessage(error: unknown): string {

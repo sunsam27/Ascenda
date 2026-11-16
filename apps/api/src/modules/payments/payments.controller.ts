@@ -152,7 +152,8 @@ export class PaymentsController {
     this.sendFile(res, await this.service.export(query));
   }
 
-  @Get(':id')
+  // Do not swallow static child-module routes such as employer-wallet.
+  @Get(':id([0-9a-fA-F-]{36})')
   @ApiOperation({ summary: 'Get one payment' })
   @RequirePermission({
     resource: 'payments',

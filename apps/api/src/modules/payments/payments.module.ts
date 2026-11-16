@@ -10,9 +10,10 @@ import { PayoutWebhooksController } from './payouts/payout-webhooks.controller';
 import { PaystackPayoutProvider } from './payouts/paystack-payout.provider';
 import { PayoutsController } from './payouts/payouts.controller';
 import { PayoutsService } from './payouts/payouts.service';
+import { EmployerWalletModule } from './wallet/wallet.module';
 
 @Module({
-  imports: [AuditModule, IdentityAccessModule, NotificationsModule],
+  imports: [AuditModule, IdentityAccessModule, NotificationsModule, EmployerWalletModule],
   controllers: [
     PayoutsController,
     PayoutWebhooksController,
@@ -25,6 +26,6 @@ import { PayoutsService } from './payouts/payouts.service';
     PaystackPayoutProvider,
     FlutterwavePayoutProvider,
   ],
-  exports: [PaymentsService, PayoutsService],
+  exports: [PaymentsService, PayoutsService, EmployerWalletModule],
 })
 export class PaymentsModule {}

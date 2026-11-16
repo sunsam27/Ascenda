@@ -557,6 +557,7 @@ model Organisation {
   invitations         Invitation[]
   notifications       Notification[]
   subscription        Subscription?
+  payrollWallet       PayrollWallet?
 
   @@map("organisations")
 }
@@ -1279,6 +1280,133 @@ model PayoutWebhookEvent {
   @@index([organisationId])
   @@index([organisationId, reference])
   @@map("payout_webhook_events")
+}
+
+// Employer payroll funding. Separate from organisation-owned gateway accounts.
+model PayrollWallet {
+  id                            String   @id @default(uuid())
+  organisationId                String   @unique
+  setupReference                String   @unique
+  status                        String   @default("NOT_STARTED")
+  currency                      String   @default("NGN")
+  provider                      String?
+  mode                          String?
+  providerWalletReference       String?  @unique
+  applicationEncrypted          String?
+  fundingAccountEncrypted       String?
+  bankName                      String?
+  accountName                   String?
+  pendingMinorUnits             Int      @default(0)
+  availableMinorUnits           Int      @default(0)
+  reservedMinorUnits            Int      @default(0)
+  paidMinorUnits                Int      @default(0)
+  lastReconciledAt               DateTime?
+  reconciliationRequired        Boolean  @default(false)
+  createdBy                     String
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  ledger PayrollWalletLedger[]
+  deposits PayrollWalletDeposit[]
+  reservations PayrollWalletReservation[]
+  attempts PayrollWalletAttempt[]
+  @@unique([id, organisationId])
+  @@map("payroll_wallets")
+}
+
+/// Immutable journal; balance projections are changed in the same locked transaction.
+model PayrollWalletLedger {
+  id                  String   @id @default(uuid())
+  organisationId      String
+  walletId            String
+  eventKey            String
+  type                String
+  status              String
+  amountMinorUnits    Int
+  currency            String   @default("NGN")
+  pendingDelta        Int      @default(0)
+  availableDelta      Int      @default(0)
+  reservedDelta       Int      @default(0)
+  paidDelta           Int      @default(0)
+  providerReference   String
+  payrollRunId        String?
+  paymentBatchId      String?
+  actorId             String
+  occurredAt          DateTime
+  createdAt           DateTime @default(now())
+  wallet PayrollWallet @relation(fields: [walletId, organisationId], references: [id, organisationId])
+  @@unique([walletId, eventKey])
+  @@index([organisationId, createdAt])
+  @@map("payroll_wallet_ledger")
+}
+
+model PayrollWalletDeposit {
+  id                  String   @id @default(uuid())
+  organisationId      String
+  walletId            String
+  providerReference   String
+  amountMinorUnits    Int
+  feeMinorUnits       Int
+  status              String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  wallet PayrollWallet @relation(fields: [walletId, organisationId], references: [id, organisationId])
+  @@unique([walletId, providerReference])
+  @@index([organisationId])
+  @@map("payroll_wallet_deposits")
+}
+
+/// One immutable reservation per idempotent submission (initial or explicit retry).
+model PayrollWalletReservation {
+  id                  String   @id @default(uuid())
+  organisationId      String
+  walletId            String
+  paymentBatchId      String
+  payrollRunId        String
+  requestKey          String
+  retry               Boolean  @default(false)
+  totalMinorUnits     Int
+  feeMinorUnits       Int
+  createdBy           String
+  createdAt           DateTime @default(now())
+  wallet PayrollWallet @relation(fields: [walletId, organisationId], references: [id, organisationId])
+  attempts PayrollWalletAttempt[]
+  @@unique([walletId, requestKey])
+  @@unique([id, organisationId])
+  @@index([organisationId, paymentBatchId])
+  @@map("payroll_wallet_reservations")
+}
+
+/// A new row per retry; historical provider references are never overwritten.
+model PayrollWalletAttempt {
+  id                      String   @id @default(uuid())
+  organisationId          String
+  walletId                String
+  reservationId           String
+  paymentBatchId          String
+  payrollRunId            String
+  paymentId               String
+  workerId                String
+  reference               String   @unique
+  attemptNumber           Int
+  amountMinorUnits        Int
+  feeReservedMinorUnits   Int
+  actualFeeMinorUnits     Int?
+  currency                String   @default("NGN")
+  status                  String   @default("QUEUED")
+  providerTransferId      String?
+  beneficiaryEncrypted    String
+  submittedAt             DateTime?
+  lastCheckedAt           DateTime?
+  completedAt             DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  wallet PayrollWallet @relation(fields: [walletId, organisationId], references: [id, organisationId])
+  reservation PayrollWalletReservation @relation(fields: [reservationId, organisationId], references: [id, organisationId])
+  @@unique([paymentId, attemptNumber])
+  @@index([organisationId, paymentBatchId])
+  @@map("payroll_wallet_attempts")
 }
 
 // ─── Payslips (PAY-13) ───────────────────────────────────────────────────────

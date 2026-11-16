@@ -5,7 +5,7 @@ import { useCurrentUser } from '@/lib/useCurrentUser';
 import RunsPanel from './RunsPanel';
 import RulePacksPanel from './RulePacksPanel';
 import PayslipsPanel from './PayslipsPanel';
-import PaymentsPanel from './PaymentsPanel';
+import EmployerWalletPanel from './EmployerWalletPanel';
 import ClaimsPanel from './ClaimsPanel';
 import YearEndPanel from './YearEndPanel';
 import PayCalendarsPanel from './PayCalendarsPanel';
@@ -24,8 +24,6 @@ type Tab =
 const PAYROLL_ADMINS = new Set(['OWNER', 'PAYROLL_ADMINISTRATOR']);
 /** Roles that may approve/process/lock/reverse runs and export payments. */
 const APPROVERS = new Set(['OWNER', 'FINANCE_APPROVER']);
-/** Roles that may move a payment through its status lifecycle. */
-const PAYMENT_MANAGERS = new Set(['OWNER', 'PAYROLL_ADMINISTRATOR']);
 /** Roles that submit reimbursements (self-service) — plus managers for their team. */
 const CLAIM_SUBMITTERS = new Set([
   'OWNER',
@@ -59,9 +57,7 @@ export default function PayrollView() {
   const canManageRuns = PAYROLL_ADMINS.has(role);
   const canApprove = APPROVERS.has(role);
   const canManagePacks = PAYROLL_ADMINS.has(role);
-  const canManagePayments = PAYMENT_MANAGERS.has(role);
-  const canExportPayments = APPROVERS.has(role);
-  const canConfigurePayout = role === 'OWNER';
+  const canSetupFunding = role === 'OWNER';
   const canSubmitClaims = CLAIM_SUBMITTERS.has(role);
   const canReadOrg = ORG_READERS.has(role);
   const canReviewClaims = canApprove || role === 'MANAGER';
@@ -131,13 +127,9 @@ export default function PayrollView() {
       ) : activeTab === 'payslips' ? (
         <PayslipsPanel selfService={isSelfService} />
       ) : activeTab === 'payments' ? (
-        <PaymentsPanel
-          canManage={canManagePayments}
+        <EmployerWalletPanel
           canApprove={canApprove}
-          canExport={canExportPayments}
-          canConfigurePayout={canConfigurePayout}
-          currentUserId={user?.sub}
-          isOwner={role === 'OWNER'}
+          canSetup={canSetupFunding}
         />
       ) : activeTab === 'claims' ? (
         <ClaimsPanel

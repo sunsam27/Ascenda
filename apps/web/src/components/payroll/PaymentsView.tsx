@@ -1,17 +1,13 @@
 'use client';
 
 import { useCurrentUser } from '@/lib/useCurrentUser';
-import PaymentsPanel from '@/components/payroll/PaymentsPanel';
+import EmployerWalletPanel from '@/components/payroll/EmployerWalletPanel';
 import styles from '@/components/payroll/payroll.module.css';
 
-/** Roles that may move a payment through its status lifecycle. */
-const PAYMENT_MANAGERS = new Set(['OWNER', 'PAYROLL_ADMINISTRATOR']);
-/** Roles permitted by the org-wide `payments:export` grant. */
-const PAYMENT_EXPORTERS = new Set(['OWNER', 'FINANCE_APPROVER']);
 /** Roles permitted by the org-wide `payments:approve` grant. */
 const PAYMENT_APPROVERS = new Set(['OWNER', 'FINANCE_APPROVER']);
-/** Roles permitted to store payout credentials (settings:update). */
-const PAYOUT_CONFIGURERS = new Set(['OWNER']);
+/** Company funding setup uses the existing settings:update grant. */
+const FUNDING_SETUP_ADMINS = new Set(['OWNER']);
 /** Roles that may read payments (everything else is denied by the API). */
 const PAYMENT_READERS = new Set([
   'OWNER',
@@ -32,7 +28,7 @@ export default function PaymentsView() {
         <div className={styles.pageHeading}>
           <h1 className={styles.pageTitle}>Payments</h1>
           <p className={styles.pageSubtitle}>
-            Worker payments created by processed runs and the bank-upload export
+            Fund company payroll, review available funds and pay approved salaries
           </p>
         </div>
       </div>
@@ -40,13 +36,9 @@ export default function PaymentsView() {
       {loading ? (
         <div className={styles.spinnerRow}>Loading…</div>
       ) : canRead ? (
-        <PaymentsPanel
-          canManage={PAYMENT_MANAGERS.has(role)}
+        <EmployerWalletPanel
           canApprove={PAYMENT_APPROVERS.has(role)}
-          canExport={PAYMENT_EXPORTERS.has(role)}
-          canConfigurePayout={PAYOUT_CONFIGURERS.has(role)}
-          currentUserId={user?.sub}
-          isOwner={role === 'OWNER'}
+          canSetup={FUNDING_SETUP_ADMINS.has(role)}
         />
       ) : (
         <div className={`glass ${styles.message}`}>

@@ -7,6 +7,8 @@ import { LeaveBalancesService } from '../time-leave/leave-balances.service';
 import { LeaveRequestsService } from '../time-leave/leave-requests.service';
 import { SystemPrismaService } from './system-prisma.service';
 import { DocumentWorkflowsService } from '../documents/document-workflows.service';
+import { EmployerWalletService } from '../payments/wallet/wallet.service';
+import { EmployerFundingRegistry } from '../payments/wallet/wallet-provider';
 
 /** 15 minutes, on the quarter hour. */
 const ESCALATION_CRON = '*/15 * * * *';
@@ -39,6 +41,8 @@ export class SchedulerService {
     private readonly payouts: PayoutsService,
     private readonly config: ConfigService,
     private readonly documents: DocumentWorkflowsService,
+    private readonly employerWallets: EmployerWalletService,
+    private readonly employerFunding: EmployerFundingRegistry,
   ) {
     this.enabled =
       `${this.config.get<string>('SCHEDULER_ENABLED') ?? ''}`.toLowerCase() ===
@@ -82,6 +86,15 @@ export class SchedulerService {
   async runDocumentMaintenance(): Promise<void> {
     if (!this.enabled) return;
     await this.forEachOrganisation('document-maintenance', () => this.documents.maintenance());
+  }
+
+  @Cron('3-59/10 * * * *', { name: 'employer-funding-reconciliation' })
+  async runEmployerFundingReconciliation(): Promise<void> {
+    if (!this.enabled || !this.employerFunding.configured()) return;
+    await this.forEachOrganisation('employer-funding-reconciliation', async () => {
+      const summary = await this.employerWallets.summary();
+      if (summary.status === 'ACTIVE') await this.employerWallets.reconcile();
+    });
   }
 
   private async forEachOrganisation(

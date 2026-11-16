@@ -2,6 +2,26 @@
 
 **Bounded context:** payments
 
+## Employer-first payroll funding
+
+The primary Payments experience is now **Company payroll funding**: company setup,
+verified funding-account status, pending/available/reserved balances, salary-payment
+review and an organisation ledger. No employer provider login is required for this
+new journey. **Partner activation is not yet enabled**; applications remain pending
+and no funding account or successful balance is simulated. See the
+[employer funding implementation and activation gates](./wallet/README.md).
+
+Direct-bank connection scaffolding and employer-managed provider setup have been
+removed. Employers cannot add provider keys or connect their own merchant account.
+Both Payments entry points now render the employer funding panel directly; the
+previous provider-dashboard funding, manual-payment and bank-file controls are no
+longer part of that interface. Employee bank details remain unchanged.
+
+The merchant-owned payout backend below is retained for compatibility with existing
+records and in-flight payments, including signed webhooks and reconciliation. It is
+not the employer funding wallet or the onboarding route for new employers. No
+payment history, stored account data or subscription payment integration was deleted.
+
 Worker payments and salary payouts (PRD PAY-07, PAY-12) plus the provider
 payout account used to move money in-platform.
 
@@ -88,9 +108,12 @@ payoutsService.reconcileStalePayouts();
 | `API_PREFIX` | API path prefix (default `api/v1`). |
 | `SCHEDULER_ENABLED` | Enables reconciliation and other background jobs. |
 
-Connect the payout account with `PUT /payments/payout-account` (step-up,
-`settings:update`). Paystack webhook signatures use the account secret key;
-Flutterwave requires the `verif-hash` secret to be supplied when connecting.
+`GET /payments/payout-options`, `PUT /payments/payout-account` and
+`DELETE /payments/payout-account` have been removed. There is no customer-facing
+provider-credential setup/replacement/disconnection API. Existing credentials are
+retained solely for legacy compatibility and reconciliation; any necessary key
+recovery must follow a reviewed operational procedure. Paystack webhook signatures
+use the retained account secret key; Flutterwave uses its retained `verif-hash` secret.
 
 ## Operational notes
 

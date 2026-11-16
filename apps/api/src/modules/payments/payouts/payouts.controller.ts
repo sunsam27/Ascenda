@@ -1,14 +1,11 @@
 import {
-  Body,
   Controller,
-  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
-  Put,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -20,7 +17,6 @@ import { AuthGuard } from '@nestjs/passport';
 import { PermissionScope } from '@ascenda/types';
 import { StepUpGuard } from '../../../common/auth/step-up.guard';
 import { RequirePermission } from '../../../common/rbac/permission.decorator';
-import { SavePayoutAccountDto } from '../dto/payment.dto';
 import { PayoutsService } from './payouts.service';
 
 @ApiTags('payments')
@@ -29,17 +25,6 @@ import { PayoutsService } from './payouts.service';
 @UseGuards(AuthGuard('jwt'))
 export class PayoutsController {
   constructor(private readonly payouts: PayoutsService) {}
-
-  @Get('payout-options')
-  @ApiOperation({ summary: 'List payout providers and supported currencies' })
-  @RequirePermission({
-    resource: 'payments',
-    action: 'read',
-    scope: PermissionScope.ORGANISATION,
-  })
-  options() {
-    return this.payouts.getOptions();
-  }
 
   @Get('payout-account')
   @ApiOperation({ summary: 'Get the organisation payout account (masked)' })
@@ -52,20 +37,6 @@ export class PayoutsController {
     return { account: await this.payouts.getAccount() };
   }
 
-  @Put('payout-account')
-  @UseGuards(StepUpGuard)
-  @ApiOperation({
-    summary: 'Connect or replace the organisation payout account (step-up)',
-  })
-  @RequirePermission({
-    resource: 'settings',
-    action: 'update',
-    scope: PermissionScope.ORGANISATION,
-  })
-  save(@Body() dto: SavePayoutAccountDto) {
-    return this.payouts.saveAccount(dto);
-  }
-
   @Post('payout-account/balance')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh the provider wallet balance' })
@@ -76,19 +47,6 @@ export class PayoutsController {
   })
   refreshBalance() {
     return this.payouts.refreshBalance();
-  }
-
-  @Delete('payout-account')
-  @UseGuards(StepUpGuard)
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Disconnect the payout account (step-up)' })
-  @RequirePermission({
-    resource: 'settings',
-    action: 'update',
-    scope: PermissionScope.ORGANISATION,
-  })
-  disconnect(): Promise<void> {
-    return this.payouts.disconnectAccount();
   }
 
   @Get('batches/:id/payouts')

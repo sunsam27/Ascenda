@@ -40,6 +40,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 -- Audit log is append-only for the app role (SECURITY.md §8).
 REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM ascenda_app;
 
+-- Re-applying baseline grants must not make the employer journal mutable.
+DO $$ BEGIN
+  IF to_regclass('public.payroll_wallet_ledger') IS NOT NULL THEN
+    REVOKE UPDATE, DELETE, TRUNCATE ON payroll_wallet_ledger, payroll_wallet_reservations FROM ascenda_app;
+    REVOKE DELETE, TRUNCATE ON payroll_wallets, payroll_wallet_deposits, payroll_wallet_attempts FROM ascenda_app;
+  END IF;
+END $$;
+
 -- ── Context helpers ──────────────────────────────────────────────────────────
 -- Set per transaction by PrismaService. `true` = missing_ok, returns NULL when
 -- unset so policies simply match nothing.

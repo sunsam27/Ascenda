@@ -67,47 +67,6 @@
 .panelMeta { font-size: var(--text-body-sm); color: var(--color-text-muted); overflow-wrap: anywhere; }
 .workerIdentity { display: flex; flex-direction: column; gap: var(--space-1); }
 .panelActions { display: flex; gap: var(--space-2); flex: 0 0 auto; flex-wrap: wrap; }
-.payoutAccountCard {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3) var(--space-4);
-  min-width: 0;
-  padding: var(--space-4) var(--space-5);
-  overflow-wrap: anywhere;
-}
-.connectionDetails {
-  grid-column: 1 / -1;
-  min-width: 0;
-  max-width: 100%;
-  color: var(--color-text-muted);
-  font-size: var(--text-body-sm);
-}
-.connectionDetails > summary { cursor: pointer; width: fit-content; max-width: 100%; }
-.connectionDetails[open] { border-top: 1px solid var(--color-border); padding-top: var(--space-3); }
-.connectionFields { display: grid; gap: var(--space-2); margin: var(--space-3) 0 0; }
-.connectionFields > div { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: var(--space-2); }
-.connectionFields dt { font-weight: var(--weight-semibold); }
-.connectionFields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-.fundingPanel {
-  grid-column: 1 / -1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
-}
-.fundingPanel p { margin: 0; }
-.fundingWarning { font-size: var(--text-body-sm); font-weight: var(--weight-semibold); color: var(--color-text); }
-.fundingSteps { margin: 0; padding-left: var(--space-5); font-size: var(--text-body-sm); color: var(--color-text-secondary); }
-.fundingSteps li + li { margin-top: var(--space-2); }
-.fundingActions { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
-.fundingActions a { white-space: normal; text-decoration: none; }
-@media (max-width: 640px) {
-  .payoutAccountCard { grid-template-columns: minmax(0, 1fr); }
-  .connectionFields > div { grid-template-columns: minmax(0, 1fr); }
-}
 
 /* ── Forms ─────────────────────────────────────────────────────────────────── */
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); width: 100%; }
@@ -262,6 +221,3 @@
   .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .bandRow { grid-template-columns: 1fr; }
 }
-
-.payoutForm { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
-.payoutFormActions { display: flex; justify-content: flex-end; gap: var(--space-2); }
