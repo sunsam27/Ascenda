@@ -17,10 +17,13 @@ import {
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { Public } from '../../common/auth/public.decorator';
+import { RequirePermission } from '../../common/rbac/permission.decorator';
+import { PermissionScope } from '@ascenda/types';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { writeAuthCookies } from '../identity-access/auth-cookies';
 import { BillingService } from './billing.service';
 import { InitializeCheckoutDto, VerifyPaymentDto } from './dto/checkout.dto';
+import { InitializeRenewalDto } from './dto/renew.dto';
 
 @ApiTags('billing')
 @Controller('billing')
@@ -37,6 +40,16 @@ export class BillingController {
   @ApiOperation({ summary: 'Initialise a payment checkout session' })
   checkout(@Body() dto: InitializeCheckoutDto) {
     return this.service.initialize(dto.registrationId, dto.provider);
+  }
+
+  /** Owner-only: start a manual renewal checkout; nothing is charged automatically. */
+  @Post('renew')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @RequirePermission({ resource: 'settings', action: 'update', scope: PermissionScope.ORGANISATION })
+  @ApiOperation({ summary: 'Initialise a manual subscription renewal checkout' })
+  renew(@Body() dto: InitializeRenewalDto) {
+    return this.service.initializeRenewal(dto.provider);
   }
 
   /** Public: confirm payment and sign the new owner in. */

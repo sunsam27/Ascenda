@@ -479,6 +479,9 @@ model User {
   notifications    Notification[] @relation("NotificationRecipient")
   policyRecipients PolicyRecipient[]
   announcementRecipients AnnouncementRecipient[]
+  platformPlanEvents PlatformPlanEvent[]
+  featurePolicyChanges PlanFeaturePolicy[]
+  organisationAccessChanges OrganisationAccessControl[]
 
   @@map("users")
 }
@@ -498,6 +501,7 @@ model Membership {
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
   user         User         @relation(fields: [userId], references: [id])
+  planPriceEmails PlanPriceEmail[]
 
   @@unique([organisationId, userId])
   @@index([organisationId])
@@ -558,6 +562,9 @@ model Organisation {
   notifications       Notification[]
   subscription        Subscription?
   payrollWallet       PayrollWallet?
+  planPriceEmails     PlanPriceEmail[]
+  accessControl OrganisationAccessControl?
+  lifecycleEvents     SubscriptionLifecycleEvent[]
 
   @@map("organisations")
 }
@@ -1858,9 +1865,94 @@ model Plan {
   updatedAt       DateTime      @updatedAt
 
   subscriptions Subscription[]
+  platformEvents PlatformPlanEvent[]
+  featurePolicy PlanFeaturePolicy?
 
   @@index([isActive])
   @@map("plans")
+}
+
+/// Platform-only immutable catalogue audit/outbox; no customer payroll data.
+model PlanFeaturePolicy {
+  planId String @id
+  enabledFeatures Json
+  trialDays Int @default(0)
+  trialFeatures Json @default("{}")
+  defaultDemoDays Int @default(14)
+  updatedBy String
+  updatedAt DateTime @default(now()) @db.Timestamptz(6)
+  plan Plan @relation(fields: [planId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actor User @relation(fields: [updatedBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  @@map("plan_feature_policies")
+}
+
+model OrganisationAccessControl {
+  organisationId String @id
+  manualState String @default("AUTO")
+  manualUntil DateTime? @db.Timestamptz(6)
+  demoFeatures Json @default("{}")
+  demoExpiresAt DateTime? @db.Timestamptz(6)
+  trialStartedAt DateTime? @db.Timestamptz(6)
+  updatedBy String
+  updatedAt DateTime @default(now()) @db.Timestamptz(6)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actor User @relation(fields: [updatedBy], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  @@map("organisation_access_controls")
+}
+
+/// Idempotent lifecycle markers only; never employee or salary data.
+model SubscriptionLifecycleEvent {
+  id String @id
+  organisationId String
+  periodEnd DateTime @db.Timestamptz(6)
+  kind String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  @@unique([organisationId, periodEnd, kind])
+  @@map("subscription_lifecycle_events")
+}
+
+model PlatformPlanEvent {
+  id String @id @default(uuid())
+  actorId String
+  planId String
+  action String
+  details Json
+  notificationPayload Json?
+  audienceOrganisationIds String[] @default([])
+  fanoutCursor Int @default(0)
+  fanoutSkipped Int @default(0)
+  fanoutCompletedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  actor User @relation(fields: [actorId], references: [id])
+  plan Plan @relation(fields: [planId], references: [id])
+  emails PlanPriceEmail[]
+  @@index([fanoutCompletedAt, createdAt], map: "platform_plan_events_pending_idx")
+  @@map("platform_plan_events")
+}
+
+/// Tenant-isolated, retryable email intent; never stores email contents in logs.
+model PlanPriceEmail {
+  id String @id @default(uuid())
+  eventId String
+  organisationId String
+  recipientUserId String
+  payload Json
+  status String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now()) @db.Timestamptz(6)
+  claimedAt DateTime? @db.Timestamptz(6)
+  claimToken String?
+  lastErrorCode String?
+  sentAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  event PlatformPlanEvent @relation(fields: [eventId], references: [id])
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  membership Membership @relation(fields: [organisationId, recipientUserId], references: [organisationId, userId])
+  @@unique([eventId, organisationId, recipientUserId])
+  @@index([organisationId, status, nextAttemptAt], map: "plan_price_emails_due_idx")
+  @@map("plan_price_emails")
 }
 
 // ─── Subscriptions (one active plan per organisation) ────────────────────────

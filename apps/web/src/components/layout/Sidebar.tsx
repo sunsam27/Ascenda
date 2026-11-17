@@ -20,8 +20,10 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  ShieldCheck,
 } from 'lucide-react';
 import styles from './Sidebar.module.css';
+import { useSubscriptionAccess } from '@/lib/subscription-access';
 
 const navItems = [
   { href: '/dashboard',   label: 'Dashboard',  icon: LayoutDashboard },
@@ -59,9 +61,11 @@ export function SidebarContent() {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useCurrentUser();
+  const {access}=useSubscriptionAccess();
 
   const isSelf = Boolean(user?.role && SELF_ROLES.has(user.role));
-  const items = isSelf ? selfNavItems : navItems;
+  const featureByPath:Record<string,'people'|'timeLeave'|'documents'|'payroll'|'payments'|'analytics'>={'/people':'people','/time-leave':'timeLeave','/documents':'documents','/payroll':'payroll','/payments':'payments','/analytics':'analytics'};
+  const items = (isSelf ? selfNavItems : navItems).filter(item=>!featureByPath[item.href]||access?.features[featureByPath[item.href]!]===true);
   // Self-service roles only ever see Settings when the org grants it; EMPLOYEE_
   // SELF has no `settings` grant, so hide the link to avoid a dead end.
   const showSettings = !isSelf;
@@ -115,6 +119,7 @@ export function SidebarContent() {
 
       {/* Bottom section */}
       <div className={styles.bottom}>
+        {user?.platformAdmin && <Link href="/admin" className={styles.navItem}><ShieldCheck size={20} strokeWidth={1.75} aria-hidden="true" /><span>Admin Console</span></Link>}
         {showSettings && (
           <Link href="/settings" className={`${styles.navItem} ${pathname.startsWith('/settings') ? styles.active : ''}`}>
             <Settings size={20} strokeWidth={1.75} aria-hidden="true" />

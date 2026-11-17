@@ -5,6 +5,8 @@
 
 // ── Enums ────────────────────────────────────────────────────────────────────
 export * from './payroll-wallet';
+export * from './analytics';
+export * from './subscription-access';
 
 export enum OrganisationType {
   CHURCH = 'CHURCH',

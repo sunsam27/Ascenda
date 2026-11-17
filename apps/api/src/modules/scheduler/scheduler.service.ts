@@ -9,6 +9,8 @@ import { SystemPrismaService } from './system-prisma.service';
 import { DocumentWorkflowsService } from '../documents/document-workflows.service';
 import { EmployerWalletService } from '../payments/wallet/wallet.service';
 import { EmployerFundingRegistry } from '../payments/wallet/wallet-provider';
+import { PlanPriceNotificationsService } from '../plans/plan-price-notifications.service';
+import { SubscriptionLifecycleService } from '../billing/lifecycle/subscription-lifecycle.service';
 
 /** 15 minutes, on the quarter hour. */
 const ESCALATION_CRON = '*/15 * * * *';
@@ -43,6 +45,8 @@ export class SchedulerService {
     private readonly documents: DocumentWorkflowsService,
     private readonly employerWallets: EmployerWalletService,
     private readonly employerFunding: EmployerFundingRegistry,
+    private readonly planPrices: PlanPriceNotificationsService,
+    private readonly subscriptions: SubscriptionLifecycleService,
   ) {
     this.enabled =
       `${this.config.get<string>('SCHEDULER_ENABLED') ?? ''}`.toLowerCase() ===
@@ -86,6 +90,35 @@ export class SchedulerService {
   async runDocumentMaintenance(): Promise<void> {
     if (!this.enabled) return;
     await this.forEachOrganisation('document-maintenance', () => this.documents.maintenance());
+  }
+
+  @Cron('* * * * *', { name: 'plan-price-notifications' })
+  async runPlanPriceNotifications(): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      await this.planPrices.fanOut(this.system);
+      await this.forEachOrganisation('plan-price-notifications', () => this.planPrices.deliverForCurrentOrganisation());
+    } catch {
+      this.logger.warn('Plan price notification pass deferred; check migration 04 and database availability');
+    }
+  }
+
+  /** Manual renewal reminders, past-due marking and fixed seven-day grace expiry. */
+  @Cron('11 * * * *', { name: 'subscription-lifecycle' })
+  async runSubscriptionLifecycle(): Promise<void> {
+    if (!this.enabled || !this.subscriptions.enabled()) return;
+    await this.forEachOrganisation('subscription-lifecycle', () =>
+      this.subscriptions.runForCurrentOrganisation(),
+    );
+  }
+
+  /** Finite demos and manual activations revert at their stored timestamp. */
+  @Cron('13 * * * *', { name: 'subscription-access-expiry' })
+  async runSubscriptionAccessExpiry(): Promise<void> {
+    if (!this.enabled || !this.subscriptions.enabled()) return;
+    await this.forEachOrganisation('subscription-access-expiry', () =>
+      this.subscriptions.expireOverridesForCurrentOrganisation(),
+    );
   }
 
   @Cron('3-59/10 * * * *', { name: 'employer-funding-reconciliation' })

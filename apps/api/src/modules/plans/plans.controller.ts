@@ -1,19 +1,11 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Patch,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/auth/public.decorator';
 import { PlatformAdminGuard } from '../../common/auth/platform-admin.guard';
 import { PlansService } from './plans.service';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
+import { StepUpGuard } from '../../common/auth/step-up.guard';
 
 @ApiTags('plans')
 @Controller('plans')
@@ -40,7 +32,7 @@ export class PlansController {
   }
 
   @Post()
-  @UseGuards(PlatformAdminGuard)
+  @UseGuards(PlatformAdminGuard, StepUpGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a plan' })
   create(@Body() dto: CreatePlanDto) {
@@ -48,7 +40,7 @@ export class PlansController {
   }
 
   @Patch(':id')
-  @UseGuards(PlatformAdminGuard)
+  @UseGuards(PlatformAdminGuard, StepUpGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a plan (name, price, limits, features)' })
   update(@Param('id') id: string, @Body() dto: UpdatePlanDto) {
@@ -56,7 +48,7 @@ export class PlansController {
   }
 
   @Delete(':id')
-  @UseGuards(PlatformAdminGuard)
+  @UseGuards(PlatformAdminGuard, StepUpGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Archive a plan' })
   archive(@Param('id') id: string) {

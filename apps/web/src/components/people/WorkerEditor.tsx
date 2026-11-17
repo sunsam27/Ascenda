@@ -17,6 +17,7 @@ import { useOrganisation } from '@/lib/useOrganisation';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 import CompensationPanel from './CompensationPanel';
 import BankAccountsPanel from './BankAccountsPanel';
+import { useSubscriptionAccess } from '@/lib/subscription-access';
 import styles from './people.module.css';
 
 interface Draft {
@@ -145,6 +146,7 @@ export default function WorkerEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { organisation } = useOrganisation();
+  const {access}=useSubscriptionAccess();
   const { user } = useCurrentUser();
   const canConfigureRouting = user?.role === 'OWNER' || user?.role === 'PAYROLL_ADMINISTRATOR';
 
@@ -432,7 +434,7 @@ export default function WorkerEditor({
 
             {worker && (
               <>
-                <p className={styles.sectionLabel}>Compensation</p>
+                {access?.features.payroll && <><p className={styles.sectionLabel}>Compensation</p>
                 <div className={styles.fieldFull}>
                   <CompensationPanel
                     worker={worker}
@@ -440,6 +442,7 @@ export default function WorkerEditor({
                   />
                 </div>
 
+                </>}
                 <p className={styles.sectionLabel}>Bank details</p>
                 <div className={styles.fieldFull}>
                   <BankAccountsPanel

@@ -100,8 +100,8 @@ export default function LoginForm() {
       </div>
 
       <div className={styles.header}>
-        <h1 className={styles.title}>Welcome back</h1>
-        <p className={styles.subtitle}>Sign in to your workspace</p>
+        <h1 className={styles.title}>{nextPath?.startsWith('/admin') ? 'Ascenda Admin' : 'Welcome back'}</h1>
+        <p className={styles.subtitle}>{nextPath?.startsWith('/admin') ? 'Sign in with your platform administrator account' : 'Sign in to your workspace'}</p>
       </div>
 
       {error && (

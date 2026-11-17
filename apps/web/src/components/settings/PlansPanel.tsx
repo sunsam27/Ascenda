@@ -24,6 +24,8 @@ import {
   type UpdatePlanDto,
 } from '@ascenda/types';
 import styles from './PlansPanel.module.css';
+import StepUpDialog from '@/components/payroll/StepUpDialog';
+import { toMinorUnits, toMajorUnits, formatMinorUnits } from '@/lib/money';
 
 type LoadState = 'loading' | 'ready' | 'forbidden' | 'error';
 
@@ -72,7 +74,7 @@ function toDraft(plan: PlanSummary): Draft {
     code: plan.code,
     name: plan.name,
     description: plan.description ?? '',
-    price: String(plan.priceMinorUnits / 100),
+    price: toMajorUnits(plan.priceMinorUnits),
     currency: plan.currency,
     billingPeriod: plan.billingPeriod,
     minHeadcount: plan.minHeadcount != null ? String(plan.minHeadcount) : '',
@@ -96,7 +98,7 @@ function draftToPayload(draft: Draft): CreatePlanDto {
     code: draft.code.trim().toLowerCase(),
     name: draft.name.trim(),
     description: draft.description.trim() || undefined,
-    priceMinorUnits: Math.round((Number.parseFloat(draft.price) || 0) * 100),
+    priceMinorUnits: toMinorUnits(draft.price)!,
     currency: draft.currency.trim().toUpperCase() || 'NGN',
     billingPeriod: draft.billingPeriod,
     minHeadcount: optionalInt(draft.minHeadcount),
@@ -113,11 +115,7 @@ function draftToPayload(draft: Draft): CreatePlanDto {
 
 function formatPrice(plan: PlanSummary): string {
   if (plan.isFree || plan.priceMinorUnits === 0) return 'Free';
-  return new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency: plan.currency,
-    minimumFractionDigits: 0,
-  }).format(plan.priceMinorUnits / 100);
+  return formatMinorUnits(plan.priceMinorUnits, plan.currency);
 }
 
 function sizeLabel(plan: PlanSummary): string {
@@ -139,6 +137,10 @@ export default function PlansPanel() {
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [pending, setPending] = useState<
+    { kind: 'save'; id?: string } | { kind: 'archive'; plan: PlanSummary } | null
+  >(null);
 
   function load() {
     setState('loading');
@@ -149,11 +151,7 @@ export default function PlansPanel() {
         setState('ready');
       })
       .catch((err) => {
-        setState(
-          axios.isAxiosError(err) && err.response?.status === 403
-            ? 'forbidden'
-            : 'error',
-        );
+        setState(axios.isAxiosError(err) && err.response?.status === 403 ? 'forbidden' : 'error');
       });
   }
 
@@ -181,23 +179,53 @@ export default function PlansPanel() {
     setError('');
   }
 
-  async function save(id?: string) {
+  function requestSave(id?: string) {
     if (!draft.name.trim() || !draft.code.trim()) {
       setError('Code and name are required.');
       return;
     }
+    const amount = toMinorUnits(draft.price);
+    if (amount === null || amount > 2147483647) {
+      setError('Enter a valid non-negative price with at most two decimal places.');
+      return;
+    }
+    const existing = plans.find((p) => p.id === id);
+    const priceChanged =
+      existing &&
+      (existing.priceMinorUnits !== amount ||
+        existing.currency !== draft.currency.trim().toUpperCase() ||
+        existing.billingPeriod !== draft.billingPeriod);
+    if (
+      priceChanged &&
+      !window.confirm(
+        'This changes pricing for future checkouts and automatically queues email notices for active Owners of affected organisations. Paid periods and past payments are unchanged. Continue?',
+      )
+    )
+      return;
+    setPending({ kind: 'save', id });
+  }
+
+  async function save(token: string, id?: string) {
     setBusy(true);
     setError('');
     try {
       const payload = draftToPayload(draft);
       if (id) {
-        const { data } = await api.patch<PlanSummary>(`/plans/${id}`, payload as UpdatePlanDto);
+        const { data } = await api.patch<
+          PlanSummary & { priceChangeNotification?: { organisationCount: number } }
+        >(`/plans/${id}`, payload as UpdatePlanDto, { headers: { 'x-step-up-token': token } });
         setPlans((prev) => prev.map((p) => (p.id === id ? data : p)));
-      } else {
-        const { data } = await api.post<PlanSummary>('/plans', payload);
-        setPlans((prev) =>
-          [...prev, data].sort((a, b) => a.sortOrder - b.sortOrder),
+        setNotice(
+          data.priceChangeNotification
+            ? `Plan saved. Email notices queued for ${data.priceChangeNotification.organisationCount} affected organisations. Delivery requires the scheduler and configured SMTP; this does not charge customers.`
+            : 'Plan saved.',
         );
+      } else {
+        const { data } = await api.post<PlanSummary>('/plans', payload, {
+          headers: { 'x-step-up-token': token },
+        });
+        setNotice('Plan created.');
+        setPlans((prev) => [...prev, data].sort((a, b) => a.sortOrder - b.sortOrder));
       }
       cancel();
     } catch (err) {
@@ -207,16 +235,23 @@ export default function PlansPanel() {
     }
   }
 
-  async function archive(plan: PlanSummary) {
+  function requestArchive(plan: PlanSummary) {
     const keep = window.confirm(
       `Archive “${plan.name}”? It will stop appearing for new signups; existing subscribers are unaffected.`,
     );
     if (!keep) return;
+    setPending({ kind: 'archive', plan });
+  }
+
+  async function archive(token: string, plan: PlanSummary) {
     setBusy(true);
     setError('');
     try {
-      const { data } = await api.delete<PlanSummary>(`/plans/${plan.id}`);
+      const { data } = await api.delete<PlanSummary>(`/plans/${plan.id}`, {
+        headers: { 'x-step-up-token': token },
+      });
       setPlans((prev) => prev.map((p) => (p.id === plan.id ? data : p)));
+      setNotice('Plan archived.');
     } catch (err) {
       setError(messageFrom(err, 'Could not archive the plan.'));
     } finally {
@@ -232,9 +267,7 @@ export default function PlansPanel() {
     return (
       <div className={`glass ${styles.message}`}>
         <p className={styles.messageTitle}>Platform administrators only</p>
-        <p className={styles.muted}>
-          Your account does not have permission to manage plans.
-        </p>
+        <p className={styles.muted}>Your account does not have permission to manage plans.</p>
       </div>
     );
   }
@@ -250,6 +283,24 @@ export default function PlansPanel() {
 
   return (
     <div className={styles.wrapper}>
+      {notice && <p role="status">{notice}</p>}
+      <StepUpDialog
+        open={pending !== null}
+        title="Confirm catalogue change"
+        description="Confirm your password to save this platform-wide change. Pricing changes are audited and queue email notices for affected organisations."
+        onCancel={() => {
+          if (!busy) setPending(null);
+        }}
+        onVerified={async (token) => {
+          if (!pending) return;
+          try {
+            if (pending.kind === 'save') await save(token, pending.id);
+            else await archive(token, pending.plan);
+          } finally {
+            setPending(null);
+          }
+        }}
+      />
       {error && (
         <p className={styles.error} role="alert">
           {error}
@@ -270,7 +321,7 @@ export default function PlansPanel() {
           setDraft={setDraft}
           busy={busy}
           onCancel={cancel}
-          onSave={() => save()}
+          onSave={() => requestSave()}
           onArchive={null}
           showCode
         />
@@ -287,8 +338,8 @@ export default function PlansPanel() {
                   setDraft={setDraft}
                   busy={busy}
                   onCancel={cancel}
-                  onSave={() => save(plan.id)}
-                  onArchive={plan.isActive ? () => archive(plan) : null}
+                  onSave={() => requestSave(plan.id)}
+                  onArchive={plan.isActive ? () => requestArchive(plan) : null}
                 />
               </li>
             );
@@ -301,26 +352,19 @@ export default function PlansPanel() {
             <li key={plan.id} className={`glass ${styles.item}`}>
               <div className={styles.itemMain}>
                 <div className={styles.itemHeader}>
-                  <span
-                    className={`${styles.planIcon} ${tilt}`}
-                    aria-hidden="true"
-                  >
+                  <span className={`${styles.planIcon} ${tilt}`} aria-hidden="true">
                     <Icon size={20} strokeWidth={2} />
                   </span>
                   <span className={styles.planName}>{plan.name}</span>
                   <span className={styles.planCode}>{plan.code}</span>
                   {plan.isFree && <span className={styles.freeTag}>Free</span>}
-                  {!plan.isActive && (
-                    <span className={styles.archivedTag}>Archived</span>
-                  )}
+                  {!plan.isActive && <span className={styles.archivedTag}>Archived</span>}
                 </div>
                 <p className={styles.priceRow}>
                   <span className={styles.price}>{formatPrice(plan)}</span>
                   {!plan.isFree && (
                     <span className={styles.period}>
-                      {plan.billingPeriod === BillingPeriod.ANNUALLY
-                        ? '/ year'
-                        : '/ month'}
+                      {plan.billingPeriod === BillingPeriod.ANNUALLY ? '/ year' : '/ month'}
                     </span>
                   )}
                   <span className={styles.dot}>·</span>
@@ -330,11 +374,7 @@ export default function PlansPanel() {
                   <ul className={styles.features} role="list">
                     {plan.features.map((feature) => (
                       <li key={feature}>
-                        <CircleCheckBig
-                          size={15}
-                          strokeWidth={2.2}
-                          aria-hidden="true"
-                        />
+                        <CircleCheckBig size={15} strokeWidth={2.2} aria-hidden="true" />
                         {feature}
                       </li>
                     ))}
@@ -421,9 +461,7 @@ function PlanEditor({
           <select
             className={styles.input}
             value={draft.billingPeriod}
-            onChange={(e) =>
-              set('billingPeriod', e.currentTarget.value as BillingPeriod)
-            }
+            onChange={(e) => set('billingPeriod', e.currentTarget.value as BillingPeriod)}
           >
             <option value={BillingPeriod.ANNUALLY}>Annually</option>
             <option value={BillingPeriod.MONTHLY}>Monthly</option>
@@ -496,12 +534,7 @@ function PlanEditor({
       </label>
 
       <div className={styles.editorActions}>
-        <button
-          type="button"
-          className={styles.cancelButton}
-          onClick={onCancel}
-          disabled={busy}
-        >
+        <button type="button" className={styles.cancelButton} onClick={onCancel} disabled={busy}>
           <X size={15} strokeWidth={2} />
           Cancel
         </button>
@@ -515,12 +548,7 @@ function PlanEditor({
             Archive
           </button>
         )}
-        <button
-          type="button"
-          className={styles.saveButton}
-          onClick={onSave}
-          disabled={busy}
-        >
+        <button type="button" className={styles.saveButton} onClick={onSave} disabled={busy}>
           {busy ? (
             <Loader2 className={styles.spin} size={15} />
           ) : (
@@ -535,8 +563,7 @@ function PlanEditor({
 
 function messageFrom(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err)) {
-    const message = (err.response?.data as { message?: string | string[] })
-      ?.message;
+    const message = (err.response?.data as { message?: string | string[] })?.message;
     if (Array.isArray(message)) return message[0] ?? fallback;
     if (typeof message === 'string') return message;
   }

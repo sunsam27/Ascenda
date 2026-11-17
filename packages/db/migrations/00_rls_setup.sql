@@ -49,6 +49,20 @@ DO $$ BEGIN
 END $$;
 
 -- ── Context helpers ──────────────────────────────────────────────────────────
+DO $$ BEGIN
+  IF to_regclass('public.plan_feature_policies') IS NOT NULL THEN
+    REVOKE DELETE,TRUNCATE ON plan_feature_policies,organisation_access_controls FROM ascenda_app;
+  END IF;
+END $$;
+
+-- Preserve the platform audit/email privileges when baseline grants are re-applied.
+DO $$ BEGIN
+  IF to_regclass('public.platform_plan_events') IS NOT NULL THEN
+    REVOKE UPDATE,DELETE,TRUNCATE ON platform_plan_events FROM ascenda_app;
+    REVOKE DELETE,TRUNCATE ON plan_price_emails FROM ascenda_app;
+  END IF;
+END $$;
+
 -- Set per transaction by PrismaService. `true` = missing_ok, returns NULL when
 -- unset so policies simply match nothing.
 CREATE OR REPLACE FUNCTION current_org_id() RETURNS text

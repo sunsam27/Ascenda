@@ -38,6 +38,7 @@ import {
   type ProvisionedWorkspace,
 } from '../registrations/registrations.service';
 import { VerifyPaymentDto } from './dto/checkout.dto';
+import { SubscriptionLifecycleService } from './lifecycle/subscription-lifecycle.service';
 
 const PAYSTACK_BASE = 'https://api.paystack.co';
 const FLUTTERWAVE_BASE = 'https://api.flutterwave.com/v3';
@@ -58,6 +59,7 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly registrations: RegistrationsService,
+    private readonly lifecycle: SubscriptionLifecycleService,
   ) {}
 
   /** Authenticated: current subscription + most recent charge attempts. */
@@ -186,6 +188,82 @@ export class BillingService {
     };
   }
 
+  /**
+   * Authenticated: start a hosted checkout for the current paid subscription.
+   * This is a manual renewal charge only; nothing is debited automatically.
+   */
+  async initializeRenewal(provider: PaymentProvider): Promise<CheckoutSession> {
+    if (
+      provider !== PaymentProvider.PAYSTACK &&
+      provider !== PaymentProvider.FLUTTERWAVE
+    ) {
+      throw new BadRequestException('Unsupported payment provider');
+    }
+    if (!this.paymentsEnabled()) {
+      throw new BadRequestException(
+        'Payments are temporarily disabled — contact Ascenda support to renew.',
+      );
+    }
+    const ctx = getRequestContext();
+    if (!ctx?.organisationId || !ctx.userEmail) {
+      throw new UnauthorizedException('A signed-in Owner context is required');
+    }
+    const organisationId = ctx.organisationId;
+    const subscription = await this.prisma.withContext(
+      { organisationId },
+      (tx) =>
+        tx.subscription.findUnique({
+          where: { organisationId },
+          include: { plan: true },
+        }),
+    );
+    const plan = subscription?.plan;
+    if (!subscription || !plan?.isActive || plan.isFree || plan.priceMinorUnits === 0) {
+      throw new BadRequestException('This workspace has no paid plan to renew');
+    }
+
+    const reference = `REN-${randomUUID().slice(0, 8).toUpperCase()}-${Date.now()}`;
+    await this.prisma.billingTransaction.create({
+      data: {
+        provider: provider as unknown as DbPaymentProvider,
+        reference,
+        amountMinorUnits: plan.priceMinorUnits,
+        currency: plan.currency,
+        status: 'PENDING',
+        payerEmail: ctx.userEmail,
+        planId: plan.id,
+        organisationId,
+        subscriptionId: subscription.id,
+      },
+    });
+
+    const callbackUrl = `${this.registrations.webAppUrl}/signup/callback`;
+    const authorizationUrl =
+      provider === PaymentProvider.PAYSTACK
+        ? await this.paystackInitialize({
+            email: ctx.userEmail,
+            amountMinorUnits: plan.priceMinorUnits,
+            reference,
+            callbackUrl,
+          })
+        : await this.flutterwaveInitialize({
+            email: ctx.userEmail,
+            name: ctx.userEmail,
+            amountMinorUnits: plan.priceMinorUnits,
+            currency: plan.currency,
+            reference,
+            callbackUrl,
+          });
+
+    return {
+      provider,
+      reference,
+      authorizationUrl,
+      amountMinorUnits: plan.priceMinorUnits,
+      currency: plan.currency,
+    };
+  }
+
   /** Public: confirm a payment after the browser returns from the gateway. */
   async verify(dto: VerifyPaymentDto): Promise<PaymentOutcome> {
     const transaction = await this.prisma.billingTransaction.findUnique({
@@ -196,8 +274,11 @@ export class BillingService {
     }
 
     // Idempotent: already confirmed.
-    if (transaction.status === 'COMPLETED' && transaction.registrationId) {
-      return this.completeFromTransaction(dto.reference);
+    if (transaction.status === 'COMPLETED') {
+      if (transaction.registrationId) return this.completeFromTransaction(dto.reference);
+      if (transaction.organisationId && transaction.subscriptionId) {
+        return this.completeRenewalFromTransaction(dto.reference);
+      }
     }
 
     const result =
@@ -293,6 +374,90 @@ export class BillingService {
 
   // ── Internals ──────────────────────────────────────────────────────────────
 
+  /** A renewal transaction is confirmed only by provider verification/webhook data. */
+  private async confirmRenewalPayment(
+    transaction: {
+      reference: string;
+      status: string;
+      amountMinorUnits: number;
+      organisationId: string | null;
+      subscriptionId: string | null;
+      planId: string | null;
+      providerTxnId: string | null;
+    },
+    info: { providerTxnId?: string; raw?: unknown; amountMinorUnits?: number },
+  ): Promise<PaymentOutcome> {
+    if (transaction.status === 'COMPLETED') {
+      return this.completeRenewalFromTransaction(transaction.reference);
+    }
+    if (
+      info.amountMinorUnits !== undefined &&
+      info.amountMinorUnits !== transaction.amountMinorUnits
+    ) {
+      await this.prisma.billingTransaction.update({
+        where: { reference: transaction.reference },
+        data: { status: 'FAILED', raw: (info.raw ?? undefined) as never },
+      });
+      throw new BadRequestException('Payment amount does not match the plan price');
+    }
+    const plan = transaction.planId
+      ? await this.prisma.plan.findUnique({ where: { id: transaction.planId } })
+      : null;
+    if (!plan?.isActive || plan.isFree || plan.priceMinorUnits === 0) {
+      await this.prisma.billingTransaction.update({
+        where: { reference: transaction.reference },
+        data: { status: 'FAILED', raw: (info.raw ?? undefined) as never },
+      });
+      throw new BadRequestException('The paid plan for this renewal is no longer available');
+    }
+
+    await this.lifecycle.restoreAfterVerifiedPayment({
+      organisationId: transaction.organisationId!,
+      subscriptionId: transaction.subscriptionId!,
+      planId: plan.id,
+      providerTxnId: info.providerTxnId ?? transaction.providerTxnId ?? undefined,
+      raw: info.raw,
+    });
+    await this.prisma.billingTransaction.update({
+      where: { reference: transaction.reference },
+      data: {
+        status: 'COMPLETED',
+        providerTxnId: info.providerTxnId ?? transaction.providerTxnId,
+        paidAt: new Date(),
+        raw: (info.raw ?? undefined) as never,
+      },
+    });
+    return {
+      status: 'COMPLETED',
+      completed: true,
+      redirectTo: '/settings/subscription',
+      plan: toPlanSummary(plan),
+    };
+  }
+
+  private async completeRenewalFromTransaction(reference: string): Promise<PaymentOutcome> {
+    const transaction = await this.prisma.billingTransaction.findUnique({
+      where: { reference },
+    });
+    if (!transaction?.organisationId) {
+      return { status: 'COMPLETED', completed: true, redirectTo: '/settings/subscription' };
+    }
+    const subscription = await this.prisma.withContext(
+      { organisationId: transaction.organisationId },
+      (tx) =>
+        tx.subscription.findUnique({
+          where: { organisationId: transaction.organisationId! },
+          include: { plan: true },
+        }),
+    );
+    return {
+      status: 'COMPLETED',
+      completed: true,
+      redirectTo: '/settings/subscription',
+      plan: subscription?.plan ? toPlanSummary(subscription.plan) : undefined,
+    };
+  }
+
   private async completeFromTransaction(
     reference: string,
   ): Promise<PaymentOutcome> {
@@ -341,6 +506,9 @@ export class BillingService {
     });
     if (!transaction) {
       throw new NotFoundException('Payment reference not found');
+    }
+    if (transaction.organisationId && transaction.subscriptionId) {
+      return this.confirmRenewalPayment(transaction, info);
     }
     if (transaction.status === 'COMPLETED' && transaction.registrationId) {
       return this.completeFromTransaction(reference);

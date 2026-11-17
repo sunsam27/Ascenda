@@ -9,6 +9,7 @@ const ACCESS_COOKIE = 'ascenda_at';
 const SESSION_COOKIE = 'ascenda_session';
 
 const PROTECTED_PREFIXES = [
+  '/admin',
   '/dashboard',
   '/me',
   '/people',
@@ -45,6 +46,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/admin/:path*',
     '/dashboard/:path*',
     '/me/:path*',
     '/people/:path*',

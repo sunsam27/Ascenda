@@ -16,7 +16,9 @@ import { PrismaClient } from '@ascenda/db';
  *
  * Scope: use ONLY for cross-tenant orchestration (listing org ids / picking an
  * actor). Never read tenant row data through this client and never hand its
- * results to a user; per-tenant work then runs through the normal services so
+ * results to a user. The plan-email worker additionally orchestrates the global
+ * platform_plan_events outbox (public plan pricing and organisation IDs only),
+ * never tenant email rows or recipient contact details. Per-tenant work runs through the normal services so
  * RLS, auditing and notifications all apply.
  */
 @Injectable()

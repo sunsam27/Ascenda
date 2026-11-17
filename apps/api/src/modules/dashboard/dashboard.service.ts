@@ -14,6 +14,8 @@ import {
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { resolveReadScope, scopeWhereRestricts } from '../../common/rbac/worker-scope';
 import { getHolidaysForMonth } from './ng-holidays';
+import { SubscriptionAccessService } from '../billing/access/access.service';
+import { getRequestContext } from '../../common/context/request-context';
 import {
   addDays,
   calendarDateIn,
@@ -82,10 +84,12 @@ function nextBirthday(dob: Date, today: CalendarDate): CalendarDate {
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService,private readonly subscriptionAccess:SubscriptionAccessService) {}
 
   /** Headline KPI numbers for the current organisation. */
   async getSummary(): Promise<DashboardSummary> {
+    const ctx=getRequestContext();
+    const canReadPayroll=!this.subscriptionAccess.enabled()||!!ctx?.organisationId&&await this.subscriptionAccess.canUse(ctx.organisationId,'payroll',ctx.userId);
     return this.prisma.withRequestContext(async (tx) => {
       const organisation = await tx.organisation.findFirst({
         select: { timezone: true },
@@ -122,7 +126,7 @@ export class DashboardService {
           }),
           // Payroll totals are organisation-level and not team-scoped, so they
           // are only surfaced to organisation-wide callers.
-          scope === PermissionScope.ORGANISATION
+          canReadPayroll && scope === PermissionScope.ORGANISATION
             ? tx.payrollRun.findFirst({
                 orderBy: [{ periodEnd: 'desc' }, { createdAt: 'desc' }],
               })

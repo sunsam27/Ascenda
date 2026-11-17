@@ -154,7 +154,7 @@ export class IdentityAccessService {
     return {
       ...tokens,
       user,
-      redirectTo: homePathForRole(membership?.role),
+      redirectTo: user.isPlatformAdmin ? '/admin' : homePathForRole(membership?.role),
     };
   }
 

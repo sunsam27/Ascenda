@@ -6,6 +6,7 @@ import MobileNav from './MobileNav';
 import TopBar from './TopBar';
 import SessionRefresher from '@/components/auth/SessionRefresher';
 import styles from './AppShell.module.css';
+import { SubscriptionAccessProvider, SubscriptionStatusBanner, WorkspaceAccessBoundary } from '@/lib/subscription-access';
 
 export type ShellTheme = 'soft' | 'glass' | 'dark';
 
@@ -33,7 +34,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className={`app-bg ${styles.shell}`} data-theme={theme}>
+    <SubscriptionAccessProvider><div className={`app-bg ${styles.shell}`} data-theme={theme}>
       <SessionRefresher />
       <Sidebar />
       <MobileNav open={menuOpen} onClose={() => setMenuOpen(false)} />
@@ -45,9 +46,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           onToggleTheme={toggleTheme}
         />
         <main className={styles.content} id="main-content">
-          {children}
+          <SubscriptionStatusBanner />
+          <WorkspaceAccessBoundary>{children}</WorkspaceAccessBoundary>
         </main>
       </div>
-    </div>
+    </div></SubscriptionAccessProvider>
   );
 }

@@ -148,6 +148,21 @@ export class MailerService implements OnModuleInit {
     }
   }
 
+  /** Price notices are durable intents; false means retry, never successful delivery. */
+  async sendPlanPriceChange(email: NotificationEmail & { id: string }): Promise<boolean> {
+    if (!this.transporter) return false;
+    const content = buildNotification(email);
+    try {
+      await this.transporter.sendMail({ from: this.from, to: email.to, ...content,
+        messageId: `<ascenda-plan-price-${email.id}@notifications.ascenda.io>` });
+      return true;
+    } catch {
+      // Do not log recipient addresses, message content or SMTP credentials.
+      this.logger.warn('Plan price email not accepted by SMTP; queued for retry');
+      return false;
+    }
+  }
+
   /** Send the 6-digit workspace verification code used during signup. */
   async sendWorkspaceVerificationCode(
     email: WorkspaceVerificationEmail,

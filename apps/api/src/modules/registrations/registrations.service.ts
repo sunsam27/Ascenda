@@ -40,6 +40,7 @@ import { hashToken } from '../../common/security/tokens';
 import { AuditService } from '../audit/audit.service';
 import { toPlanSummary } from '../plans/plans.service';
 import { StartRegistrationDto } from './dto/start-registration.dto';
+import { SubscriptionAccessService } from '../billing/access/access.service';
 
 const CODE_TTL_MINUTES = 15;
 const MAX_VERIFY_ATTEMPTS = 5;
@@ -118,6 +119,7 @@ export class RegistrationsService {
     private readonly mailer: MailerService,
     private readonly audit: AuditService,
     private readonly config: ConfigService,
+    private readonly subscriptionAccess: SubscriptionAccessService,
   ) {}
 
   /**
@@ -514,6 +516,8 @@ export class RegistrationsService {
             currentPeriodEnd: periodEndDate,
           },
         });
+
+        if (isFree) await this.subscriptionAccess.initialiseTrial(tx);
 
         await tx.registration.update({
           where: { id: registration.id },

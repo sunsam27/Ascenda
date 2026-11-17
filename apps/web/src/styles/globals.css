@@ -8,6 +8,17 @@
 @import './soft-ui.css';
 @import './dark-theme.css';
 
+.subscription-notice {
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--text-body-sm);
+}
+.subscription-notice a { color: var(--color-primary-text); text-decoration: underline; }
+
 /* ── Reset ───────────────────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;

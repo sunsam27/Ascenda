@@ -9,6 +9,8 @@ import {
   MaxLength,
   Min,
   MinLength,
+  Max,
+  ArrayMaxSize,
 } from 'class-validator';
 import { BillingPeriod } from '@ascenda/types';
 
@@ -33,11 +35,13 @@ export class CreatePlanDto {
 
   @IsInt()
   @Min(0)
+  @Max(2147483647)
   priceMinorUnits!: number;
 
   @IsOptional()
   @IsString()
   @MaxLength(3)
+  @Matches(/^[A-Z]{3}$/)
   currency?: string;
 
   @IsOptional()
@@ -61,7 +65,9 @@ export class CreatePlanDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @IsString({ each: true })
+  @MaxLength(200, { each: true })
   features?: string[];
 
   @IsOptional()

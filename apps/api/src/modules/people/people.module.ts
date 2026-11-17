@@ -12,6 +12,7 @@ import { CompensationController } from './compensation.controller';
 import { CompensationService } from './compensation.service';
 import { BankAccountsController, BankLookupController } from './bank-accounts.controller';
 import { BankAccountsService } from './bank-accounts.service';
+import { PeopleAnalyticsReader } from './people-analytics.reader';
 
 @Module({
   imports: [AuditModule, IdentityAccessModule, NotificationsModule],
@@ -24,12 +25,13 @@ import { BankAccountsService } from './bank-accounts.service';
     BankLookupController,
   ],
   providers: [
+    PeopleAnalyticsReader,
     WorkersService,
     DepartmentsService,
     LocationsService,
     CompensationService,
     BankAccountsService,
   ],
-  exports: [WorkersService, DepartmentsService, LocationsService, CompensationService, BankAccountsService],
+  exports: [WorkersService, DepartmentsService, LocationsService, CompensationService, BankAccountsService, PeopleAnalyticsReader],
 })
 export class PeopleModule {}

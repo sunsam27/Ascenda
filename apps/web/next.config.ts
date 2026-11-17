@@ -22,6 +22,10 @@ const contentSecurityPolicy = [
 ].join('; ');
 
 const nextConfig: NextConfig = {
+  // Production verification must not overwrite chunks used by a running dev server.
+  distDir: isDev ? '.next-dev' : '.next',
+  typescript: { tsconfigPath: isDev ? 'tsconfig.dev.json' : 'tsconfig.json' },
+
   // Mobile-first — images should be optimised
   images: {
     remotePatterns: [

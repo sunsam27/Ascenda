@@ -22,6 +22,7 @@ import { YearEndController } from './year-end.controller';
 import { YearEndService } from './year-end.service';
 import { ExpenseClaimsController } from './expense-claims.controller';
 import { ExpenseClaimsService } from './expense-claims.service';
+import { PayrollAnalyticsReader } from './payroll-analytics.reader';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ExpenseClaimsService } from './expense-claims.service';
     ExpenseClaimsController,
   ],
   providers: [
+    PayrollAnalyticsReader,
     PayrollService,
     PayCalendarsService,
     RecurringPayItemsService,
@@ -54,6 +56,7 @@ import { ExpenseClaimsService } from './expense-claims.service';
     ExpenseClaimsService,
   ],
   exports: [
+    PayrollAnalyticsReader,
     PayrollService,
     PayCalendarsService,
     RecurringPayItemsService,

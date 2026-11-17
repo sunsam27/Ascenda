@@ -13,6 +13,7 @@ import { AttendanceController } from './attendance.controller';
 import { AttendanceService } from './attendance.service';
 import { BlackoutPeriodsController } from './blackout-periods.controller';
 import { BlackoutPeriodsService } from './blackout-periods.service';
+import { TimeLeaveAnalyticsReader } from './time-leave-analytics.reader';
 
 @Module({
   imports: [AuditModule, NotificationsModule],
@@ -25,6 +26,7 @@ import { BlackoutPeriodsService } from './blackout-periods.service';
     BlackoutPeriodsController,
   ],
   providers: [
+    TimeLeaveAnalyticsReader,
     LeaveTypesService,
     HolidaysService,
     LeaveRequestsService,
@@ -33,6 +35,7 @@ import { BlackoutPeriodsService } from './blackout-periods.service';
     BlackoutPeriodsService,
   ],
   exports: [
+    TimeLeaveAnalyticsReader,
     LeaveTypesService,
     HolidaysService,
     LeaveRequestsService,

@@ -26,9 +26,12 @@ import { ServiceModule } from './modules/service/service.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { TalentModule } from './modules/talent/talent.module';
 import { TimeLeaveModule } from './modules/time-leave/time-leave.module';
+import { SubscriptionAccessModule } from './modules/billing/access/access.module';
+import { SubscriptionFeatureGuard } from './modules/billing/access/access.guard';
 
 @Module({
   imports: [
+    SubscriptionAccessModule,
     ConfigModule.forRoot({ isGlobal: true, cache: true }),
     ThrottlerModule.forRoot([
       {
@@ -60,6 +63,7 @@ import { TimeLeaveModule } from './modules/time-leave/time-leave.module';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RbacGuard },
+    { provide: APP_GUARD, useClass: SubscriptionFeatureGuard },
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],

@@ -1,0 +1,148 @@
+.shell {
+  min-height: 100vh;
+  color: var(--color-text);
+}
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-8);
+}
+.brand {
+  display: inline-flex;
+  gap: var(--space-3);
+  align-items: center;
+  font-size: var(--text-h3);
+  font-weight: var(--weight-bold);
+  color: var(--color-primary-text);
+}
+.actions,
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+.actions a,
+.nav a,
+.card a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-primary-text);
+}
+.actions button,
+.card button,
+.pagination button {
+  min-height: 44px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  background: var(--color-surface);
+  color: var(--color-primary-text);
+  cursor: pointer;
+  font: inherit;
+}
+.nav {
+  padding: var(--space-4) var(--space-8);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.nav a {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-input);
+}
+.nav a[aria-current='page'] {
+  background: var(--color-primary-light);
+  font-weight: var(--weight-semibold);
+}
+.shell a:focus-visible,
+.shell button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.main {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-8);
+}
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.accessForm { display:flex; flex-direction:column; gap:var(--space-4); }
+.accessForm label { display:flex; flex-direction:column; gap:var(--space-2); color:var(--color-text-secondary); font-size:var(--text-label); }
+.accessForm input:not([type='checkbox']), .accessForm select { min-height:44px; padding:var(--space-3); border:1px solid var(--color-border-strong); border-radius:var(--radius-input); background:var(--color-surface); color:var(--color-text); font:inherit; font-size:var(--text-body); max-width:100%; }
+.accessForm button { min-height:44px; padding:var(--space-3); border:1px solid var(--color-primary); border-radius:var(--radius-input); background:var(--color-surface); color:var(--color-primary-text); cursor:pointer; }
+.accessForm input:focus-visible, .accessForm select:focus-visible { outline:2px solid var(--color-primary); outline-offset:2px; }
+.featureFlags { display:flex; flex-wrap:wrap; gap:var(--space-3); padding:var(--space-4); border:1px solid var(--color-border); border-radius:var(--radius-input); }
+.featureFlags label { display:inline-flex; flex-direction:row; align-items:center; gap:var(--space-2); min-height:44px; padding:var(--space-2); }
+.page h1,
+.card h1 {
+  font-size: var(--text-h1);
+  font-weight: var(--weight-bold);
+}
+.page h2 {
+  font-size: var(--text-h3);
+  font-weight: var(--weight-semibold);
+}
+.subtitle {
+  color: var(--color-text-secondary);
+  margin-top: var(--space-2);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+.card {
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+.card p {
+  margin: var(--space-3) 0;
+  color: var(--color-text-secondary);
+  line-height: var(--leading-normal);
+}
+.table {
+  overflow-x: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+.table table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--text-body-sm);
+}
+.table th,
+.table td {
+  padding: var(--space-4);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+}
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+@media (max-width: 640px) {
+  .header,
+  .nav,
+  .main {
+    padding: var(--space-4);
+  }
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
