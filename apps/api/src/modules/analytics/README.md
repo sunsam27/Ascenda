@@ -27,7 +27,9 @@ payment operation is introduced.
   checked integer minor units. This is payroll cost, **not cash paid**. No records
   in a month means no reported bucket, not an estimated zero. An unreplaced reversal
   removes its original from this restated-cost view; this is not a historical
-  cash-ledger report.
+  cash-ledger report. Relative gross-pay bands are grouped by pay-period month and
+  currency against that cohort's own average; the average and individual pay are
+  never exposed and cohorts below five paid workers are hidden.
 - **Attendance:** recorded worker-days, with PRESENT, REMOTE, LATE and ABSENT counts.
   All-records also includes other statuses (e.g. half-day/off-day/on-leave). Missing
   records are not assumed absent. These counts deliberately do **not** claim the
@@ -36,15 +38,15 @@ payment operation is introduced.
 - **Leave:** currently approved requests **starting** in range and their full,
   stored booked-day duration, even when the request ends outside the selected
   range. This is not leave consumed within the window; durations are not recomputed
-  using today's holidays/schedule. No reasons, medical details or leave-type
-  breakdowns are selected.
+  using today's holidays/schedule. Breakdowns by leave type/category are grouped
+  from the frozen booked days; no reasons or medical details are selected and
+  types with fewer than five contributing workers are hidden.
 
 This is a partial implementation of ANA-01–03, not completion of all acceptance
-criteria. Scheduled attendance rates, historical status/department trends, pay
-distribution, leave-type breakdowns and other detailed breakdowns remain follow-up
-work. Native Excel exports from ANA-04 and P1/P2 analytics remain deferred. CSV/PDF
-reports are described below; the reporting work does not complete the deeper
-ANA-01–03 metrics.
+criteria. Scheduled attendance rates and historical status/department trends remain
+follow-up work because they need new schedule/history data. Native Excel exports from
+ANA-04 and P1/P2 analytics remain deferred. CSV/PDF reports are described below; the
+reporting work does not complete the deeper ANA-01–03 metrics.
 
 ## Standard reports and downloads (ANA-04)
 
@@ -76,13 +78,19 @@ Paths use the configured `/api/v1` prefix. Types:
 - `retention` and `tenure`: period-start/period-end retention and completed-tenure
   summaries from the overview. Rates are suppressed below five workers. Historical
   transfers and status changes are not reconstructed.
+- `leave-types`: approved requests starting in the range, grouped by leave type and
+  category using frozen booked days. No reasons or medical details; types with fewer
+  than five contributing workers are hidden.
+- `pay-distribution`: relative gross-pay band counts by pay-period month and currency
+  from frozen processed/locked payslips. Cohort averages and individual pay are never
+  shown; cohorts below five paid workers are hidden. Requires step-up to export.
 
 Report catalogue, preview and export are all checked server-side. Missing context
 fails closed. Managers see only themselves/direct reports; unlinked managers get
 no rows. HR and payroll/finance roles only preview their underlying permitted data.
 **Only Owners download**, retaining the existing analytics export grant. Other roles
-(including Auditors) do not gain export access. Payroll/workforce-cost exports also
-require a fresh existing `x-step-up-token` (password/MFA flow), bound by the existing
+(including Auditors) do not gain export access. Payroll/pay-distribution/workforce-cost
+exports also require a fresh existing `x-step-up-token` (password/MFA flow), bound by the existing
 step-up guard to the authenticated user and organisation. The report UI reuses that
 flow. No report can bypass payroll suppression via another export format.
 
@@ -146,8 +154,8 @@ node --env-file=packages/db/.env apps/api/test/e2e/analytics-rls.cjs
 Domain and HTTP tests exercise real DTO validation, guards, services and readers
 with identity/database doubles. They cover role/field boundaries, team scope,
 explicit tenant filters, missing context, small cohorts, integer totals, date
-boundaries, retention/tenure suppression and run exclusions. ANA-04 tests additionally
-cover all eight report types,
+boundaries, retention/tenure, leave-type and pay-distribution suppression, and run
+exclusions. ANA-04 tests additionally cover all ten report types,
 preview pagination, role-specific catalogue, Owner-only exports, step-up expiration/
 user/tenant binding, CSV formula/quoting safety, exact money, full-report export,
 PDF page generation, privacy suppression, row limits, changing datasets and

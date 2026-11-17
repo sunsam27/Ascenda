@@ -395,6 +395,55 @@ export default function AnalyticsView() {
               )}
             </section>
 
+            <section className={styles.card}>
+              <h2>Pay distribution</h2>
+              <p className={styles.note}>
+                Relative gross-pay bands by pay-period month and currency. Each band compares
+                workers with their own cohort average—the average and individual pay are never
+                shown. Cohorts below {data.minimumCohort} paid workers are hidden.
+              </p>
+              {!data.payroll ? (
+                <p className={styles.empty}>Payroll figures are not available to your role.</p>
+              ) : data.payroll.distribution.length === 0 ? (
+                <p className={styles.empty}>No processed payroll in this date range.</p>
+              ) : (
+                <div className={styles.trends}>
+                  {data.payroll.distribution.map((month) => {
+                    const max = Math.max(1, ...month.bands.map((band) => band.count));
+                    return (
+                      <div key={`${month.month}-${month.currency}`}>
+                        <h3>
+                          {monthLabel(month.month)} · {month.currency}
+                        </h3>
+                        {month.suppressed ? (
+                          <p className={styles.empty}>
+                            Hidden: fewer than {data.minimumCohort} paid workers.
+                          </p>
+                        ) : (
+                          <ul className={styles.breakdown}>
+                            {month.bands.map((band) => (
+                              <li key={band.label}>
+                                <div className={styles.row}>
+                                  <span>{band.label}</span>
+                                  <strong>{number(band.count)}</strong>
+                                </div>
+                                <div className={styles.track} aria-hidden="true">
+                                  <div
+                                    className={styles.bar}
+                                    style={{ width: `${(band.count / max) * 100}%` }}
+                                  />
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
             <div className={styles.twoColumns}>
               <section className={styles.card}>
                 <h2>Recorded attendance</h2>
@@ -438,16 +487,53 @@ export default function AnalyticsView() {
                     Hidden: fewer than {data.minimumCohort} people have approved requests.
                   </p>
                 ) : (
-                  <dl className={styles.metrics}>
-                    <div>
-                      <dt>Booked leave days</dt>
-                      <dd>{number(data.leave.approvedDays)}</dd>
-                    </div>
-                    <div>
-                      <dt>Approved requests</dt>
-                      <dd>{number(data.leave.requests)}</dd>
-                    </div>
-                  </dl>
+                  <>
+                    <dl className={styles.metrics}>
+                      <div>
+                        <dt>Booked leave days</dt>
+                        <dd>{number(data.leave.approvedDays)}</dd>
+                      </div>
+                      <div>
+                        <dt>Approved requests</dt>
+                        <dd>{number(data.leave.requests)}</dd>
+                      </div>
+                    </dl>
+                    {data.leave.byType.length > 0 && (
+                      <>
+                        <h3>By leave type</h3>
+                        <ul className={styles.breakdown}>
+                          {data.leave.byType.map((row) => {
+                            const max = Math.max(
+                              1,
+                              ...data.leave!.byType.map((other) => other.approvedDays ?? 0),
+                            );
+                            return (
+                              <li key={row.label}>
+                                <div className={styles.row}>
+                                  <span>
+                                    {row.label} · {statusLabel(row.category)}
+                                  </span>
+                                  <strong>
+                                    {row.suppressed
+                                      ? 'Hidden'
+                                      : `${number(row.approvedDays)} days · ${number(row.requests)} requests`}
+                                  </strong>
+                                </div>
+                                <div className={styles.track} aria-hidden="true">
+                                  <div
+                                    className={styles.bar}
+                                    style={{
+                                      width: `${((row.approvedDays ?? 0) / max) * 100}%`,
+                                    }}
+                                  />
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </>
+                    )}
+                  </>
                 )}
               </section>
             </div>
@@ -460,8 +546,10 @@ export default function AnalyticsView() {
                 {term('Location').toLowerCase()} assignments; historical transfers and status
                 changes are not reconstructed. Joiners use start dates; exits use recorded end
                 dates. Retention and tenure use those recorded dates at the range boundaries;
-                open-ended records use current status. Future dates reflect scheduled records, not
-                forecasts. Blank periods are not estimated.
+                open-ended records use current status. Leave types group approved requests by
+                their configured type and category without reasons. Pay distribution shows only
+                relative bands against each cohort's own average—never individual pay. Future
+                dates reflect scheduled records, not forecasts. Blank periods are not estimated.
               </p>
             </section>
           </>
