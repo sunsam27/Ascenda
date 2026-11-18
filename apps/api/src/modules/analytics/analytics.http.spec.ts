@@ -44,6 +44,7 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
       if ('in' in value && !value.in.includes(row[key])) return false;
       if ('not' in value && row[key] === value.not) return false;
       if ('gte' in value && !(row[key] != null && row[key] >= value.gte)) return false;
+      if ('lte' in value && !(row[key] != null && row[key] <= value.lte)) return false;
       if ('lt' in value && !(row[key] != null && row[key] < value.lt)) return false;
       return true;
     });
@@ -98,6 +99,9 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
       status: 'APPROVED',
       days: 2.5,
       startDate: new Date('2026-01-20'),
+      endDate: new Date('2026-01-22'),
+      startHalfDay: true,
+      endHalfDay: false,
     }));
     slips = workers.map((w) => ({
       organisationId: w.organisationId,
@@ -130,8 +134,13 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
       },
       department: { findMany: jest.fn(async () => []) },
       location: { findMany: jest.fn(async () => []) },
+      organisation: { findFirst: jest.fn(async () => null) },
+      holiday: { findMany: jest.fn(async () => []) },
       payslip: { groupBy: jest.fn(async (args: Row) => group(slips, args)) },
-      attendanceRecord: { groupBy: jest.fn(async (args: Row) => group(attendance, args)) },
+      attendanceRecord: {
+        groupBy: jest.fn(async (args: Row) => group(attendance, args)),
+        findMany: jest.fn(async ({ where }: Row) => attendance.filter((r) => matches(r, where))),
+      },
       leaveRequest: {
         groupBy: jest.fn(async (args: Row) => group(leave, args)),
         findMany: jest.fn(async ({ where }: Row) => leave.filter((r) => matches(r, where))),
@@ -256,6 +265,13 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
       },
     ]);
     expect(result.attendance).toMatchObject({ records: 6, present: 6 });
+    // 22 weekdays minus 2.5 leave days each; one PRESENT record per worker.
+    expect(result.attendance.scheduled).toEqual({
+      suppressed: false,
+      scheduledDays: 117,
+      attendedDays: 6,
+      ratePercent: 5.1,
+    });
     expect(result.leave).toMatchObject({ approvedDays: 15, requests: 6 });
     expect(result.leave.byType).toEqual([
       {
@@ -373,6 +389,23 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
       requests: null,
       approvedDays: null,
       byType: [],
+    });
+  });
+  it('computes the scheduled attendance rate from schedule, leave and records only in scope', async () => {
+    const result = await data();
+    expect(result.attendance.scheduled).toMatchObject({ suppressed: false, ratePercent: 5.1 });
+    // Only org-a workers contribute; org-b rows must not leak into the denominator.
+    expect(JSON.stringify(result)).not.toMatch(/org-b/);
+  });
+  it('suppresses the scheduled rate below five workers even when records exist', async () => {
+    workers = workers.filter((w) => w.organisationId === 'org-a').slice(0, 4);
+    attendance = attendance.filter((r) => r.organisationId === 'org-a').slice(0, 4);
+    const result = await data();
+    expect(result.attendance.scheduled).toEqual({
+      suppressed: true,
+      scheduledDays: null,
+      attendedDays: null,
+      ratePercent: null,
     });
   });
   it('excludes drafts, unprocessed payroll, reversals and reversed originals', async () => {

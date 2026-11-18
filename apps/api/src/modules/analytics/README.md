@@ -32,9 +32,13 @@ payment operation is introduced.
   never exposed and cohorts below five paid workers are hidden.
 - **Attendance:** recorded worker-days, with PRESENT, REMOTE, LATE and ABSENT counts.
   All-records also includes other statuses (e.g. half-day/off-day/on-leave). Missing
-  records are not assumed absent. These counts deliberately do **not** claim the
-  PRD scheduled-working-day attendance rate; that denominator needs a separate
-  schedule/holiday/approved-leave implementation.
+  records are not assumed absent in those raw counts. The separate scheduled rate
+  uses the effective org/location work schedule, public holidays, recorded
+  employment dates and approved leave as its denominator. PRESENT, LATE, REMOTE and
+  HALF_DAY records count as attended; unrecorded scheduled days count as not
+  attended. Approved leave is removed from the denominator (half-day markers count
+  as 0.5), overlapping leave never removes more than a day, and leavers/joiners are
+  prorated by their recorded dates. Cohorts below five workers are suppressed.
 - **Leave:** currently approved requests **starting** in range and their full,
   stored booked-day duration, even when the request ends outside the selected
   range. This is not leave consumed within the window; durations are not recomputed
@@ -43,10 +47,10 @@ payment operation is introduced.
   types with fewer than five contributing workers are hidden.
 
 This is a partial implementation of ANA-01–03, not completion of all acceptance
-criteria. Scheduled attendance rates and historical status/department trends remain
-follow-up work because they need new schedule/history data. Native Excel exports from
-ANA-04 and P1/P2 analytics remain deferred. CSV/PDF reports are described below; the
-reporting work does not complete the deeper ANA-01–03 metrics.
+criteria. Historical status/department trends remain follow-up work because they
+need new history data. Native Excel exports from ANA-04 and P1/P2 analytics remain
+deferred. CSV/PDF reports are described below; the reporting work does not complete
+the deeper ANA-01–03 metrics.
 
 ## Standard reports and downloads (ANA-04)
 
@@ -74,7 +78,8 @@ Paths use the configured `/api/v1` prefix. Types:
   using the same frozen payroll source and restrictions. Not a cash-payment report.
 - `attendance` and `leave`: aggregate summary rows with the overview's precise
   recorded-day/booked-request definitions, underlying permissions and suppression.
-  These are not per-person attendance/leave exports or complete scheduled-rate reports.
+  Attendance also includes the scheduled-working-day rate. These are not per-person
+  attendance/leave exports.
 - `retention` and `tenure`: period-start/period-end retention and completed-tenure
   summaries from the overview. Rates are suppressed below five workers. Historical
   transfers and status changes are not reconstructed.
@@ -131,8 +136,9 @@ overview limitations above. Pagination is live, not a persisted report snapshot.
 - Each payroll month/currency requires at least five distinct paid workers (not
   five payslips). Smaller cohorts return `null` for every monetary field and
   `suppressed: true`. No grand total is supplied that could reveal a hidden bucket
-  by subtraction. Attendance and leave suppress all values when their non-empty
-  contributor cohort is smaller than five. Empty datasets return zero, not hidden.
+  by subtraction. Attendance and leave suppress recorded counts when their non-empty
+  contributor cohort is smaller than five; the scheduled rate also suppresses empty
+  or sub-five scheduled cohorts. Other empty aggregates return zero, not hidden.
 - Overview and aggregate reports contain counts only, with no worker identifiers,
   names, bank details or restricted personal fields. The separately authorised
   directory report intentionally includes the worker numbers/names listed above.
@@ -154,8 +160,10 @@ node --env-file=packages/db/.env apps/api/test/e2e/analytics-rls.cjs
 Domain and HTTP tests exercise real DTO validation, guards, services and readers
 with identity/database doubles. They cover role/field boundaries, team scope,
 explicit tenant filters, missing context, small cohorts, integer totals, date
-boundaries, retention/tenure, leave-type and pay-distribution suppression, and run
-exclusions. ANA-04 tests additionally cover all ten report types,
+boundaries, retention/tenure, leave-type, pay-distribution and scheduled-attendance
+suppression, and run exclusions. Scheduled-rate tests cover work schedules, public
+holidays, employment bounds, approved leave (including half days) and record statuses.
+ANA-04 tests additionally cover all ten report types,
 preview pagination, role-specific catalogue, Owner-only exports, step-up expiration/
 user/tenant binding, CSV formula/quoting safety, exact money, full-report export,
 PDF page generation, privacy suppression, row limits, changing datasets and

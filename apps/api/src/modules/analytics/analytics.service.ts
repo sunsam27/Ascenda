@@ -15,6 +15,7 @@ import {
   overviewPeriod,
   payDistribution,
   payrollMonths,
+  scheduledAttendanceRate,
 } from './analytics.domain';
 import { OverviewQueryDto } from './dto/overview-query.dto';
 import { canReadAnalyticsPayroll } from './analytics-access';
@@ -59,13 +60,23 @@ export class AnalyticsService {
       let leave: AnalyticsOverview['leave'] = null;
       if (sections.attendance !== false && canRead('attendance', PermissionScope.TEAM)) {
         const resourceScope = await resolveReadScope(tx, 'attendance', 'read');
-        const rows = await this.time.attendance(
-          tx,
-          organisationId,
-          { AND: [analyticsScope.where, resourceScope.where] },
-          period.start,
-          period.endExclusive,
-        );
+        const attendanceScope = { AND: [analyticsScope.where, resourceScope.where] };
+        const [rows, scheduledRows] = await Promise.all([
+          this.time.attendance(
+            tx,
+            organisationId,
+            attendanceScope,
+            period.start,
+            period.endExclusive,
+          ),
+          this.time.scheduledAttendance(
+            tx,
+            organisationId,
+            attendanceScope,
+            period.start,
+            period.endExclusive,
+          ),
+        ]);
         const suppressed =
           rows.length > 0 && new Set(rows.map((r) => r.workerId)).size < MINIMUM_COHORT;
         const count = (status?: string) =>
@@ -79,6 +90,7 @@ export class AnalyticsService {
           late: count('LATE'),
           absent: count('ABSENT'),
           remote: count('REMOTE'),
+          scheduled: scheduledAttendanceRate(scheduledRows),
         };
       }
       if (sections.leave !== false && canRead('leave', PermissionScope.TEAM)) {

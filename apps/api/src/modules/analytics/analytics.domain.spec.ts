@@ -4,6 +4,7 @@ import {
   payDistribution,
   payrollMonths,
   retentionSummary,
+  scheduledAttendanceRate,
   tenureSummary,
 } from './analytics.domain';
 
@@ -110,6 +111,39 @@ describe('ANA-01–03 overview acceptance', () => {
       averageMonths: null,
       bands: [],
     });
+  });
+  it('aggregates scheduled attendance and suppresses small cohorts', () => {
+    const rows = Array.from({ length: 5 }, (_, i) => ({
+      workerId: String(i),
+      scheduledDays: 20,
+      attendedDays: i === 0 ? 16 : i === 1 ? 18 : 20,
+    }));
+    expect(scheduledAttendanceRate(rows)).toEqual({
+      suppressed: false,
+      scheduledDays: 100,
+      attendedDays: 94,
+      ratePercent: 94,
+    });
+    expect(scheduledAttendanceRate(rows.slice(0, 4))).toEqual({
+      suppressed: true,
+      scheduledDays: null,
+      attendedDays: null,
+      ratePercent: null,
+    });
+    // Workers with no scheduled days in range cannot reveal a rate.
+    expect(
+      scheduledAttendanceRate([
+        ...rows.slice(0, 4),
+        { workerId: 'no-days', scheduledDays: 0, attendedDays: 0 },
+      ]),
+    ).toMatchObject({ suppressed: true, ratePercent: null });
+    expect(
+      scheduledAttendanceRate(Array.from({ length: 5 }, (_, i) => ({
+        workerId: String(i),
+        scheduledDays: 0,
+        attendedDays: 0,
+      }))),
+    ).toMatchObject({ suppressed: true, ratePercent: null });
   });
   it('groups leave types by label and hides cohorts with fewer than five workers', () => {
     const annual = Array.from({ length: 5 }, (_, i) => ({

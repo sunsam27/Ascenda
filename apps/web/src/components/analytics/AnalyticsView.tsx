@@ -105,6 +105,8 @@ export default function AnalyticsView() {
       .toLowerCase()
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const attendance = data?.attendance;
+  const scheduled = attendance?.scheduled;
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -448,30 +450,67 @@ export default function AnalyticsView() {
               <section className={styles.card}>
                 <h2>Recorded attendance</h2>
                 <p className={styles.note}>
-                  Recorded worker-days only; missing records are not assumed absent. This is not a
-                  scheduled-working-day attendance rate.
+                  Recorded worker-days only; missing records are not assumed absent. The scheduled
+                  rate below uses each worker's work schedule, public holidays, employment dates and
+                  approved leave as its denominator; unrecorded working days count as not attended.
                 </p>
-                {!data.attendance ? (
+                {!attendance ? (
                   <p className={styles.empty}>Attendance figures are not available to your role.</p>
-                ) : data.attendance.suppressed ? (
-                  <p className={styles.empty}>
-                    Hidden: fewer than {data.minimumCohort} people have attendance records.
-                  </p>
                 ) : (
-                  <dl className={styles.metrics}>
-                    {[
-                      ['All recorded days', data.attendance.records],
-                      ['Present', data.attendance.present],
-                      ['Remote', data.attendance.remote],
-                      ['Late', data.attendance.late],
-                      ['Absent', data.attendance.absent],
-                    ].map(([label, value]) => (
-                      <div key={String(label)}>
-                        <dt>{label}</dt>
-                        <dd>{number(value as number | null)}</dd>
-                      </div>
-                    ))}
-                  </dl>
+                  <>
+                    {attendance.suppressed ? (
+                      <p className={styles.empty}>
+                        Hidden: fewer than {data.minimumCohort} people contributed attendance records.
+                      </p>
+                    ) : (
+                      <dl className={styles.metrics}>
+                        {[
+                          ['All recorded days', attendance.records],
+                          ['Present', attendance.present],
+                          ['Remote', attendance.remote],
+                          ['Late', attendance.late],
+                          ['Absent', attendance.absent],
+                        ].map(([label, value]) => (
+                          <div key={String(label)}>
+                            <dt>{label}</dt>
+                            <dd>{number(value as number | null)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                    <h3>Scheduled attendance rate</h3>
+                    {!scheduled ? (
+                      <p className={styles.note}>
+                        Scheduled attendance rate is not available for this response.
+                      </p>
+                    ) : scheduled.suppressed ? (
+                      <p className={styles.empty}>
+                        Hidden: fewer than {data.minimumCohort} people contributed scheduled
+                        attendance data.
+                      </p>
+                    ) : (
+                      <>
+                        <p className={styles.note}>
+                          PRESENT, LATE, REMOTE and HALF_DAY records count as attended; approved leave
+                          is excluded from scheduled days. No individual attendance is shown.
+                        </p>
+                        <dl className={styles.metrics}>
+                          <div>
+                            <dt>Scheduled working days</dt>
+                            <dd>{number(scheduled.scheduledDays)}</dd>
+                          </div>
+                          <div>
+                            <dt>Days attended</dt>
+                            <dd>{number(scheduled.attendedDays)}</dd>
+                          </div>
+                          <div>
+                            <dt>Attendance rate</dt>
+                            <dd>{number(scheduled.ratePercent)}%</dd>
+                          </div>
+                        </dl>
+                      </>
+                    )}
+                  </>
                 )}
               </section>
               <section className={styles.card}>

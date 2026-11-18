@@ -16,6 +16,14 @@ export interface AnalyticsTenure {
   bands: AnalyticsBreakdown[];
 }
 
+/** Scheduled-working-day attendance rate (ANA-03). Null metrics are suppressed. */
+export interface AnalyticsScheduledAttendance {
+  suppressed: boolean;
+  scheduledDays: number | null;
+  attendedDays: number | null;
+  ratePercent: number | null;
+}
+
 export interface AnalyticsLeaveTypeBreakdown {
   label: string;
   category: string;
@@ -76,6 +84,7 @@ export interface AnalyticsOverview {
     late: number | null;
     absent: number | null;
     remote: number | null;
+    scheduled: AnalyticsScheduledAttendance;
   } | null;
   leave: {
     suppressed: boolean;

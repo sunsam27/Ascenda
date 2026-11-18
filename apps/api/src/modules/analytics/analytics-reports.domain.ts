@@ -24,7 +24,7 @@ export const REPORT_DEFINITIONS: AnalyticsReportDefinition[] = [
     type: 'attendance',
     title: 'Attendance summary',
     description:
-      'Recorded worker-days only, including all recorded statuses. Missing records are not assumed absent. Not a scheduled-working-day attendance rate. Cohorts below five contributors hidden.',
+      'Recorded worker-days plus the scheduled-working-day attendance rate. Effective work schedule, holidays, employment dates and approved leave form the denominator; unrecorded scheduled days count as not attended. Cohorts below five contributors hidden.',
     requiresStepUp: false,
   },
   {
@@ -186,8 +186,8 @@ export function summaryReport(
     if (!overview.attendance) throw new Error('Attendance report requires authorised data');
     return {
       columns: [
-        { key: 'metric', label: 'Recorded attendance metric', kind: 'text' },
-        { key: 'value', label: 'Worker-days', kind: 'number' },
+        { key: 'metric', label: 'Attendance metric', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'number' },
       ],
       rows: [
         { metric: 'All records', value: overview.attendance.records },
@@ -195,6 +195,9 @@ export function summaryReport(
         { metric: 'Remote', value: overview.attendance.remote },
         { metric: 'Late', value: overview.attendance.late },
         { metric: 'Absent', value: overview.attendance.absent },
+        { metric: 'Scheduled working days', value: overview.attendance.scheduled.scheduledDays },
+        { metric: 'Days attended', value: overview.attendance.scheduled.attendedDays },
+        { metric: 'Attendance rate (%)', value: overview.attendance.scheduled.ratePercent },
       ],
     };
   }

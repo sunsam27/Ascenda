@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import type {
   AnalyticsLeaveTypeBreakdown,
   AnalyticsPayDistributionMonth,
+  AnalyticsScheduledAttendance,
   AnalyticsPayrollMonth,
   AnalyticsRetention,
   AnalyticsTenure,
@@ -67,6 +68,33 @@ export function overviewPeriod(from?: string, to?: string, now = new Date()) {
     throw new BadRequestException('Choose a valid date range of at most 366 days');
   }
   return { from: first, to: last, start, endExclusive: new Date(end.getTime() + 86_400_000) };
+}
+
+export interface ScheduledAttendanceAggregate {
+  workerId: string;
+  scheduledDays: number;
+  attendedDays: number;
+}
+
+/**
+ * Aggregate per-worker scheduled/attended days. Cohorts below five workers are
+ * suppressed; no per-person counts or identifiers are exposed.
+ */
+export function scheduledAttendanceRate(
+  rows: ScheduledAttendanceAggregate[],
+): AnalyticsScheduledAttendance {
+  const eligible = rows.filter((row) => row.scheduledDays > 0);
+  if (eligible.length < MINIMUM_COHORT)
+    return { suppressed: true, scheduledDays: null, attendedDays: null, ratePercent: null };
+  const scheduledDays = eligible.reduce((sum, row) => sum + row.scheduledDays, 0);
+  const attendedDays = eligible.reduce((sum, row) => sum + row.attendedDays, 0);
+  return {
+    suppressed: false,
+    scheduledDays,
+    attendedDays,
+    ratePercent:
+      scheduledDays === 0 ? 0 : Math.round((attendedDays / scheduledDays) * 1000) / 10,
+  };
 }
 
 export interface LeaveTypeAggregate {
