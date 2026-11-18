@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function PlansPage() {
-  redirect('/admin/plans');
+  redirect('/gangsteradminAscenda/plans');
 }

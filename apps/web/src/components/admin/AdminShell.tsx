@@ -37,7 +37,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     <div className={`app-bg ${styles.shell}`}>
       <SessionRefresher />
       <header className={`glass-nav ${styles.header}`}>
-        <Link href="/admin" className={styles.brand}>
+        <Link href="/gangsteradminAscenda" className={styles.brand}>
           <ShieldCheck size={24} aria-hidden="true" /> Ascenda Admin
         </Link>
         <div className={styles.actions}>
@@ -50,11 +50,11 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       {state === 'ready' && (
         <nav className={styles.nav} aria-label="Platform administration">
           {[
-            ['/admin', 'Overview'],
-            ['/admin/plans', 'Plans and pricing'],
-            ['/admin/subscriptions', 'Subscriptions and demos'],
-            ['/admin/signups', 'Signups'],
-            ['/admin/history', 'Change history'],
+            ['/gangsteradminAscenda', 'Overview'],
+            ['/gangsteradminAscenda/plans', 'Plans and pricing'],
+            ['/gangsteradminAscenda/subscriptions', 'Subscriptions and demos'],
+            ['/gangsteradminAscenda/signups', 'Signups'],
+            ['/gangsteradminAscenda/history', 'Change history'],
           ].map(([href, label]) => (
             <Link key={href} href={href!} aria-current={pathname === href ? 'page' : undefined}>
               {label}

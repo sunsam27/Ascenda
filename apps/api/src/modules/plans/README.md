@@ -2,12 +2,15 @@
 
 ## Console boundary
 
-Platform administrators use `/admin`, with dedicated navigation/layout for Plans,
+Platform administrators use the private `/gangsteradminAscenda` URL, with dedicated navigation/layout for Plans,
 Signups and catalogue Change history. Customer Settings no longer advertises platform
-controls. Old `/settings/plans` and `/settings/signups` URLs redirect to their `/admin`
+controls. Old `/settings/plans` and `/settings/signups` URLs redirect to their private
 equivalents. Unauthenticated users go to normal login with an Admin-specific heading;
-platform staff default to `/admin` after login. Customer organisation ownership is
-**not** platform administration. Accounts are not promoted by this implementation.
+platform staff with no organisation membership default to `/gangsteradminAscenda` after
+login, while platform staff who also belong to a workspace land in that workspace and
+must navigate to the private URL to reach the console. There is no Admin Console link in
+the workspace. Customer organisation ownership is **not** platform administration.
+Accounts are not promoted by this implementation.
 
 `GET /api/v1/admin/session` checks current database `isPlatformAdmin` and `isActive`,
 not only the JWT flag. Existing plan-admin and signup endpoints use the same freshly
@@ -83,7 +86,8 @@ follow-up work. Admin history shows fan-out preparation/skips, **not** inbox del
 ## Free tier, organisation access and manual renewals
 
 `SUBSCRIPTION_ACCESS_ENABLED=false` preserves legacy behaviour. After migration 05 is
-reviewed and policies are checked in `/admin/plans` and `/admin/subscriptions`, set
+reviewed and policies are checked in `/gangsteradminAscenda/plans` and
+`/gangsteradminAscenda/subscriptions`, set
 `SUBSCRIPTION_ACCESS_ENABLED=true` to enforce them in the API. Platform-admin changes
 require the same step-up token; reasons and prior/next values are audited.
 

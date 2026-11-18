@@ -155,13 +155,13 @@ export class IdentityAccessService {
       ...tokens,
       user,
       // A real workspace membership wins: platform admins who also belong to
-      // an organisation land in that workspace. The Admin Console stays
-      // reachable from the sidebar for platform admins. Only platform admins
-      // with no membership are sent straight to /admin.
+      // an organisation land in that workspace. The Admin Console has no
+      // workspace link — it is reached only via its private URL. Platform
+      // admins with no membership are sent straight there.
       redirectTo: membership
         ? homePathForRole(membership.role)
         : user.isPlatformAdmin
-          ? '/admin'
+          ? '/gangsteradminAscenda'
           : '/dashboard',
     };
   }

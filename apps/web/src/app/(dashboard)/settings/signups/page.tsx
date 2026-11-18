@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function SignupsPage() {
-  redirect('/admin/signups');
+  redirect('/gangsteradminAscenda/signups');
 }

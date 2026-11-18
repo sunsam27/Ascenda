@@ -80,7 +80,7 @@ describe('IdentityAccessService.login redirect', () => {
   });
 
   it('still sends a platform admin with no membership to /admin', async () => {
-    expect(await loginRedirect(true, null)).toBe('/admin');
+    expect(await loginRedirect(true, null)).toBe('/gangsteradminAscenda');
   });
 
   it('keeps role-based routing for non-platform admins', async () => {

@@ -13,12 +13,12 @@ export default function AdminOverviewPage() {
         <section className={styles.card}>
           <h2>Plans and pricing</h2>
           <p>Manage subscription prices, limits and public plan descriptions.</p>
-          <Link href="/admin/plans">Manage plans</Link>
+          <Link href="/gangsteradminAscenda/plans">Manage plans</Link>
         </section>
         <section className={styles.card}>
           <h2>Workspace signups</h2>
           <p>Review workspaces created through self-service registration.</p>
-          <Link href="/admin/signups">View signups</Link>
+          <Link href="/gangsteradminAscenda/signups">View signups</Link>
         </section>
       </div>
       <section className={styles.card}>
@@ -32,7 +32,7 @@ export default function AdminOverviewPage() {
           Email intents are saved durably and retried after SMTP failures. Delivery requires
           migration 04, configured SMTP and the scheduler.
         </p>
-        <Link href="/admin/history">View catalogue change history</Link>
+        <Link href="/gangsteradminAscenda/history">View catalogue change history</Link>
       </section>
     </div>
   );

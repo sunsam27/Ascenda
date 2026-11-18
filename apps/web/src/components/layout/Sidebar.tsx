@@ -20,7 +20,6 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  ShieldCheck,
 } from 'lucide-react';
 import styles from './Sidebar.module.css';
 import { useSubscriptionAccess } from '@/lib/subscription-access';
@@ -119,7 +118,6 @@ export function SidebarContent() {
 
       {/* Bottom section */}
       <div className={styles.bottom}>
-        {user?.platformAdmin && <Link href="/admin" className={styles.navItem}><ShieldCheck size={20} strokeWidth={1.75} aria-hidden="true" /><span>Admin Console</span></Link>}
         {showSettings && (
           <Link href="/settings" className={`${styles.navItem} ${pathname.startsWith('/settings') ? styles.active : ''}`}>
             <Settings size={20} strokeWidth={1.75} aria-hidden="true" />
