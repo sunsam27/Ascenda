@@ -18,8 +18,10 @@ payment operation is introduced.
   schema. Period-end tenure bands and completed-month averages use recorded start
   and last-working dates. Retention counts workers in the period-start snapshot
   who remain in the period-end snapshot; open-ended records use current status.
-  Tenure and retention rates are suppressed below five workers. Future dates
-  reflect scheduled records, not forecasts.
+  Tenure and retention rates are suppressed below five workers. Approved leave days
+  and explicit unapproved `ABSENT` days are grouped by the worker's **current**
+  department; the same current-assignment caveat applies. Future dates reflect
+  scheduled records, not forecasts.
 - **Payroll:** sum frozen payslips on PROCESSED/LOCKED runs, using payslip period-end
   dates. Excludes reversed originals and reversal runs to avoid double-counting
   corrected payroll. Months and currencies remain separate; there is no FX or
@@ -29,7 +31,12 @@ payment operation is introduced.
   removes its original from this restated-cost view; this is not a historical
   cash-ledger report. Relative gross-pay bands are grouped by pay-period month and
   currency against that cohort's own average; the average and individual pay are
-  never exposed and cohorts below five paid workers are hidden.
+  never exposed in the distribution report and cohorts below five paid workers are
+  hidden. Gross and employer costs are also grouped by current department. Overtime,
+  bonus, allowance, volunteer-stipend and contractor costs come from frozen payslip
+  lines and worker category. Average salary is employee gross ÷ paid employees and
+  is released only for cohorts of at least five paid employees; contractor and
+  volunteer-stipend buckets have their own five-contributor thresholds.
 - **Attendance:** recorded worker-days, with PRESENT, REMOTE, LATE and ABSENT counts.
   All-records also includes other statuses (e.g. half-day/off-day/on-leave). Missing
   records are not assumed absent in those raw counts. The separate scheduled rate
@@ -38,7 +45,12 @@ payment operation is introduced.
   HALF_DAY records count as attended; unrecorded scheduled days count as not
   attended. Approved leave is removed from the denominator (half-day markers count
   as 0.5), overlapping leave never removes more than a day, and leavers/joiners are
-  prorated by their recorded dates. Cohorts below five workers are suppressed.
+  prorated by their recorded dates. Only an explicit `ABSENT` record on a scheduled
+  day counts as unapproved absence; unrecorded days are simply not attended. The
+  late-arrival rate is late clock-ins ÷ total clock-ins. Scheduled metrics are also
+  grouped by current department as the team proxy (the schema has no Team/Roster
+  entity) and into monthly trend buckets. Cohorts below five workers are suppressed
+  per team/month.
 - **Leave:** currently approved requests **starting** in range and their full,
   stored booked-day duration, even when the request ends outside the selected
   range. This is not leave consumed within the window; durations are not recomputed
@@ -46,11 +58,14 @@ payment operation is introduced.
   from the frozen booked days; no reasons or medical details are selected and
   types with fewer than five contributing workers are hidden.
 
-This is a partial implementation of ANA-01–03, not completion of all acceptance
-criteria. Historical status/department trends remain follow-up work because they
-need new history data. Native Excel exports from ANA-04 and P1/P2 analytics remain
-deferred. CSV/PDF reports are described below; the reporting work does not complete
-the deeper ANA-01–03 metrics.
+This no-schema slice completes the ANA-01–03 gaps identified for existing dated
+facts, payslip lines and current assignments. It is still not the full acceptance
+criteria: true historical status/department/location trends and hire/exit trend
+series need an effective-dated worker-history ledger. Period-average-headcount
+turnover and its employee/volunteer split are also outside this slice. Team analytics
+use current department instead of a real Team entity. Native Excel exports from
+ANA-04 and P1/P2 analytics remain deferred. CSV/PDF reports are described below;
+those report types are unchanged by this slice.
 
 ## Standard reports and downloads (ANA-04)
 
@@ -135,8 +150,15 @@ overview limitations above. Pagination is live, not a persisted report snapshot.
   `RESTRICTED_FIELD_ACCESSED`, report/date metadata only—never salary values.
 - Each payroll month/currency requires at least five distinct paid workers (not
   five payslips). Smaller cohorts return `null` for every monetary field and
-  `suppressed: true`. No grand total is supplied that could reveal a hidden bucket
-  by subtraction. Attendance and leave suppress recorded counts when their non-empty
+  `suppressed: true`. Department, team, month and leave-type buckets are suppressed
+  independently at the same five-distinct-worker threshold. Where a hidden child
+  bucket could be recovered by subtraction, the matching overall figure is hidden
+  too: monthly payroll totals disappear for a month/currency with a hidden
+  department; the overall scheduled rate disappears when a team or month is hidden;
+  and overall leave totals/types disappear when a department or type is hidden.
+  Component amounts and average salary are released only when their own contributor
+  cohorts reach five; the pay-distribution report still never exposes the cohort
+  average. Attendance and leave suppress recorded counts when their non-empty
   contributor cohort is smaller than five; the scheduled rate also suppresses empty
   or sub-five scheduled cohorts. Other empty aggregates return zero, not hidden.
 - Overview and aggregate reports contain counts only, with no worker identifiers,
@@ -161,8 +183,12 @@ Domain and HTTP tests exercise real DTO validation, guards, services and readers
 with identity/database doubles. They cover role/field boundaries, team scope,
 explicit tenant filters, missing context, small cohorts, integer totals, date
 boundaries, retention/tenure, leave-type, pay-distribution and scheduled-attendance
-suppression, and run exclusions. Scheduled-rate tests cover work schedules, public
-holidays, employment bounds, approved leave (including half days) and record statuses.
+suppression, and run exclusions. The expanded ANA-01–03 tests cover department
+leave/absence and payroll cost, pay components and average salary, late-arrival and
+absence rates, department-as-team grouping and monthly attendance trends, including
+per-bucket suppression and hidden-parent totals. Scheduled-rate tests cover work
+schedules, public holidays, employment bounds, approved leave (including half days)
+and record statuses.
 ANA-04 tests additionally cover all ten report types,
 preview pagination, role-specific catalogue, Owner-only exports, step-up expiration/
 user/tenant binding, CSV formula/quoting safety, exact money, full-report export,

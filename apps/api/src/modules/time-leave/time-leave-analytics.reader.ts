@@ -5,6 +5,7 @@ import {
   scheduledAttendanceForWorker,
   type ScheduledAttendanceLeave,
   type ScheduledAttendanceRecord,
+  type ScheduledAttendanceWorkerResult,
 } from './domain/scheduled-attendance';
 
 /** ANA-03 aggregate interface. Never selects leave reasons or clock-in locations. */
@@ -88,7 +89,9 @@ export class TimeLeaveAnalyticsReader {
     scope: Prisma.WorkerWhereInput,
     start: Date,
     endExclusive: Date,
-  ): Promise<{ workerId: string; scheduledDays: number; attendedDays: number }[]> {
+  ): Promise<
+    (ScheduledAttendanceWorkerResult & { lateArrivals: number; clockIns: number })[]
+  > {
     const endInclusive = new Date(endExclusive.getTime() - 86_400_000);
     const [workers, org, locations, holidays, attendance, leave] = await Promise.all([
       tx.worker.findMany({
@@ -138,7 +141,7 @@ export class TimeLeaveAnalyticsReader {
       }),
       tx.attendanceRecord.findMany({
         where: { organisationId, worker: { is: scope }, date: { gte: start, lt: endExclusive } },
-        select: { workerId: true, date: true, status: true },
+        select: { workerId: true, date: true, status: true, clockIn: true },
       }),
       tx.leaveRequest.findMany({
         where: {
@@ -160,10 +163,22 @@ export class TimeLeaveAnalyticsReader {
 
     const locationById = new Map(locations.map((location) => [location.id, location]));
     const attendanceByWorker = new Map<string, ScheduledAttendanceRecord[]>();
+    const lateByWorker = new Map<string, number>();
+    const clockInsByWorker = new Map<string, number>();
+    const lateByWorkerMonth = new Map<string, number>();
+    const clockInsByWorkerMonth = new Map<string, number>();
     for (const row of attendance) {
       const rows = attendanceByWorker.get(row.workerId) ?? [];
       rows.push({ date: row.date, status: row.status as ScheduledAttendanceRecord['status'] });
       attendanceByWorker.set(row.workerId, rows);
+      if (!row.clockIn) continue;
+      const month = row.date.toISOString().slice(0, 7);
+      clockInsByWorker.set(row.workerId, (clockInsByWorker.get(row.workerId) ?? 0) + 1);
+      const monthKey = `${row.workerId}|${month}`;
+      clockInsByWorkerMonth.set(monthKey, (clockInsByWorkerMonth.get(monthKey) ?? 0) + 1);
+      if (row.status !== 'LATE') continue;
+      lateByWorker.set(row.workerId, (lateByWorker.get(row.workerId) ?? 0) + 1);
+      lateByWorkerMonth.set(monthKey, (lateByWorkerMonth.get(monthKey) ?? 0) + 1);
     }
     const leaveByWorker = new Map<string, ScheduledAttendanceLeave[]>();
     for (const row of leave) {
@@ -182,7 +197,7 @@ export class TimeLeaveAnalyticsReader {
         org,
         worker.locationId ? (locationById.get(worker.locationId) ?? null) : null,
       );
-      return scheduledAttendanceForWorker(
+      const result = scheduledAttendanceForWorker(
         {
           workerId: worker.id,
           startDate: worker.startDate,
@@ -197,6 +212,19 @@ export class TimeLeaveAnalyticsReader {
         start,
         endInclusive,
       );
+      return {
+        ...result,
+        lateArrivals: lateByWorker.get(worker.id) ?? 0,
+        clockIns: clockInsByWorker.get(worker.id) ?? 0,
+        months: result.months.map((month) => {
+          const key = `${worker.id}|${month.month}`;
+          return {
+            ...month,
+            lateArrivals: lateByWorkerMonth.get(key) ?? 0,
+            clockIns: clockInsByWorkerMonth.get(key) ?? 0,
+          };
+        }),
+      };
     });
   }
 }

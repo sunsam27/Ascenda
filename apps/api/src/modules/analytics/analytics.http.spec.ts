@@ -71,14 +71,14 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
         organisationId,
         userId: i === 0 ? 'actor' : null,
         managerId: i > 0 && i < 5 ? `${organisationId}-0` : null,
-        departmentId: null,
+        departmentId: 'dept-a',
         locationId: null,
         category: 'EMPLOYEE',
         employeeNumber: `W${i}`,
         firstName: `Person ${i}`,
         lastName: 'Fixture',
         jobTitle: 'Analyst',
-        department: null,
+        department: { id: 'dept-a', name: 'Operations' },
         location: null,
         status: 'ACTIVE',
         startDate: new Date('2026-01-01'),
@@ -90,6 +90,7 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
       workerId: w.id,
       status: 'PRESENT',
       date: new Date('2026-01-15'),
+      clockIn: new Date('2026-01-15T09:00:00Z'),
     }));
     leave = workers.map((w) => ({
       organisationId: w.organisationId,
@@ -112,6 +113,13 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
       netMinorUnits: 9001,
       deductionsMinorUnits: 1000,
       employerCostsMinorUnits: 500,
+      lines: [
+        { type: 'BASIC_SALARY', amountMinorUnits: 9201 },
+        { type: 'ALLOWANCE', amountMinorUnits: 500 },
+        { type: 'OVERTIME', amountMinorUnits: 100 },
+        { type: 'BONUS', amountMinorUnits: 200 },
+      ],
+      worker: { category: w.category },
       payrollRun: {
         organisationId: w.organisationId,
         status: 'PROCESSED',
@@ -136,7 +144,10 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
       location: { findMany: jest.fn(async () => []) },
       organisation: { findFirst: jest.fn(async () => null) },
       holiday: { findMany: jest.fn(async () => []) },
-      payslip: { groupBy: jest.fn(async (args: Row) => group(slips, args)) },
+      payslip: {
+        groupBy: jest.fn(async (args: Row) => group(slips, args)),
+        findMany: jest.fn(async ({ where }: Row) => slips.filter((r) => matches(r, where))),
+      },
       attendanceRecord: {
         groupBy: jest.fn(async (args: Row) => group(attendance, args)),
         findMany: jest.fn(async ({ where }: Row) => attendance.filter((r) => matches(r, where))),
@@ -271,7 +282,52 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
       scheduledDays: 117,
       attendedDays: 6,
       ratePercent: 5.1,
+      lateArrivals: 0,
+      clockIns: 6,
+      lateArrivalRatePercent: 0,
+      unapprovedAbsenceDays: 0,
+      absenceRatePercent: 0,
     });
+    expect(result.attendance.byTeam).toEqual([
+      { team: 'Operations', ...result.attendance.scheduled },
+    ]);
+    expect(result.attendance.trend).toEqual([
+      { month: '2026-01', ...result.attendance.scheduled },
+    ]);
+    expect(result.workforce.leaveByDepartment).toEqual([
+      {
+        department: 'Operations',
+        suppressed: false,
+        approvedLeaveDays: 15,
+        unapprovedAbsenceDays: 0,
+      },
+    ]);
+    expect(result.payroll.byDepartment).toEqual([
+      {
+        month: '2026-01',
+        currency: 'NGN',
+        department: 'Operations',
+        suppressed: false,
+        grossMinorUnits: 60006,
+        employerCostsMinorUnits: 3000,
+        totalCostMinorUnits: 63006,
+        paidWorkers: 6,
+      },
+    ]);
+    expect(result.payroll.components).toEqual([
+      {
+        month: '2026-01',
+        currency: 'NGN',
+        suppressed: false,
+        overtimeMinorUnits: 600,
+        bonusMinorUnits: 1200,
+        allowanceMinorUnits: 3000,
+        contractorMinorUnits: null,
+        volunteerStipendMinorUnits: null,
+        averageSalaryMinorUnits: 10001,
+        paidEmployees: 6,
+      },
+    ]);
     expect(result.leave).toMatchObject({ approvedDays: 15, requests: 6 });
     expect(result.leave.byType).toEqual([
       {
@@ -341,6 +397,7 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
     expect(result.leave.approvedDays).toBe(12.5);
     expect(result.payroll).toBeNull();
     expect(tx.payslip.groupBy).not.toHaveBeenCalled();
+    expect(tx.payslip.findMany).not.toHaveBeenCalled();
   });
   it('fails closed for a manager without a linked worker', async () => {
     tx.worker.findFirst.mockResolvedValue(null);
@@ -353,6 +410,7 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
     async (role) => {
       expect((await data(role)).payroll).toBeNull();
       expect(tx.payslip.groupBy).not.toHaveBeenCalled();
+      expect(tx.payslip.findMany).not.toHaveBeenCalled();
       expect(audit.record).not.toHaveBeenCalled();
     },
   );
@@ -397,6 +455,51 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
     // Only org-a workers contribute; org-b rows must not leak into the denominator.
     expect(JSON.stringify(result)).not.toMatch(/org-b/);
   });
+  it('computes late-arrival and unapproved-absence rates from clock-ins and explicit absences', async () => {
+    attendance[0]!.status = 'LATE';
+    attendance[1]!.status = 'ABSENT';
+    attendance[1]!.clockIn = null;
+    const result = await data();
+    expect(result.attendance.scheduled).toMatchObject({
+      suppressed: false,
+      scheduledDays: 117,
+      attendedDays: 5,
+      ratePercent: 4.3,
+      lateArrivals: 1,
+      clockIns: 5,
+      lateArrivalRatePercent: 20,
+      unapprovedAbsenceDays: 1,
+      absenceRatePercent: 0.9,
+    });
+    expect(result.workforce.leaveByDepartment[0]).toMatchObject({ unapprovedAbsenceDays: 1 });
+  });
+  it('hides parent totals when a department/team/month child bucket is suppressed', async () => {
+    workers = workers.filter((w) => w.organisationId === 'org-a');
+    for (const worker of workers.slice(0, 4)) {
+      worker.departmentId = 'dept-b';
+      worker.department = { id: 'dept-b', name: 'Small team' };
+    }
+    const result = await data();
+    expect(result.workforce.leaveByDepartment).toEqual([
+      {
+        department: 'Operations',
+        suppressed: true,
+        approvedLeaveDays: null,
+        unapprovedAbsenceDays: null,
+      },
+      {
+        department: 'Small team',
+        suppressed: true,
+        approvedLeaveDays: null,
+        unapprovedAbsenceDays: null,
+      },
+    ]);
+    expect(result.leave).toMatchObject({ approvedDays: null, requests: null, byType: [] });
+    expect(result.attendance.scheduled).toMatchObject({ suppressed: true, ratePercent: null });
+    expect(result.attendance.byTeam.every((row: Row) => row.suppressed)).toBe(true);
+    expect(result.payroll.months[0]).toMatchObject({ suppressed: true, grossMinorUnits: null });
+    expect(result.payroll.byDepartment.every((row: Row) => row.suppressed)).toBe(true);
+  });
   it('suppresses the scheduled rate below five workers even when records exist', async () => {
     workers = workers.filter((w) => w.organisationId === 'org-a').slice(0, 4);
     attendance = attendance.filter((r) => r.organisationId === 'org-a').slice(0, 4);
@@ -406,6 +509,11 @@ describe('ANA-01–03 overview HTTP acceptance', () => {
       scheduledDays: null,
       attendedDays: null,
       ratePercent: null,
+      lateArrivals: null,
+      clockIns: null,
+      lateArrivalRatePercent: null,
+      unapprovedAbsenceDays: null,
+      absenceRatePercent: null,
     });
   });
   it('excludes drafts, unprocessed payroll, reversals and reversed originals', async () => {

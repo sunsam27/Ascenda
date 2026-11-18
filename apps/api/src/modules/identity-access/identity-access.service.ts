@@ -154,7 +154,15 @@ export class IdentityAccessService {
     return {
       ...tokens,
       user,
-      redirectTo: user.isPlatformAdmin ? '/admin' : homePathForRole(membership?.role),
+      // A real workspace membership wins: platform admins who also belong to
+      // an organisation land in that workspace. The Admin Console stays
+      // reachable from the sidebar for platform admins. Only platform admins
+      // with no membership are sent straight to /admin.
+      redirectTo: membership
+        ? homePathForRole(membership.role)
+        : user.isPlatformAdmin
+          ? '/admin'
+          : '/dashboard',
     };
   }
 

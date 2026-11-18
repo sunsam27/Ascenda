@@ -298,6 +298,40 @@ export default function AnalyticsView() {
             </div>
 
             <section className={styles.card}>
+              <h2>Leave and absence by department</h2>
+              <p className={styles.note}>
+                Approved leave days and explicit unapproved absences grouped by each worker's
+                current department. Historical transfers are not reconstructed; departments with
+                fewer than {data.minimumCohort} contributing workers are hidden.
+              </p>
+              {data.workforce.leaveByDepartment.length === 0 ? (
+                <p className={styles.empty}>No leave or recorded absence in this range.</p>
+              ) : (
+                <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Scrollable leave and absence by department table">
+                  <table>
+                    <caption className={styles.note}>Current department · booked days</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Department</th>
+                        <th scope="col">Approved leave days</th>
+                        <th scope="col">Unapproved absence days</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.workforce.leaveByDepartment.map((row) => (
+                        <tr key={row.department}>
+                          <th scope="row">{row.department}</th>
+                          <td>{number(row.approvedLeaveDays)}</td>
+                          <td>{number(row.unapprovedAbsenceDays)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section className={styles.card}>
               <h2>Payroll cost trend</h2>
               <p className={styles.note}>
                 Frozen payslips from processed or locked runs, grouped by pay-period end month.
@@ -446,6 +480,102 @@ export default function AnalyticsView() {
               )}
             </section>
 
+            <section className={styles.card}>
+              <h2>Payroll cost by department</h2>
+              <p className={styles.note}>
+                Frozen payslip gross and employer-side costs grouped by each worker's current
+                department. This is payroll cost, not cash paid, and historical transfers are not
+                reconstructed. Hidden rows have fewer than {data.minimumCohort} paid workers.
+              </p>
+              {!data.payroll ? (
+                <p className={styles.empty}>Payroll figures are not available to your role.</p>
+              ) : data.payroll.byDepartment.length === 0 ? (
+                <p className={styles.empty}>No processed payroll in this date range.</p>
+              ) : (
+                <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Scrollable payroll cost by department table">
+                  <table>
+                    <caption className={styles.note}>Amounts shown separately by currency</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Month</th>
+                        <th scope="col">Currency</th>
+                        <th scope="col">Department</th>
+                        <th scope="col">Gross</th>
+                        <th scope="col">Employer costs</th>
+                        <th scope="col">Total cost</th>
+                        <th scope="col">Paid workers</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.payroll.byDepartment.map((row) => (
+                        <tr key={`${row.month}-${row.currency}-${row.department}`}>
+                          <th scope="row">{monthLabel(row.month)}</th>
+                          <td>{row.currency}</td>
+                          <td>{row.department}</td>
+                          <td>{row.grossMinorUnits === null ? 'Hidden' : formatMinorUnits(row.grossMinorUnits, row.currency)}</td>
+                          <td>{row.employerCostsMinorUnits === null ? 'Hidden' : formatMinorUnits(row.employerCostsMinorUnits, row.currency)}</td>
+                          <td>{row.totalCostMinorUnits === null ? 'Hidden' : formatMinorUnits(row.totalCostMinorUnits, row.currency)}</td>
+                          <td>{number(row.paidWorkers)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section className={styles.card}>
+              <h2>Pay components</h2>
+              <p className={styles.note}>
+                Amounts come from frozen payslip lines, not current compensation. Each component is
+                hidden unless at least {data.minimumCohort} workers contributed to it; contractor
+                and average-salary cohorts are suppressed independently.
+              </p>
+              {!data.payroll ? (
+                <p className={styles.empty}>Payroll figures are not available to your role.</p>
+              ) : data.payroll.components.length === 0 ? (
+                <p className={styles.empty}>No processed payroll in this date range.</p>
+              ) : (
+                <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Scrollable pay components table">
+                  <table>
+                    <caption className={styles.note}>Monthly component totals by currency</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Month</th>
+                        <th scope="col">Currency</th>
+                        <th scope="col">Overtime</th>
+                        <th scope="col">Bonus</th>
+                        <th scope="col">Allowance</th>
+                        <th scope="col">Contractor cost</th>
+                        <th scope="col">Volunteer stipend</th>
+                        <th scope="col">Average salary</th>
+                        <th scope="col">Paid employees</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.payroll.components.map((row) => {
+                        const money = (value: number | null) =>
+                          value === null ? 'Hidden' : formatMinorUnits(value, row.currency);
+                        return (
+                          <tr key={`${row.month}-${row.currency}`}>
+                            <th scope="row">{monthLabel(row.month)}</th>
+                            <td>{row.currency}</td>
+                            <td>{money(row.overtimeMinorUnits)}</td>
+                            <td>{money(row.bonusMinorUnits)}</td>
+                            <td>{money(row.allowanceMinorUnits)}</td>
+                            <td>{money(row.contractorMinorUnits)}</td>
+                            <td>{money(row.volunteerStipendMinorUnits)}</td>
+                            <td>{money(row.averageSalaryMinorUnits)}</td>
+                            <td>{number(row.paidEmployees)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
             <div className={styles.twoColumns}>
               <section className={styles.card}>
                 <h2>Recorded attendance</h2>
@@ -492,7 +622,9 @@ export default function AnalyticsView() {
                       <>
                         <p className={styles.note}>
                           PRESENT, LATE, REMOTE and HALF_DAY records count as attended; approved leave
-                          is excluded from scheduled days. No individual attendance is shown.
+                          is excluded from scheduled days. Late rate is late clock-ins ÷ total
+                          clock-ins; absence rate uses explicit unapproved ABSENT days ÷ scheduled
+                          days. No individual attendance is shown.
                         </p>
                         <dl className={styles.metrics}>
                           <div>
@@ -506,6 +638,26 @@ export default function AnalyticsView() {
                           <div>
                             <dt>Attendance rate</dt>
                             <dd>{number(scheduled.ratePercent)}%</dd>
+                          </div>
+                          <div>
+                            <dt>Late clock-ins</dt>
+                            <dd>{number(scheduled.lateArrivals)}</dd>
+                          </div>
+                          <div>
+                            <dt>Total clock-ins</dt>
+                            <dd>{number(scheduled.clockIns)}</dd>
+                          </div>
+                          <div>
+                            <dt>Late arrival rate</dt>
+                            <dd>{number(scheduled.lateArrivalRatePercent)}%</dd>
+                          </div>
+                          <div>
+                            <dt>Unapproved absence days</dt>
+                            <dd>{number(scheduled.unapprovedAbsenceDays)}</dd>
+                          </div>
+                          <div>
+                            <dt>Absence rate</dt>
+                            <dd>{number(scheduled.absenceRatePercent)}%</dd>
                           </div>
                         </dl>
                       </>
@@ -576,6 +728,86 @@ export default function AnalyticsView() {
                 )}
               </section>
             </div>
+
+            <div className={styles.twoColumns}>
+              <section className={styles.card}>
+                <h2>Attendance by team</h2>
+                <p className={styles.note}>
+                  Teams use each worker's current department as the closest available proxy; the
+                  schema has no separate team or roster record. Historical transfers are not
+                  reconstructed. Teams below {data.minimumCohort} workers are hidden.
+                </p>
+                {!attendance ? (
+                  <p className={styles.empty}>Attendance figures are not available to your role.</p>
+                ) : attendance.byTeam.length === 0 ? (
+                  <p className={styles.empty}>No scheduled attendance in this date range.</p>
+                ) : (
+                  <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Scrollable attendance by team table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">Team</th>
+                          <th scope="col">Scheduled days</th>
+                          <th scope="col">Attendance rate</th>
+                          <th scope="col">Late arrival rate</th>
+                          <th scope="col">Absence rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attendance.byTeam.map((row) => (
+                          <tr key={row.team}>
+                            <th scope="row">{row.team}</th>
+                            <td>{number(row.scheduledDays)}</td>
+                            <td>{number(row.ratePercent)}%</td>
+                            <td>{number(row.lateArrivalRatePercent)}%</td>
+                            <td>{number(row.absenceRatePercent)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+              <section className={styles.card}>
+                <h2>Attendance trend</h2>
+                <p className={styles.note}>
+                  Monthly buckets from the same scheduled-day calculation. Each month applies its own{' '}
+                  {data.minimumCohort}-worker suppression; a hidden month is not reconstructed from
+                  the overall rate.
+                </p>
+                {!attendance ? (
+                  <p className={styles.empty}>Attendance figures are not available to your role.</p>
+                ) : attendance.trend.length === 0 ? (
+                  <p className={styles.empty}>No scheduled attendance in this date range.</p>
+                ) : (
+                  <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Scrollable attendance trend table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">Month</th>
+                          <th scope="col">Scheduled days</th>
+                          <th scope="col">Attendance rate</th>
+                          <th scope="col">Late arrival rate</th>
+                          <th scope="col">Absence rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attendance.trend.map((row) => (
+                          <tr key={row.month}>
+                            <th scope="row">{monthLabel(row.month)}</th>
+                            <td>{number(row.scheduledDays)}</td>
+                            <td>{number(row.ratePercent)}%</td>
+                            <td>{number(row.lateArrivalRatePercent)}%</td>
+                            <td>{number(row.absenceRatePercent)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            </div>
+
             <section className={styles.card}>
               <h2>About these numbers</h2>
               <p className={styles.note}>
@@ -583,12 +815,14 @@ export default function AnalyticsView() {
                 left. Open-ended records must currently be active, on leave or on probation.
                 Breakdowns use current category, {term('Department').toLowerCase()} and{' '}
                 {term('Location').toLowerCase()} assignments; historical transfers and status
-                changes are not reconstructed. Joiners use start dates; exits use recorded end
-                dates. Retention and tenure use those recorded dates at the range boundaries;
-                open-ended records use current status. Leave types group approved requests by
-                their configured type and category without reasons. Pay distribution shows only
-                relative bands against each cohort's own average—never individual pay. Future
-                dates reflect scheduled records, not forecasts. Blank periods are not estimated.
+                changes are not reconstructed. Department-level leave, absence, payroll cost and
+                team attendance use that same current assignment. Joiners use start dates; exits
+                use recorded end dates. Retention and tenure use those recorded dates at the range
+                boundaries; open-ended records use current status. Leave types group approved
+                requests by their configured type and category without reasons. Pay components come
+                from frozen payslip lines, not current compensation. Pay distribution shows only
+                relative bands against each cohort's own average—never individual pay. Future dates
+                reflect scheduled records, not forecasts. Blank periods are not estimated.
               </p>
             </section>
           </>

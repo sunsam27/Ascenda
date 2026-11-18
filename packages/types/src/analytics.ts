@@ -16,12 +16,59 @@ export interface AnalyticsTenure {
   bands: AnalyticsBreakdown[];
 }
 
-/** Scheduled-working-day attendance rate (ANA-03). Null metrics are suppressed. */
+/** Scheduled-working-day attendance metrics (ANA-03). Null metrics are suppressed. */
 export interface AnalyticsScheduledAttendance {
   suppressed: boolean;
   scheduledDays: number | null;
   attendedDays: number | null;
   ratePercent: number | null;
+  lateArrivals: number | null;
+  clockIns: number | null;
+  lateArrivalRatePercent: number | null;
+  unapprovedAbsenceDays: number | null;
+  absenceRatePercent: number | null;
+}
+
+export interface AnalyticsAttendanceTeam extends AnalyticsScheduledAttendance {
+  team: string;
+}
+
+export interface AnalyticsAttendanceTrend extends AnalyticsScheduledAttendance {
+  month: string;
+}
+
+/** Leave usage and unapproved absence grouped by the worker's current department. */
+export interface AnalyticsDepartmentUsage {
+  department: string;
+  suppressed: boolean;
+  approvedLeaveDays: number | null;
+  unapprovedAbsenceDays: number | null;
+}
+
+/** Frozen pay-component costs for one pay-period month and currency. */
+export interface AnalyticsPayrollComponents {
+  month: string;
+  currency: string;
+  suppressed: boolean;
+  overtimeMinorUnits: number | null;
+  bonusMinorUnits: number | null;
+  allowanceMinorUnits: number | null;
+  contractorMinorUnits: number | null;
+  volunteerStipendMinorUnits: number | null;
+  averageSalaryMinorUnits: number | null;
+  paidEmployees: number | null;
+}
+
+/** Frozen payroll cost grouped by the worker's current department. */
+export interface AnalyticsPayrollDepartment {
+  month: string;
+  currency: string;
+  department: string;
+  suppressed: boolean;
+  grossMinorUnits: number | null;
+  employerCostsMinorUnits: number | null;
+  totalCostMinorUnits: number | null;
+  paidWorkers: number | null;
 }
 
 export interface AnalyticsLeaveTypeBreakdown {
@@ -72,10 +119,13 @@ export interface AnalyticsOverview {
     statuses: AnalyticsBreakdown[];
     retention: AnalyticsRetention;
     tenure: AnalyticsTenure;
+    leaveByDepartment: AnalyticsDepartmentUsage[];
   };
   payroll: {
     months: AnalyticsPayrollMonth[];
     distribution: AnalyticsPayDistributionMonth[];
+    byDepartment: AnalyticsPayrollDepartment[];
+    components: AnalyticsPayrollComponents[];
   } | null;
   attendance: {
     suppressed: boolean;
@@ -85,6 +135,8 @@ export interface AnalyticsOverview {
     absent: number | null;
     remote: number | null;
     scheduled: AnalyticsScheduledAttendance;
+    byTeam: AnalyticsAttendanceTeam[];
+    trend: AnalyticsAttendanceTrend[];
   } | null;
   leave: {
     suppressed: boolean;

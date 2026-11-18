@@ -1,7 +1,12 @@
 import {
+  attendanceByTeam,
+  attendanceTrend,
+  departmentUsage,
   leaveTypeBreakdown,
   overviewPeriod,
   payDistribution,
+  payrollByDepartment,
+  payrollComponents,
   payrollMonths,
   retentionSummary,
   scheduledAttendanceRate,
@@ -123,12 +128,22 @@ describe('ANA-01–03 overview acceptance', () => {
       scheduledDays: 100,
       attendedDays: 94,
       ratePercent: 94,
+      lateArrivals: 0,
+      clockIns: 0,
+      lateArrivalRatePercent: 0,
+      unapprovedAbsenceDays: 0,
+      absenceRatePercent: 0,
     });
     expect(scheduledAttendanceRate(rows.slice(0, 4))).toEqual({
       suppressed: true,
       scheduledDays: null,
       attendedDays: null,
       ratePercent: null,
+      lateArrivals: null,
+      clockIns: null,
+      lateArrivalRatePercent: null,
+      unapprovedAbsenceDays: null,
+      absenceRatePercent: null,
     });
     // Workers with no scheduled days in range cannot reveal a rate.
     expect(
@@ -203,5 +218,175 @@ describe('ANA-01–03 overview acceptance', () => {
       workerCount: null,
       bands: [],
     });
+  });
+  it('groups attendance by team and month with per-bucket suppression', () => {
+    const rows = Array.from({ length: 9 }, (_, i) => ({
+      workerId: String(i),
+      scheduledDays: 20,
+      attendedDays: 18,
+      unapprovedAbsenceDays: 1,
+      lateArrivals: 1,
+      clockIns: 10,
+    }));
+    const teams = new Map(rows.map((row, i) => [row.workerId, i < 5 ? 'Alpha' : 'Beta']));
+    expect(attendanceByTeam(rows, teams)).toEqual([
+      {
+        team: 'Alpha',
+        suppressed: false,
+        scheduledDays: 100,
+        attendedDays: 90,
+        ratePercent: 90,
+        lateArrivals: 5,
+        clockIns: 50,
+        lateArrivalRatePercent: 10,
+        unapprovedAbsenceDays: 5,
+        absenceRatePercent: 5,
+      },
+      {
+        team: 'Beta',
+        suppressed: true,
+        scheduledDays: null,
+        attendedDays: null,
+        ratePercent: null,
+        lateArrivals: null,
+        clockIns: null,
+        lateArrivalRatePercent: null,
+        unapprovedAbsenceDays: null,
+        absenceRatePercent: null,
+      },
+    ]);
+    const trendRows = rows.slice(0, 5).map((row) => ({
+      ...row,
+      months: [
+        {
+          month: '2026-01',
+          scheduledDays: 20,
+          attendedDays: 18,
+          unapprovedAbsenceDays: 1,
+          lateArrivals: 1,
+          clockIns: 10,
+        },
+      ],
+    }));
+    expect(attendanceTrend(trendRows)).toEqual([
+      {
+        month: '2026-01',
+        suppressed: false,
+        scheduledDays: 100,
+        attendedDays: 90,
+        ratePercent: 90,
+        lateArrivals: 5,
+        clockIns: 50,
+        lateArrivalRatePercent: 10,
+        unapprovedAbsenceDays: 5,
+        absenceRatePercent: 5,
+      },
+    ]);
+  });
+  it('groups leave usage and absence by department with small-cohort suppression', () => {
+    const rows = [
+      ...Array.from({ length: 5 }, (_, i) => ({
+        workerId: `ops-${i}`,
+        department: 'Operations',
+        approvedLeaveDays: 2,
+        unapprovedAbsenceDays: 1,
+      })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        workerId: `small-${i}`,
+        department: 'Small team',
+        approvedLeaveDays: 3,
+        unapprovedAbsenceDays: 0,
+      })),
+    ];
+    expect(departmentUsage(rows)).toEqual([
+      {
+        department: 'Operations',
+        suppressed: false,
+        approvedLeaveDays: 10,
+        unapprovedAbsenceDays: 5,
+      },
+      {
+        department: 'Small team',
+        suppressed: true,
+        approvedLeaveDays: null,
+        unapprovedAbsenceDays: null,
+      },
+    ]);
+  });
+  it('groups frozen payroll cost by department with small-cohort suppression', () => {
+    const rows = Array.from({ length: 5 }, (_, i) => ({
+      workerId: String(i),
+      department: 'Operations',
+      currency: 'NGN',
+      month: '2026-01',
+      grossMinorUnits: 1000,
+      employerCostsMinorUnits: 100,
+    }));
+    expect(payrollByDepartment(rows)).toEqual([
+      {
+        month: '2026-01',
+        currency: 'NGN',
+        department: 'Operations',
+        suppressed: false,
+        grossMinorUnits: 5000,
+        employerCostsMinorUnits: 500,
+        totalCostMinorUnits: 5500,
+        paidWorkers: 5,
+      },
+    ]);
+    expect(payrollByDepartment(rows.slice(0, 4))[0]).toMatchObject({ suppressed: true });
+  });
+  it('aggregates pay components, contractor cost and average salary with suppression', () => {
+    const rows = [
+      ...Array.from({ length: 5 }, (_, i) => ({
+        workerId: `employee-${i}`,
+        category: 'EMPLOYEE',
+        currency: 'NGN',
+        month: '2026-01',
+        grossMinorUnits: 1000,
+        overtimeMinorUnits: i === 0 ? 100 : 0,
+        bonusMinorUnits: 0,
+        allowanceMinorUnits: 200,
+        volunteerStipendMinorUnits: 0,
+      })),
+      ...Array.from({ length: 5 }, (_, i) => ({
+        workerId: `contractor-${i}`,
+        category: 'CONTRACTOR',
+        currency: 'NGN',
+        month: '2026-01',
+        grossMinorUnits: 1000,
+        overtimeMinorUnits: 0,
+        bonusMinorUnits: 0,
+        allowanceMinorUnits: 0,
+        // Stipend lines on contractors must not be reported as volunteer stipends.
+        volunteerStipendMinorUnits: 999,
+      })),
+      ...Array.from({ length: 5 }, (_, i) => ({
+        workerId: `volunteer-${i}`,
+        category: 'VOLUNTEER',
+        currency: 'NGN',
+        month: '2026-01',
+        grossMinorUnits: 100,
+        overtimeMinorUnits: 0,
+        bonusMinorUnits: 0,
+        allowanceMinorUnits: 0,
+        volunteerStipendMinorUnits: 100,
+      })),
+    ];
+    expect(payrollComponents(rows)).toEqual([
+      {
+        month: '2026-01',
+        currency: 'NGN',
+        suppressed: false,
+        overtimeMinorUnits: null,
+        bonusMinorUnits: null,
+        allowanceMinorUnits: 1000,
+        contractorMinorUnits: 5000,
+        volunteerStipendMinorUnits: 500,
+        averageSalaryMinorUnits: 1000,
+        paidEmployees: 5,
+      },
+    ]);
+    expect(payrollComponents(rows.slice(0, 4))[0]).toMatchObject({ suppressed: true });
   });
 });

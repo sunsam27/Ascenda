@@ -11,9 +11,14 @@ import { PayrollAnalyticsReader } from '../payroll/payroll-analytics.reader';
 import { TimeLeaveAnalyticsReader } from '../time-leave/time-leave-analytics.reader';
 import {
   MINIMUM_COHORT,
+  attendanceByTeam,
+  attendanceTrend,
+  departmentUsage,
   leaveTypeBreakdown,
   overviewPeriod,
   payDistribution,
+  payrollByDepartment,
+  payrollComponents,
   payrollMonths,
   scheduledAttendanceRate,
 } from './analytics.domain';
@@ -56,12 +61,16 @@ export class AnalyticsService {
         period.start,
         period.endExclusive,
       );
+      const assignments = await this.people.assignments(tx, organisationId, analyticsScope.where);
+      const departmentByWorker = new Map(assignments.map((a) => [a.workerId, a.department]));
+      const usageRows: Parameters<typeof departmentUsage>[0] = [];
+      let scheduledRows: Awaited<ReturnType<TimeLeaveAnalyticsReader['scheduledAttendance']>> = [];
       let attendance: AnalyticsOverview['attendance'] = null;
       let leave: AnalyticsOverview['leave'] = null;
       if (sections.attendance !== false && canRead('attendance', PermissionScope.TEAM)) {
         const resourceScope = await resolveReadScope(tx, 'attendance', 'read');
         const attendanceScope = { AND: [analyticsScope.where, resourceScope.where] };
-        const [rows, scheduledRows] = await Promise.all([
+        const [rows, scheduled] = await Promise.all([
           this.time.attendance(
             tx,
             organisationId,
@@ -77,12 +86,18 @@ export class AnalyticsService {
             period.endExclusive,
           ),
         ]);
+        scheduledRows = scheduled;
         const suppressed =
           rows.length > 0 && new Set(rows.map((r) => r.workerId)).size < MINIMUM_COHORT;
         const count = (status?: string) =>
           suppressed
             ? null
             : rows.reduce((sum, r) => sum + (!status || r.status === status ? r._count : 0), 0);
+        const byTeam = attendanceByTeam(scheduled, departmentByWorker);
+        const trend = attendanceTrend(scheduled);
+        // A hidden team/month must not be recoverable by subtracting visible
+        // buckets from the overall scheduled totals.
+        const hiddenBucket = [...byTeam, ...trend].some((row) => row.suppressed);
         attendance = {
           suppressed,
           records: count(),
@@ -90,7 +105,9 @@ export class AnalyticsService {
           late: count('LATE'),
           absent: count('ABSENT'),
           remote: count('REMOTE'),
-          scheduled: scheduledAttendanceRate(scheduledRows),
+          scheduled: hiddenBucket ? scheduledAttendanceRate([]) : scheduledAttendanceRate(scheduled),
+          byTeam,
+          trend,
         };
       }
       if (sections.leave !== false && canRead('leave', PermissionScope.TEAM)) {
@@ -101,23 +118,72 @@ export class AnalyticsService {
           this.time.leaveByType(tx, organisationId, leaveWhere, period.start, period.endExclusive),
         ]);
         const suppressed = rows.length > 0 && rows.length < MINIMUM_COHORT;
+        const byType = suppressed ? [] : leaveTypeBreakdown(byTypeRows);
         leave = {
           suppressed,
           approvedDays: suppressed
             ? null
             : rows.reduce((sum, r) => sum + Number(r._sum.days ?? 0), 0),
           requests: suppressed ? null : rows.reduce((sum, r) => sum + r._count, 0),
-          byType: suppressed ? [] : leaveTypeBreakdown(byTypeRows),
+          byType,
         };
+        for (const row of byTypeRows) {
+          usageRows.push({
+            workerId: row.workerId,
+            department: departmentByWorker.get(row.workerId) ?? 'Unassigned',
+            approvedLeaveDays: row.days,
+            unapprovedAbsenceDays: 0,
+          });
+        }
+      }
+      for (const row of scheduledRows) {
+        usageRows.push({
+          workerId: row.workerId,
+          department: departmentByWorker.get(row.workerId) ?? 'Unassigned',
+          approvedLeaveDays: 0,
+          unapprovedAbsenceDays: row.unapprovedAbsenceDays,
+        });
+      }
+      const leaveByDepartment = departmentUsage(usageRows);
+      if (leave && (leave.byType.some((row) => row.suppressed) || leaveByDepartment.some((row) => row.suppressed))) {
+        // Keep the overall totals and any sibling partition from revealing a
+        // hidden department or leave type by subtraction.
+        leave = { ...leave, approvedDays: null, requests: null, byType: [] };
       }
       let payroll: AnalyticsOverview['payroll'] = null;
       if (canReadPayroll) {
-        const [monthly, distributionRows] = await Promise.all([
+        const [monthly, distributionRows, componentRows] = await Promise.all([
           this.pay.monthly(tx, organisationId, period.start, period.endExclusive),
           this.pay.distribution(tx, organisationId, period.start, period.endExclusive),
+          this.pay.components(tx, organisationId, period.start, period.endExclusive),
         ]);
+        const byDepartment = payrollByDepartment(
+          monthly.map((r) => ({
+            workerId: r.workerId,
+            department: departmentByWorker.get(r.workerId) ?? 'Unassigned',
+            currency: r.currency,
+            month: r.periodEnd.toISOString().slice(0, 7),
+            grossMinorUnits: r._sum.grossMinorUnits ?? 0,
+            employerCostsMinorUnits: r._sum.employerCostsMinorUnits ?? 0,
+          })),
+        );
+        const hiddenMonthCurrencies = new Set(
+          byDepartment.filter((row) => row.suppressed).map((row) => `${row.month}|${row.currency}`),
+        );
         payroll = {
-          months: payrollMonths(monthly),
+          months: payrollMonths(monthly).map((month) =>
+            hiddenMonthCurrencies.has(`${month.month}|${month.currency}`)
+              ? {
+                  ...month,
+                  suppressed: true,
+                  grossMinorUnits: null,
+                  netMinorUnits: null,
+                  deductionsMinorUnits: null,
+                  employerCostsMinorUnits: null,
+                  totalCostMinorUnits: null,
+                }
+              : month,
+          ),
           distribution: payDistribution(
             distributionRows.map((r) => ({
               currency: r.currency,
@@ -126,6 +192,8 @@ export class AnalyticsService {
               grossMinorUnits: r._sum.grossMinorUnits ?? 0,
             })),
           ),
+          byDepartment,
+          components: payrollComponents(componentRows),
         };
       }
       return {
@@ -136,7 +204,7 @@ export class AnalyticsService {
             ? ('organisation' as const)
             : ('team' as const),
         minimumCohort: MINIMUM_COHORT,
-        workforce,
+        workforce: { ...workforce, leaveByDepartment },
         attendance,
         leave,
         payroll,

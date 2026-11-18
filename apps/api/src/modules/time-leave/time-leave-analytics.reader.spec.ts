@@ -43,8 +43,18 @@ describe('TimeLeaveAnalyticsReader.scheduledAttendance', () => {
       },
       attendanceRecord: {
         findMany: jest.fn(async () => [
-          { workerId: 'weekend-worker', date: new Date('2026-01-03'), status: 'PRESENT' },
-          { workerId: 'default-worker', date: new Date('2026-01-05'), status: 'LATE' },
+          {
+            workerId: 'weekend-worker',
+            date: new Date('2026-01-03'),
+            status: 'PRESENT',
+            clockIn: new Date('2026-01-03T09:00:00Z'),
+          },
+          {
+            workerId: 'default-worker',
+            date: new Date('2026-01-05'),
+            status: 'LATE',
+            clockIn: new Date('2026-01-05T09:30:00Z'),
+          },
         ]),
       },
       leaveRequest: {
@@ -72,16 +82,22 @@ describe('TimeLeaveAnalyticsReader.scheduledAttendance', () => {
     );
     const byWorker = new Map(result.map((row) => [row.workerId, row]));
     // Weekend override: Sat 3, Sun 4 and Sat 10. The recurring 1 Jan holiday is a Thursday.
-    expect(byWorker.get('weekend-worker')).toEqual({
+    expect(byWorker.get('weekend-worker')).toMatchObject({
       workerId: 'weekend-worker',
       scheduledDays: 3,
       attendedDays: 1,
+      lateArrivals: 0,
+      clockIns: 1,
+      unapprovedAbsenceDays: 0,
     });
     // Org weekdays 1–10 minus the 1 Jan holiday minus two days of approved leave.
-    expect(byWorker.get('default-worker')).toEqual({
+    expect(byWorker.get('default-worker')).toMatchObject({
       workerId: 'default-worker',
       scheduledDays: 4,
       attendedDays: 1,
+      lateArrivals: 1,
+      clockIns: 1,
+      unapprovedAbsenceDays: 0,
     });
   });
 

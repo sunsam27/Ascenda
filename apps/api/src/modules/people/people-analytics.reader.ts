@@ -72,13 +72,33 @@ export class PeopleAnalyticsReader {
     };
   }
 
+  /** Current assignment labels used to group ANA-01–03 facts. No historical ledger exists yet. */
+  async assignments(
+    tx: Prisma.TransactionClient,
+    organisationId: string,
+    scope: Prisma.WorkerWhereInput,
+  ) {
+    const rows = await tx.worker.findMany({
+      where: { organisationId, AND: [scope], status: { not: 'DRAFT' } },
+      select: {
+        id: true,
+        category: true,
+        department: { select: { name: true } },
+      },
+    });
+    return rows.map((row) => {
+      const department = row.department?.name ?? 'Unassigned';
+      return { workerId: row.id, category: row.category, department, team: department };
+    });
+  }
+
   async overview(
     tx: Prisma.TransactionClient,
     organisationId: string,
     scope: Prisma.WorkerWhereInput,
     start: Date,
     endExclusive: Date,
-  ): Promise<AnalyticsOverview['workforce']> {
+  ): Promise<Omit<AnalyticsOverview['workforce'], 'leaveByDepartment'>> {
     const base: Prisma.WorkerWhereInput = {
       organisationId,
       AND: [scope],

@@ -69,7 +69,21 @@ describe('scheduled attendance domain (ANA-03)', () => {
         { date: new Date('2026-01-12'), status: 'OFF_DAY' },
       ],
     });
-    expect(count(input)).toMatchObject({ scheduledDays: 22, attendedDays: 3.5 });
+    expect(count(input)).toMatchObject({
+      scheduledDays: 22,
+      attendedDays: 3.5,
+      unapprovedAbsenceDays: 1,
+      months: [
+        {
+          month: '2026-01',
+          scheduledDays: 22,
+          attendedDays: 3.5,
+          unapprovedAbsenceDays: 1,
+          lateArrivals: 0,
+          clockIns: 0,
+        },
+      ],
+    });
   });
 
   it('removes approved leave from the denominator, including half days', () => {
@@ -138,7 +152,7 @@ describe('scheduled attendance domain (ANA-03)', () => {
     );
     // 1 and 2 Jan are both in range and fully covered by leave; the PRESENT
     // record on 2 Jan cannot be credited above the remaining availability.
-    expect(result).toEqual({ workerId: 'w1', scheduledDays: 20, attendedDays: 0 });
+    expect(result).toMatchObject({ workerId: 'w1', scheduledDays: 20, attendedDays: 0 });
   });
 
   it('returns zero for a range with no scheduled working days', () => {
@@ -147,6 +161,6 @@ describe('scheduled attendance domain (ANA-03)', () => {
       rangeStart,
       rangeEnd,
     );
-    expect(result).toEqual({ workerId: 'w1', scheduledDays: 0, attendedDays: 0 });
+    expect(result).toMatchObject({ workerId: 'w1', scheduledDays: 0, attendedDays: 0 });
   });
 });
